@@ -1,10 +1,9 @@
 /**
- * @import { Nabu } from "./nabu.svelte";
- * @import { LoroTreeNode } from "loro-crdt";
+ * @import { Nabu, NabuNode } from "./nabu.svelte";
  */
 
 export class Block {
-    /** @param {Nabu} nabu @param {LoroTreeNode<{type: string}>} node */
+    /** @param {Nabu} nabu @param {NabuNode} node */
     constructor(nabu, node) {
         this.nabu = nabu;
         const metadata = node?.data || new Map();
@@ -18,14 +17,13 @@ export class Block {
         }
     }
 
-    /** @type {Nabu} */
-    nabu;
-
     /** @type {Block | null} */
     parent = $state(null);
 
+    component = $derived(this.nabu.components.get(this.type) || null);
 
-    /** @param {Nabu} nabu @param {LoroTreeNode<{type: string}>} node */
+
+    /** @param {Nabu} nabu @param {NabuNode} node */
     static load(nabu, node) {
         const metadata = node.data;
         const type = metadata.get("type") || "block";

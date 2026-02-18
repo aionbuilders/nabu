@@ -1,13 +1,12 @@
 import { Block } from "./block.svelte";
 
 /**
- * @import { Nabu } from "./nabu.svelte";
- * @import { LoroTreeNode } from "loro-crdt";
+ * @import { Nabu, NabuNode } from "./nabu.svelte";
  */
 
 export class MegaBlock extends Block {
 
-    /** @param {Nabu} nabu @param {LoroTreeNode<{type: string}>} node */
+    /** @param {Nabu} nabu @param {NabuNode} node */
 	constructor(nabu, node) {
 		super(nabu, node);
         const children = node.children();

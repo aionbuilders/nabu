@@ -4,6 +4,11 @@ import { Block } from './block.svelte';
 
 /**
  * @import {Component} from "svelte";
+ * @import { LoroTreeNode } from "loro-crdt";
+ */
+
+/**
+ * @typedef {LoroTreeNode<{type: string}>} NabuNode
  */
 
 export class Nabu {
@@ -14,7 +19,8 @@ export class Nabu {
         }
 
         this.tree = this.doc.getTree("blocks");
-        const roots = this.tree.roots();
+
+        const roots = /** @type {NabuNode[]} */ (this.tree.roots());
         if (roots?.length) {
             for (const root of roots) {
                 const block = Block.load(this, root);
@@ -24,8 +30,10 @@ export class Nabu {
     }
     /** @type {LoroDoc} */
     doc;
-    /** @type {SvelteMap<string, Component>} */
+    /** @type {SvelteMap<string, typeof Block>} */
     registry = new SvelteMap();
+    /** @type {SvelteMap<string, Component>} */
+    components = new SvelteMap();
     /** @type {SvelteMap<string, Block>} */
     blocks = new SvelteMap();
 
