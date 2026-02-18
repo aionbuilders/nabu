@@ -20,4 +20,10 @@ export class MegaBlock extends Block {
 
     /** @type {Block[]} */
     children = $state([]);
+
+
+    /** @param {InputEvent} event @param {{from: Block} & Object} [data={}] */
+    beforeinput(event, data) {
+
+    }
 }

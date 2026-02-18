@@ -8,12 +8,21 @@
 
 ---
 
-## 🟠 PHASE 1 : Architecture de Rendu & Premier Affichage
+## 🟠 PHASE 1 : Le Moteur "Single CE" (TERMINÉE)
 
-*   [ ] **1.1. Paragraph.svelte (Le Bloc de base) :** Implémenter le premier bloc "Leaf" passif.
-*   [ ] **1.2. NabuEditor.svelte (L'Hôte) :** Le composant racine avec l'unique `contenteditable="true"`.
-*   [ ] **1.3. Recursive Renderer :** Créer un composant qui parcourt l'arbre d'instances et affiche les bons composants via le Registry.
-*   [ ] **1.4. Test de Rendu :** Initialiser Nabu avec des données de test et vérifier l'affichage.
+*   [x] **1.1. Setup & Rendu :** Affichage récursif via Svelte 5 et LoroTree. (Validé)
+*   [x] **1.2. Selection Engine :** Mapping DOM ↔ Modèle via Virtual Range et restauration du curseur (`getDOMPoint`). (Validé)
+*   [x] **1.3. Input Handler (Text) :** Interception `beforeinput`, mutations Loro et réconciliation réactive. (Validé)
+*   [x] **1.4. Structural Input :** Split (Entrée) et Merge (Backspace/Suppr) via hooks d'extensions et Loro Deltas. (Validé)
+
+---
+
+## 🟡 PHASE 2 : Structure & Types (À VENIR)
+
+*   [ ] **2.1. Transformer les blocs :** Pouvoir changer un paragraphe en Titre (H1, H2).
+*   [ ] **2.2. Markdown Shortcuts :** Déclenchement automatique (`# `, `- `) lors de la frappe.
+*   [ ] **2.3. Gestion des listes imbriquées :** Implémentation du `MegaBlock` Liste et gestion du Tab / Shift+Tab.
+*   [ ] **2.4. Rich Text (Spans) :** Rendu et édition des `marks` (Gras, Italique).
 
 ---
 

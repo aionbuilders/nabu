@@ -1,0 +1,129 @@
+
+import { SvelteSelection } from "../utils/selection.svelte";
+
+/**
+* @import { Nabu } from "./nabu.svelte";
+* @import { Block } from "./block.svelte";
+* @import { LoroTree, LoroTreeNode } from "loro-crdt";
+*/
+
+export class NabuSelection extends SvelteSelection {
+    /** @param {Nabu} nabu */
+    constructor(nabu) {
+        super();
+        this.nabu = nabu;
+
+        $effect(() => {
+            if (this.blocks) {
+                this.previous.forEach(block => block.selected = this.blocks.has(block));
+                this.blocks.forEach(block => block.selected = true);   
+                this.previous = new Set(this.blocks);
+            }
+        })
+    }
+    
+    anchorBlock = $derived.by(() => {
+        this.anchorNode;
+        const id = this.anchorNode?.parentElement?.closest("[data-block-id]")?.getAttribute("data-block-id");
+        return id ? this.nabu.blocks.get(id) : null;
+    });
+    
+    focusBlock = $derived.by(() => {
+        this.focusNode;
+        const id = this.focusNode?.parentElement?.closest("[data-block-id]")?.getAttribute("data-block-id");
+        return id ? this.nabu.blocks.get(id) : null;
+    });
+    
+    startBlock = $derived.by(() => {
+        this.range;
+        const id = this.range?.startContainer?.parentElement?.closest("[data-block-id]")?.getAttribute("data-block-id");
+        return id ? this.nabu.blocks.get(id) : null;
+    });
+    
+    endBlock = $derived.by(() => {
+        this.range;
+        const id = this.range?.endContainer?.parentElement?.closest("[data-block-id]")?.getAttribute("data-block-id");
+        return id ? this.nabu.blocks.get(id) : null;
+    });
+
+    start = $derived(this.startBlock?.selection && {
+        block: this.startBlock,
+        ...this.startBlock.selection
+    });
+
+    end = $derived(this.endBlock?.selection && {
+        block: this.endBlock,
+        ...this.endBlock.selection
+    });
+
+    /**
+     * Définit le curseur à un endroit précis du document (Modèle -> DOM)
+     * @param {Block} block 
+     * @param {number} offset 
+     */
+    setCursor(block, offset) {
+        if (!block.element) return;
+        
+        // On délègue au bloc le soin de trouver le bon point DOM
+        // (Chaque type de bloc sait comment il affiche son texte)
+        //@ts-ignore
+        const point = block.getDOMPoint?.(offset);
+        if (!point) return;
+
+        this.setBaseAndExtent(point.node, point.offset, point.node, point.offset);
+    }
+
+    /** @type {Set<Block>} */
+    previous = new Set();
+    blocks = $derived(new Set(getNodesBetween(this.nabu.tree, this.startBlock?.node.id.toString() || "", this.endBlock?.node.id.toString() || "").map(node => {
+        return this.nabu.blocks.get(node.id.toString());
+    }).filter(b => !!b)));
+    
+}
+
+
+
+/**
+* Récupère tous les nœuds situés entre deux nœuds dans un arbre Loro (version aplatie).
+* L'ordre dans lequel on passe A et B n'a pas d'importance.
+* @param {LoroTree} tree - L'arbre Loro à parcourir
+* @param {string} nodeIdA - ID du premier nœud de la sélection
+* @param {string} nodeIdB - ID du second nœud de la sélection
+*/
+function getNodesBetween(tree, nodeIdA, nodeIdB) {
+    const roots = tree.roots(); 
+    
+    let isRecording = false;
+    /** @type {LoroTreeNode[]} */
+    const nodesInRange = [];
+    
+    /** @param {LoroTreeNode[]} nodes */
+    function traverse(nodes) {
+        const sortedNodes = nodes.sort((a, b) => a.index() - b.index());
+        
+        for (const node of sortedNodes) {
+
+            if (node.id === nodeIdA) {
+                isRecording = true;
+                nodesInRange.push(node);
+                if (node.id === nodeIdB) break;
+            } else if (isRecording) {
+                nodesInRange.push(node);
+                if (node.id === nodeIdB) {
+                    break;
+                }
+            }
+            
+            const children = node.children();
+            if (children && children.length > 0) {
+                if (traverse(children)) {
+                    return true; 
+                }
+            }
+        }
+        return false;
+    }
+    
+    traverse(roots);
+    return nodesInRange;
+}
