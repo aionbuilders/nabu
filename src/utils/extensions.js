@@ -10,8 +10,8 @@
  * onBlockUpdate: function(Nabu, Block): void,
  * onBeforeTransaction: function(Nabu, Array<{type: string, block: Block}>): void,
  * onAfterTransaction: function(Nabu, Array<{type: string, block: Block}>): void,
+ * onSplit: function(Nabu, Block, Event, {offset: number, delta: import('loro-crdt').Delta<string>}): {block: Block},
  * } & Object<string, function>} ExtensionHooks
- * 
  */
 
 /**
@@ -28,6 +28,7 @@ export class Extension {
         this.name = name;
         this.component = init.component;
         this.block = init.block;
+        /** @type {Partial<ExtensionHooks>} */
         this.hooks = init.hooks || {};
     }
 }

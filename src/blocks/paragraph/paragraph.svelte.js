@@ -57,7 +57,7 @@ export class Paragraph extends Block {
             from,
             to,
             isCollapsed: from === to,
-            direction: this.nabu.selection.direction
+            direction: this.nabu.selection.direction, 
         };
     })
 
@@ -84,9 +84,10 @@ export class Paragraph extends Block {
                 event.preventDefault();
                 const textToInsert = event.data || "";
                 if (!sel.isCollapsed) {
-                    this.delete(sel.from, sel.to - sel.from);
+                    this.delete({index: sel.from, length: sel.to - sel.from});
                 }
                 this.insert(sel.from, textToInsert);
+                this.commit();
                 
                 // RESTAURATION DU CURSEUR
                 await tick();
@@ -97,9 +98,10 @@ export class Paragraph extends Block {
             case "insertSoftLineBreak":
                 event.preventDefault();
                 if (!sel.isCollapsed) {
-                    this.delete(sel.from, sel.to - sel.from);
+                    this.delete({index: sel.from, length: sel.to - sel.from});
                 }
                 this.insert(sel.from, "\n");
+                this.commit();
                 
                 await tick();
                 this.nabu.selection.setCursor(this, sel.from + 1);
@@ -118,7 +120,7 @@ export class Paragraph extends Block {
                             ...this.container.toDelta()
                         ])
                         this.destroy();
-                        // this.delete(0, this.text.length);
+                        this.commit();
                         
                         // RESTAURATION DU CURSEUR
                         await tick();
@@ -128,7 +130,9 @@ export class Paragraph extends Block {
                     event.preventDefault();
                     const length = sel.isCollapsed ? 1 : sel.to - sel.from;
                     const index = sel.isCollapsed ? sel.from - 1 : sel.from;
-                    this.delete(index, length);
+                    console.log("Deleting from index", index, "length", length);
+                    this.delete({index, length});
+                    this.commit();
                     
                     // RESTAURATION DU CURSEUR
                     await tick();
@@ -147,6 +151,7 @@ export class Paragraph extends Block {
                             ...nextParagraph.container.toDelta()
                         ])
                         nextParagraph.destroy();
+                        this.commit();
                         
                         // RESTAURATION DU CURSEUR
                         await tick();
@@ -155,7 +160,8 @@ export class Paragraph extends Block {
                 } else {
                     event.preventDefault();
                     const length = sel.isCollapsed ? 1 : sel.to - sel.from;
-                    this.delete(sel.from, length);
+                    this.delete({index: sel.from, length});
+                    this.commit();
                     
                     await tick();
                     this.nabu.selection.setCursor(this, sel.from);
@@ -199,23 +205,52 @@ export class Paragraph extends Block {
         return { node: this.element, offset: this.element.childNodes.length };
     }
 
-    /** @param {number} index @param {string} text */
-    insert(index, text) {
-        this.container.insert(index, text);
-        this.nabu.doc.commit();
+    /** @param {Block} block */
+    mergeWith(block) {
+        if (!(block instanceof Paragraph)) return false;
+        const other = block;
+        this.delta([
+            { retain: this.container.length },
+            ...other.container.toDelta()
+        ]);
+        other.destroy();
+        return true;
     }
 
-    /** @param {number} index @param {number} length */
-    delete(index, length) {
+
+    /** @param {number} index @param {string} text */
+    insert(index, text) {
+        console.warn("Inserting text", text, "at index", index, "in paragraph", this.id);
+        this.container.insert(index, text);
+    }
+
+    
+    /** @param {Parameters<Block["delete"]>[0]} [deletion] */
+    delete(deletion) {
+        const l = this.container.length;
+        let from = deletion?.from ?? this.selection?.from ?? 0;
+        if (from < 0) from = l + from + 1;
+        let to = deletion?.to ?? this.selection?.to ?? l;
+        if (to < 0) to = l + (to + 1) ;
+        const index = deletion?.index ?? from;
+        const length = deletion?.length ?? (to - from);
         this.container.delete(index, length);
-        this.nabu.doc.commit();
     }
 
     /** @param {import('loro-crdt').Delta<string>[]} data */
     delta(data = []) {
         this.container.applyDelta(data);
-        this.nabu.doc.commit();
     } 
+
+    /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
+    split(options) {
+        const sel = this.selection;
+        if (!sel) return null;
+        const offset = options?.index ?? options?.offset ?? options?.from;
+        const from = options?.from ?? offset ?? sel.from;
+        const to = options?.to ?? (options?.length ? from + options.length : (offset ?? sel.to));
+        return this.ascend("onSplit", null, { offset: from, delta: this.container.sliceDelta(from, to)});
+    }
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {

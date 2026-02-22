@@ -12,7 +12,7 @@
     spellcheck="false"
     translate="no"
     data-nabu-root="true"
-    onbeforeinput={(e) => engine.beforeinput(e)}
+    onbeforeinput={(e) => engine.handleBeforeinput(e)}
 >
     {#each engine.children as block (block.id)}
         <Block {block} />

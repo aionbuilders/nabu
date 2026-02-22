@@ -15,8 +15,15 @@ export class NabuSelection extends SvelteSelection {
 
         $effect(() => {
             if (this.blocks) {
-                this.previous.forEach(block => block.selected = this.blocks.has(block));
-                this.blocks.forEach(block => block.selected = true);   
+                this.previous.forEach(block => block.clearSelection());
+                let i = 0;
+                const lastIndex = this.blocks.size - 1;
+                this.blocks.forEach((block) => {
+                    block.selected = true;
+                    block.isSelectionStart = (i === 0);
+                    block.isSelectionEnd = i === lastIndex;
+                    i++;
+                });
                 this.previous = new Set(this.blocks);
             }
         })

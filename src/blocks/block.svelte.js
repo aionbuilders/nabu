@@ -3,6 +3,8 @@
  * @import { MegaBlock } from "./megablock.svelte";
  */
 
+import { tick } from "svelte";
+
 
 export class Block {
     /** @param {Nabu} nabu @param {NabuNode} node */
@@ -21,12 +23,31 @@ export class Block {
     }
 
     selected = $state(false);
+    isSelectionStart = $state(false);
+    isSelectionEnd = $state(false);
+    isIntermediate = $derived(this.selected && !this.isSelectionStart && !this.isSelectionEnd);
+    
+    clearSelection() {
+        this.selected = false;
+        this.isSelectionStart = false;
+        this.isSelectionEnd = false;
+    }
 
     /** @type {{from: number, to: number, direction: "forward" | "backward" | "none"} | null} */
     selection = $derived(null);
 
     /** @type {MegaBlock | null} */
     parent = $state(null);
+
+    parents = $derived.by(() => {
+        const parents = [];
+        let current = this.parent;
+        while (current) {
+            parents.push(current);
+            current = current.parent;
+        }
+        return parents;
+    });
 
     component = $derived(this.nabu.components.get(this.type) || null);
 
@@ -85,6 +106,54 @@ export class Block {
         this.nabu.delete(this);
     }
 
+
+
+    /** @param {number} index @param {string} text */
+    insert(index, text) {
+        console.warn("Not implemented: insert text", text, "at index", index, "in block", this.id);
+    }
+
+    /** @param {{from?: number, to?: number, index?: number, length?: number}} [deletion] */
+    delete(deletion) {
+        console.warn("Not implemented: delete block", this.id, "with deletion range", deletion);
+    }
+
+    /** @param {Block} block */
+    mergeWith(block) {
+        console.warn("Not implemented: merge block", this.id, "with block", block.id);
+    }
+
+    /** @param {{from?: number, to?: number, index?: number, length?: number, offset?: number}} options @returns {{block: Block} | null} */
+    split(options) {
+        console.warn("Not implemented: split block", this.id, "with options", options);
+        return null;
+    }
+
+    /** @param {{start?: number, end?: number, offset?: number}} options @param {boolean} [passive=false] */
+    focus(options = {}, passive = false) {
+        let start = options.start ?? options.offset ?? this.selection?.from ?? 0;
+        let end = options.end ?? options.offset ?? this.selection?.to ?? 0;
+        const startPoint = this.getDOMPoint(start);
+        const endPoint = this.getDOMPoint(end);
+        if (!passive && startPoint && endPoint) {
+            tick().then(() => {
+                console.log("REFOCUS");
+                this.nabu.selection.setBaseAndExtent(startPoint.node, startPoint.offset || 0, endPoint.node || null, endPoint.offset || 0)
+            })
+        }
+
+        return {start: startPoint, end: endPoint, options: {startOffset: start, endOffset: end}};
+    } 
+
+    /** 
+     * @param {number} offset
+     * @returns {{node: Node, offset: number} | null}
+     */
+    getDOMPoint(offset) {
+        console.warn("getDOMPoint not implemented for block", this.type, this.id);
+        return null;
+    }
+
     // -- Event Handling --
 
     /** @param {string} eventName @param {Event} event @param {Object} [data={}] */
@@ -99,8 +168,10 @@ export class Block {
         const hooks = this.nabu.hooks.get(eventName);
         if (hooks) {
             for (const hook of hooks) {
+
                 // Si un hook retourne 'true', on considère l'événement géré
-                if (hook(this.nabu, this, event, data)) return true;
+                const result = hook(this.nabu, this, event, data);
+                if (result) return result;
             }
         }
 
@@ -113,6 +184,13 @@ export class Block {
     }
 
 
+
+    // -- UTILS --
+
+    commit() {
+        console.log("Committing changes in block", this.id);
+        this.nabu.doc.commit();
+    }
 
 
     /** @param {Nabu} nabu @param {NabuNode} node */

@@ -9,6 +9,8 @@
     data-block-type="paragraph"
     class="nabu-paragraph"
     class:selected={block.selected}
+    class:first={block.isSelectionStart}
+    class:last={block.isSelectionEnd}
 >{block.text || "\n"}</div>
 
 <style>
@@ -17,6 +19,13 @@
         &.selected {
             background-color: rgba(59, 130, 246, 0.25);
         }
+        &.first {
+            border-top: 1px solid rgba(59, 130, 246, 0.5);
+        }
+        &.last {
+            border-bottom: 1px solid rgba(59, 130, 246, 0.5);
+        }
+        
 
         /* &::before {
             content: " ";
