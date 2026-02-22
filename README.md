@@ -1,65 +1,34 @@
-# Svelte library
+# 🖋️ NABU — Next-Generation Block Engine
 
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
+Nabu is a modular, local-first block editor engine built on a **Single ContentEditable** architecture. It bridges the gap between the intuitive selection of document-based editors (Google Docs, ProseMirror) and the structural flexibility of block-based editors (Notion).
 
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
+## 🏗️ Core Architecture
 
-## Creating a project
+### Single ContentEditable Root
+Unlike traditional block editors that use isolated editable zones, Nabu manages a single native selection at the root. This guarantees seamless cross-block selection, native copy-paste, and superior browser performance.
 
-If you're seeing this, you've probably already done this step. Congrats!
+### Reactive CRDT Core (Loro-CRDT)
+Nabu treats the UI as a pure reflection of a distributed state. Built on **Loro-CRDT (WASM)**, it provides out-of-the-box support for:
+- **Local-First:** High-performance local state with offline-first capabilities.
+- **Collaboration:** Conflict-free merging of concurrent edits.
+- **Rich Text:** Native support for spans and marks via Loro Deltas.
 
-```sh
-# create a new project in the current directory
-npx sv create
+### Svelte 5 Integration
+Leveraging Svelte 5's Runes (`$state`, `$derived`), Nabu achieves fine-grained reactivity. Only modified blocks or selection states trigger re-renders, ensuring a fluid 60fps experience even in massive documents.
 
-# create a new project in my-app
-npx sv create my-app
-```
+## 🛠️ Key Technical Features
 
-To recreate this project with the same configuration:
+- **Selection Bridge:** A high-precision mapping engine between DOM Nodes/Offsets and Model IDs/Indexes, enabling stable cursor restoration and robust cross-block ranges.
+- **Event Ascension:** A modular "Chain of Responsibility" pattern. Blocks handle local interactions while structural changes (split, merge) are escalated to parents or engine-level hooks.
+- **Delta-Based Mutations:** All structural operations (splitting, merging) utilize Loro Deltas to preserve formatting and metadata integrity during transformation.
+- **Block Registry:** A highly decoupled extension system allowing developers to define custom logic and UI for any block type.
 
-```sh
-# recreate this project
-bun x sv create --template library --types jsdoc --install bun .
-```
+## 🚀 Tech Stack
 
-## Developing
+- **UI Framework:** Svelte 5
+- **State/CRDT:** Loro-CRDT (WASM)
+- **Typing:** Strict JSDoc
+- **Architecture:** OOP-based Block Registry & Extensions
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
-
-## Building
-
-To build your library:
-
-```sh
-npm pack
-```
-
-To create a production version of your showcase app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-
-## Publishing
-
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
-
-To publish your library to [npm](https://www.npmjs.com):
-
-```sh
-npm publish
-```
+---
+*Architected for performance, built for the future of collaborative writing.*
