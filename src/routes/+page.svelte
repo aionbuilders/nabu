@@ -15,8 +15,7 @@
         <div class="brand">
             <h1>Nabu</h1>
             <span class="badge">alpha</span>
-            <!-- <p>{JSON.stringify(engine.selection.blocks.map(b => b.id))}</p> -->
-             <p>start: {JSON.stringify(engine.selection.startBlock?.selection)} / end: {JSON.stringify(engine.selection.endBlock?.selection)}</p>
+            <p>start: {JSON.stringify(engine.selection.startBlock?.selection)} / end: {JSON.stringify(engine.selection.endBlock?.selection)}</p>
         </div>
         <div class="actions">
             <button onclick={() => console.log(engine)}>Log Engine</button>

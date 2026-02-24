@@ -214,6 +214,7 @@ export class SvelteSelection {
     addRange = (range) => {
         try {
             this.raw?.addRange(range);
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de l\'ajout de la range:', error);
@@ -228,6 +229,7 @@ export class SvelteSelection {
     removeAllRanges = () => {
         try {
             this.raw?.removeAllRanges();
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de la suppression des ranges:', error);
@@ -243,6 +245,7 @@ export class SvelteSelection {
     removeRange = (range) => {
         try {
             this.raw?.removeRange(range);
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de la suppression de la range:', error);
@@ -273,6 +276,7 @@ export class SvelteSelection {
     collapse = (node, offset = 0) => {
         try {
             this.raw?.collapse(node, offset);
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de la réduction de la sélection:', error);
@@ -287,6 +291,7 @@ export class SvelteSelection {
     collapseToStart = () => {
         try {
             this.raw?.collapseToStart();
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de la réduction au début:', error);
@@ -301,6 +306,7 @@ export class SvelteSelection {
     collapseToEnd = () => {
         try {
             this.raw?.collapseToEnd();
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de la réduction à la fin:', error);
@@ -316,6 +322,7 @@ export class SvelteSelection {
     selectAllChildren = (node) => {
         try {
             this.raw?.selectAllChildren(node);
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de la sélection des enfants:', error);
@@ -332,6 +339,7 @@ export class SvelteSelection {
     extend = (node, offset = 0) => {
         try {
             this.raw?.extend(node, offset);
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de l\'extension de la sélection:', error);
@@ -351,6 +359,7 @@ export class SvelteSelection {
     setBaseAndExtent = (anchorNode, anchorOffset, focusNode, focusOffset) => {
         try {
             this.raw?.setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de la définition de la base et extension:', error);
@@ -439,6 +448,7 @@ export class SvelteSelection {
     selectAll = () => {
         try {
             this.raw?.selectAllChildren(document.body);
+            this.#updateSelection();
             return true;
         } catch (error) {
             console.warn('Erreur lors de la sélection de tout:', error);

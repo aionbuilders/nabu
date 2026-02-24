@@ -75,7 +75,7 @@ export class Paragraph extends Block {
     }
 
     /** @param {InputEvent} event */
-    async beforeinput(event) {
+    beforeinput(event) {
         const sel = this.selection;
         if (!sel) return;
 
@@ -90,8 +90,7 @@ export class Paragraph extends Block {
                 this.commit();
                 
                 // RESTAURATION DU CURSEUR
-                await tick();
-                this.nabu.selection.setCursor(this, sel.from + textToInsert.length);
+                tick().then(() => this.nabu.selection.setCursor(this, sel.from + textToInsert.length));
                 break;
 
             case "insertLineBreak":
@@ -103,8 +102,7 @@ export class Paragraph extends Block {
                 this.insert(sel.from, "\n");
                 this.commit();
                 
-                await tick();
-                this.nabu.selection.setCursor(this, sel.from + 1);
+                tick().then(() => this.nabu.selection.setCursor(this, sel.from + 1));
                 break;
             
             case "deleteContentBackward":
@@ -123,8 +121,7 @@ export class Paragraph extends Block {
                         this.commit();
                         
                         // RESTAURATION DU CURSEUR
-                        await tick();
-                        this.nabu.selection.setCursor(previousParagraph, previousLength);
+                        tick().then(() => this.nabu.selection.setCursor(previousParagraph, previousLength));
                     }
                 } else {
                     event.preventDefault();
@@ -135,8 +132,8 @@ export class Paragraph extends Block {
                     this.commit();
                     
                     // RESTAURATION DU CURSEUR
-                    await tick();
-                    this.nabu.selection.setCursor(this, index);
+                    
+                    tick().then(() => this.nabu.selection.setCursor(this, index));
                 }
                 break;
 
@@ -154,17 +151,14 @@ export class Paragraph extends Block {
                         this.commit();
                         
                         // RESTAURATION DU CURSEUR
-                        await tick();
-                        this.nabu.selection.setCursor(this, sel.from);
+                        tick().then(() => this.nabu.selection.setCursor(this, sel.from));
                     }
                 } else {
                     event.preventDefault();
                     const length = sel.isCollapsed ? 1 : sel.to - sel.from;
                     this.delete({index: sel.from, length});
                     this.commit();
-                    
-                    await tick();
-                    this.nabu.selection.setCursor(this, sel.from);
+                    tick().then(() => this.nabu.selection.setCursor(this, sel.from));
                 }
                 break;
 
@@ -220,7 +214,6 @@ export class Paragraph extends Block {
 
     /** @param {number} index @param {string} text */
     insert(index, text) {
-        console.warn("Inserting text", text, "at index", index, "in paragraph", this.id);
         this.container.insert(index, text);
     }
 

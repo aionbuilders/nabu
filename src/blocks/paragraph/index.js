@@ -15,7 +15,7 @@ const ParagraphExtension = extension("paragraph", {
                 nabu.insert("paragraph", {
                     text: ""
                 });
-
+                
             }
         },
         /** @param {Nabu} nabu @param {Paragraph} block @param {Event} event @param {{offset: number, delta: import('loro-crdt').Delta<string>}} data */
