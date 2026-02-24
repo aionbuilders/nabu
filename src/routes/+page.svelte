@@ -1,8 +1,8 @@
 <script>
-    import { ParagraphExtension, Nabu, NabuEditor } from "../blocks";
+    import { ParagraphExtension, HeadingExtension, Nabu, NabuEditor } from "../blocks";
 
     let engine = new Nabu({
-        extensions: [ParagraphExtension]
+        extensions: [ParagraphExtension, HeadingExtension]
     });
 
     if (typeof window !== 'undefined') {
@@ -18,6 +18,8 @@
             <p>start: {JSON.stringify(engine.selection.startBlock?.selection)} / end: {JSON.stringify(engine.selection.endBlock?.selection)}</p>
         </div>
         <div class="actions">
+            <button onclick={() => engine.insert("heading", { level: 1, text: "Nouveau Titre" })}>+ Heading H1</button>
+            <button onclick={() => engine.insert("paragraph", { text: "" })}>+ Paragraph</button>
             <button onclick={() => console.log(engine)}>Log Engine</button>
         </div>
     </header>

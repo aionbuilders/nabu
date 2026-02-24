@@ -4,6 +4,7 @@
  */
 
 import { tick } from "svelte";
+import { SvelteMap } from "svelte/reactivity";
 
 
 export class Block {
@@ -22,6 +23,7 @@ export class Block {
         }
     }
 
+    behaviors = new SvelteMap();
     selected = $state(false);
     isSelectionStart = $state(false);
     isSelectionEnd = $state(false);

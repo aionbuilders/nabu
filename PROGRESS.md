@@ -17,9 +17,9 @@
 
 ---
 
-## 🟡 PHASE 2 : Structure & Types (À VENIR)
+## 🟡 PHASE 2 : Structure & Types (EN COURS)
 
-*   [ ] **2.1. Transformer les blocs :** Pouvoir changer un paragraphe en Titre (H1, H2).
+*   [x] **2.1. Transformer les blocs :** Pouvoir changer un paragraphe en Titre (H1, H2). Implémentation du bloc `Heading` et du `TextBehavior`. (Terminé)
 *   [ ] **2.2. Markdown Shortcuts :** Déclenchement automatique (`# `, `- `) lors de la frappe.
 *   [ ] **2.3. Gestion des listes imbriquées :** Implémentation du `MegaBlock` Liste et gestion du Tab / Shift+Tab.
 *   [ ] **2.4. Rich Text (Spans) :** Rendu et édition des `marks` (Gras, Italique).

@@ -4,3 +4,6 @@ export * from "./megablock.svelte";
 export { default as NabuEditor } from "./Nabu.svelte";
 
 export * from "./paragraph";
+export * from "./heading";
+
+export * from "./selection.svelte";

@@ -1,32 +1,40 @@
+import { TextBehavior } from "../../behaviors/text";
+import HeadingComponent from "./Heading.svelte";
 import { Block } from "../block.svelte";
 import { LoroText } from "loro-crdt";
-import ParagraphComponent from "./Paragraph.svelte";
-import { tick } from "svelte";
-import { TextBehavior } from "../../behaviors/text";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte";
+ * @import { TextNode } from "../../behaviors/text";
  */
 
 /**
- * @typedef {NabuNode<{type: "paragraph", text: LoroText}>} ParagraphNode
+ * @typedef {NabuNode<{type: "heading", text: LoroText, level: number}>} HeadingNode
  */
 
-export class Paragraph extends Block {
-    /** @param {Nabu} nabu @param {ParagraphNode} node */
+export class Heading extends Block {
+    /** @param {Nabu} nabu @param {HeadingNode} node */
     constructor(nabu, node) {
         super(nabu, node);
-        
         const data = node.data;
         this.container = data.get("text") ?? data.setContainer("text", new LoroText());
 
         /** @type {TextBehavior} */
         this.behavior = new TextBehavior(this, this.container);
         this.behaviors.set("text", this.behavior);
+
+        this.level = data.get("level") || 1;
         
+        // Synchronisation du niveau
+        this.node.data.subscribe(() => {
+            this.level = this.node.data.get("level") || 1;
+        });
     }
 
-    component = $derived(this.nabu.components.get("paragraph") || ParagraphComponent);
+    /** @type {number} */
+    level = $state(1);
+
+    component = $derived(this.nabu.components.get("heading") || HeadingComponent);
     
     get text() {
         return this.behavior.text;
@@ -40,14 +48,10 @@ export class Paragraph extends Block {
     }
 
     /**
-     * Retrouve le nœud texte et l'offset DOM pour un offset Modèle donné
      * @param {number} targetOffset 
      * @returns {{node: Node, offset: number} | null}
      */
-    getDOMPoint(targetOffset) {
-        if (!this.element) return null;
-        return this.behavior.getDOMPoint(targetOffset);
-    }
+    getDOMPoint(targetOffset) { return this.behavior.getDOMPoint(targetOffset); }
 
     /** @param {Block} block */
     mergeWith(block) { return this.behavior.mergeWith(block); }
@@ -67,11 +71,12 @@ export class Paragraph extends Block {
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = nabu.tree.createNode(parentId || undefined, index || undefined);
-        node.data.set("type", "paragraph");
+        node.data.set("type", "heading");
+        node.data.set("level", props.level || 1);
         const container = node.data.setContainer("text", new LoroText());
-        if (props.text) container.insert(0, props.text || "Start writing...");
+        if (props.text) container.insert(0, props.text);
         if (props.delta) container.applyDelta([...props.delta]);
-        const block = new Paragraph(nabu, node);
+        const block = new Heading(nabu, node);
         return block;
     }
 }
