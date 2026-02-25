@@ -173,6 +173,7 @@ export class Block {
 
     /** @param {string} eventName @param {Event} event @param {Object} [data={}] */
     ascend(eventName, event, data = {}) {
+        console.log(`My parent is`, this.parent, `and I'm ascending event ${eventName} with data`, data);
         //@ts-ignore
         if (this.parent && typeof this.parent[eventName] === "function") {
             //@ts-ignore
@@ -198,7 +199,10 @@ export class Block {
         // On peut intercepter les événements d'input ici pour faire des choses comme :
     }
 
-
+    /** @param {KeyboardEvent} event @returns {any} */
+    keydown(event) {
+        // Intercepter les touches spéciales (Tab, Enter, flèches)
+    }
 
     // -- UTILS --
 

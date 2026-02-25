@@ -13,6 +13,7 @@
     translate="no"
     data-nabu-root="true"
     onbeforeinput={(e) => engine.handleBeforeinput(e)}
+    onkeydown={(e) => engine.handleKeydown(e)}
 >
     {#each engine.children as block (block.id)}
         <Block {block} />

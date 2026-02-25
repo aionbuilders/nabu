@@ -1,8 +1,8 @@
 <script>
-    import { ParagraphExtension, HeadingExtension, Nabu, NabuEditor } from "../blocks";
+    import { ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, Nabu, NabuEditor } from "../blocks";
 
     let engine = new Nabu({
-        extensions: [ParagraphExtension, HeadingExtension]
+        extensions: [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension]
     });
 
     if (typeof window !== 'undefined') {
@@ -20,6 +20,21 @@
         <div class="actions">
             <button onclick={() => engine.insert("heading", { level: 1, text: "Nouveau Titre" })}>+ Heading H1</button>
             <button onclick={() => engine.insert("paragraph", { text: "" })}>+ Paragraph</button>
+            <button onclick={() => {
+                // 1. Liste Racine
+                const mainList = engine.insert("list", { listType: "bullet" });
+                
+                // 2. Items simples
+                engine.insert("list-item", { text: "Item racine 1" }, mainList.node.id.toString(), 0);
+                const item2 = engine.insert("list-item", { text: "Item racine 2 (Parent)" }, mainList.node.id.toString(), 1);
+                
+                // 3. Sous-liste (enfant de l'Item 2)
+                const subList = engine.insert("list", { listType: "ordered" }, item2.node.id.toString());
+                
+                // 4. Sous-items
+                engine.insert("list-item", { text: "Sous-item A" }, subList.node.id.toString(), 0);
+                engine.insert("list-item", { text: "Sous-item B" }, subList.node.id.toString(), 1);
+            }}>+ Nested List Test</button>
             <button onclick={() => console.log(engine)}>Log Engine</button>
         </div>
     </header>

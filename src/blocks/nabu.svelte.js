@@ -59,7 +59,31 @@ export class Nabu {
             }
         }
         
-        this.tree.subscribe(() => {
+        this.tree.subscribe((event) => {
+            event.events.forEach(e => {
+                if (e.diff.type === "tree") {
+                    console.log("Tree event:", e);
+                    e.diff.diff.forEach(action => {
+                        //WARN: maybe delete actions should be handled differently, since the block will already be deleted at this point
+                        console.log("Tree action:", action);
+                        if ((action.action === 'create' || action.action === 'move' || action.action === 'delete')) {
+                            if (action.parent) {
+                                const parentId = action.parent.toString();
+                                const parentBlock = this.blocks.get(parentId);
+                                if (parentBlock) parentBlock.updateChildren();
+                            }
+
+                            if (action.oldParent) {
+                                const oldParentId = action.oldParent.toString();
+                                const oldParentBlock = this.blocks.get(oldParentId);
+                                if (oldParentBlock) oldParentBlock.updateChildren();
+                            }
+                        }
+                    })
+                }
+            })
+            
+            
             const roots = /** @type {NabuNode[]} */ (this.tree.roots());
             const newChildren = [];
             for (const root of roots) {
@@ -67,12 +91,8 @@ export class Nabu {
                 let block = this.blocks.get(id);
                 const currentType = root.data.get("type");
                 
-                // TYPE SWAP : Si le bloc n'existe pas OU si son type a changé
                 if (!block || block.type !== currentType) {
-                    if (block) {
-                        // Nettoyage si nécessaire (optionnel car Svelte 5 gère bien)
-                        this.blocks.delete(id);
-                    }
+                    if (block) this.blocks.delete(id);
                     block = Block.load(this, root);
                 }
                 newChildren.push(block);
@@ -82,12 +102,12 @@ export class Nabu {
         
         this.init();
     }
-
+    
     static BREAK = Symbol("BREAK");
     static CONTINUE = Symbol("CONTINUE");
     BREAK = Nabu.BREAK;
     CONTINUE = Nabu.CONTINUE;
-
+    
     /** @type {LoroDoc} */
     doc;
     /** @type {SvelteMap<string, typeof Block>} */
@@ -151,39 +171,57 @@ export class Nabu {
     }
     
     // EVENT HANDLING
-    
-    /** @param {InputEvent} e */
-    handleBeforeinput(e) {
-        e.preventDefault();
+
+    /** 
+     * Route un événement vers le bon bloc en fonction de la sélection courante.
+     * @param {string} handlerName - Le nom de la méthode à appeler sur le bloc (ex: 'beforeinput', 'keydown')
+     * @param {Event} e - L'événement natif
+     * @param {string} [hookName] - Optionnel : Le nom du hook d'extension à vérifier en premier
+     */
+    dispatchEventToSelection(handlerName, e, hookName) {
         const sel = this.selection;
         if (!sel.anchorBlock || !sel.focusBlock) return;
-
-        const beforeInputHooks = this.hooks.get("onBeforeInput") || [];
-        for (const hook of beforeInputHooks) {
-            const handled = hook(this, e, sel.anchorBlock);
-            // if (handled) return;
-            if (handled === this.BREAK) {
-                e.preventDefault();
-                return;
+        
+        // 1. Essayer les hooks globaux d'extension d'abord
+        if (hookName) {
+            const hooks = this.hooks.get(hookName) || [];
+            for (const hook of hooks) {
+                const handled = hook(this, e, sel.anchorBlock);
+                if (handled === this.BREAK) {
+                    e.preventDefault();
+                    return;
+                }
             }
         }
         
+        // 2. Trouver la cible et lui déléguer
+        let targetBlock = null;
         if (sel.anchorBlock === sel.focusBlock) {
-            const handled = sel.anchorBlock.beforeinput?.(e);
-            if (handled) {
-                e.preventDefault();
-                return;
-            }
+            targetBlock = sel.anchorBlock;
         } else {
             const anchorParents = sel.anchorBlock.parents || [];
             const focusParents = sel.focusBlock.parents || [];
-            const commonAncestor = anchorParents.find(ancestor => focusParents.includes(ancestor)) || this;
-            const handled = commonAncestor.beforeinput?.(e);
+            targetBlock = anchorParents.find(ancestor => focusParents.includes(ancestor)) || this;
+        }
+
+        // 3. Appeler la méthode sur le bloc cible s'il la possède
+        if (targetBlock && typeof targetBlock[handlerName] === 'function') {
+            const handled = targetBlock[handlerName](e);
             if (handled) {
                 e.preventDefault();
-                return;
             }
         }
+    }
+    
+    /** @param {InputEvent} e */
+    handleBeforeinput(e) {
+        e.preventDefault(); // Toujours bloquer les mutations natives
+        this.dispatchEventToSelection('beforeinput', e, 'onBeforeInput');
+    }
+
+    /** @param {KeyboardEvent} e */
+    handleKeydown(e) {
+        this.dispatchEventToSelection('keydown', e, 'onKeyDown');
     }
     
     /** @param {InputEvent} e */
@@ -232,8 +270,8 @@ export class Nabu {
             newBlock.focus({offset: 0});
         }
     }
-
-
+    
+    
 }
 
 

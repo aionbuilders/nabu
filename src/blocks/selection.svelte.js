@@ -98,26 +98,33 @@ export class NabuSelection extends SvelteSelection {
 * @param {string} nodeIdB - ID du second nœud de la sélection
 */
 function getNodesBetween(tree, nodeIdA, nodeIdB) {
-    const roots = tree.roots(); 
+    const roots = tree.roots();
     
     let isRecording = false;
     /** @type {LoroTreeNode[]} */
     const nodesInRange = [];
     
+    
+    // if (nodeIdA && nodeIdA === nodeIdB) {
+    //     
+    // }
+    
     /** @param {LoroTreeNode[]} nodes */
     function traverse(nodes) {
-        const sortedNodes = nodes.sort((a, b) => a.index() - b.index());
-        
-        for (const node of sortedNodes) {
+        for (const node of nodes) {
+            const currentId = node.id.toString();
 
-            if (node.id === nodeIdA) {
+            if (currentId === nodeIdA) {
                 isRecording = true;
                 nodesInRange.push(node);
-                if (node.id === nodeIdB) break;
+                
+                if (currentId === nodeIdB) {
+                    return true;
+                }
             } else if (isRecording) {
                 nodesInRange.push(node);
-                if (node.id === nodeIdB) {
-                    break;
+                if (currentId === nodeIdB) {
+                    return true; 
                 }
             }
             
@@ -128,7 +135,7 @@ function getNodesBetween(tree, nodeIdA, nodeIdB) {
                 }
             }
         }
-        return false;
+        return false; // La fin n'a pas été trouvée dans cette branche
     }
     
     traverse(roots);
