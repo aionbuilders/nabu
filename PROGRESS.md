@@ -25,13 +25,12 @@
 *   [x] **2.1.3. Signaux de Hook :** Introduction de `Nabu.BREAK` et `Nabu.CONTINUE` pour le contrôle de flux.
 
 ### 2.2. Perfectionnement des Titres (Headings)
-*   [x] **2.2.1. Extension Heading :** Support des tags h1-h6 réactifs et mapping Loro.
-*   [x] **2.2.2. Markdown Shortcuts :** Conversion automatique via `# + Espace`.
-*   [ ] **2.2.3. UX de Dé-transformation :**
-    *   [ ] **Backspace au début :** Si curseur à l'offset 0 d'un Heading -> Transformer en Paragraph.
-    *   [ ] **Suppression totale :** Si le titre devient vide via Backspace -> Transformer en Paragraph ? (A discuter)
-*   [ ] **2.2.4. Orchestration du Split :**
-    *   [ ] **Entrée systématique :** Appuyer sur Entrée dans un titre doit toujours créer un Paragraph à la suite (UX standard).
+*   [x] **2.2.1. Extension Heading :** Support des tags h1-h6 réactifs et mapping Loro. (Terminé)
+*   [x] **2.2.2. Markdown Shortcuts :** Conversion automatique via `# + Espace`. (Terminé)
+*   [x] **2.2.3. UX de Dé-transformation :**
+    *   [x] **Backspace au début :** Si curseur à l'offset 0 d'un Heading -> Transformer en Paragraph. (Terminé)
+*   [x] **2.2.4. Orchestration du Split :**
+    *   [x] **Entrée systématique :** Appuyer sur Entrée dans un titre doit toujours créer un Paragraph à la suite. (Terminé)
 
 ### 2.3. Gestion des Listes Imbriquées (MegaBlocks)
 *   [ ] **2.3.1. Architecture MegaBlock :** Implémentation du conteneur `List` (ul/ol) et des items `ListItem`.
