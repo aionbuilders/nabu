@@ -108,7 +108,20 @@ export class Block {
         this.nabu.delete(this);
     }
 
-
+    /**
+     * Transforme ce bloc en un autre type de bloc.
+     * @param {string} newType 
+     * @param {Object} [props={}] 
+     */
+    transformTo(newType, props = {}) {
+        console.log(`Transforming block ${this.id} from ${this.type} to ${newType}`, props);
+        const data = this.node.data;
+        data.set("type", newType);
+        for (const [key, value] of Object.entries(props)) {
+            data.set(key, value);
+        }
+        this.commit();
+    }
 
     /** @param {number} index @param {string} text */
     insert(index, text) {

@@ -65,7 +65,14 @@ export class Nabu {
             for (const root of roots) {
                 const id = root.id.toString();
                 let block = this.blocks.get(id);
-                if (!block) {
+                const currentType = root.data.get("type");
+                
+                // TYPE SWAP : Si le bloc n'existe pas OU si son type a changé
+                if (!block || block.type !== currentType) {
+                    if (block) {
+                        // Nettoyage si nécessaire (optionnel car Svelte 5 gère bien)
+                        this.blocks.delete(id);
+                    }
                     block = Block.load(this, root);
                 }
                 newChildren.push(block);
@@ -75,6 +82,12 @@ export class Nabu {
         
         this.init();
     }
+
+    static BREAK = Symbol("BREAK");
+    static CONTINUE = Symbol("CONTINUE");
+    BREAK = Nabu.BREAK;
+    CONTINUE = Nabu.CONTINUE;
+
     /** @type {LoroDoc} */
     doc;
     /** @type {SvelteMap<string, typeof Block>} */
@@ -144,6 +157,16 @@ export class Nabu {
         e.preventDefault();
         const sel = this.selection;
         if (!sel.anchorBlock || !sel.focusBlock) return;
+
+        const beforeInputHooks = this.hooks.get("onBeforeInput") || [];
+        for (const hook of beforeInputHooks) {
+            const handled = hook(this, e, sel.anchorBlock);
+            // if (handled) return;
+            if (handled === this.BREAK) {
+                e.preventDefault();
+                return;
+            }
+        }
         
         if (sel.anchorBlock === sel.focusBlock) {
             const handled = sel.anchorBlock.beforeinput?.(e);
@@ -209,6 +232,8 @@ export class Nabu {
             newBlock.focus({offset: 0});
         }
     }
+
+
 }
 
 

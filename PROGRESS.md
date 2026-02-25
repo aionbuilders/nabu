@@ -19,10 +19,32 @@
 
 ## 🟡 PHASE 2 : Structure & Types (EN COURS)
 
-*   [x] **2.1. Transformer les blocs :** Pouvoir changer un paragraphe en Titre (H1, H2). Implémentation du bloc `Heading` et du `TextBehavior`. (Terminé)
-*   [ ] **2.2. Markdown Shortcuts :** Déclenchement automatique (`# `, `- `) lors de la frappe.
-*   [ ] **2.3. Gestion des listes imbriquées :** Implémentation du `MegaBlock` Liste et gestion du Tab / Shift+Tab.
-*   [ ] **2.4. Rich Text (Spans) :** Rendu et édition des `marks` (Gras, Italique).
+### 2.1. Écosystème de Blocs Textuels
+*   [x] **2.1.1. TextBehavior :** Extraction de la logique textuelle universelle (LoroText + DOM Sync).
+*   [x] **2.1.2. Moteur "Type Swap" :** Capacité du moteur Nabu à ré-instancier un bloc dont le type change dans Loro.
+*   [x] **2.1.3. Signaux de Hook :** Introduction de `Nabu.BREAK` et `Nabu.CONTINUE` pour le contrôle de flux.
+
+### 2.2. Perfectionnement des Titres (Headings)
+*   [x] **2.2.1. Extension Heading :** Support des tags h1-h6 réactifs et mapping Loro.
+*   [x] **2.2.2. Markdown Shortcuts :** Conversion automatique via `# + Espace`.
+*   [ ] **2.2.3. UX de Dé-transformation :**
+    *   [ ] **Backspace au début :** Si curseur à l'offset 0 d'un Heading -> Transformer en Paragraph.
+    *   [ ] **Suppression totale :** Si le titre devient vide via Backspace -> Transformer en Paragraph ? (A discuter)
+*   [ ] **2.2.4. Orchestration du Split :**
+    *   [ ] **Entrée systématique :** Appuyer sur Entrée dans un titre doit toujours créer un Paragraph à la suite (UX standard).
+
+### 2.3. Gestion des Listes Imbriquées (MegaBlocks)
+*   [ ] **2.3.1. Architecture MegaBlock :** Implémentation du conteneur `List` (ul/ol) et des items `ListItem`.
+*   [ ] **2.3.2. Hiérarchie LoroTree :** Manipulation du parentage Loro pour l'imbrication.
+*   [ ] **2.3.3. Raccourcis Clavier :**
+    *   [ ] **Tab :** Indenter l'item (le faire devenir enfant du précédent).
+    *   [ ] **Shift+Tab :** Désindenter l'item (remonter d'un niveau).
+    *   [ ] **Entrée sur item vide :** Sortir de la liste (transformer en paragraphe).
+
+### 2.4. Rich Text & Marks (Inline Formatting)
+*   [ ] **2.4.1. Loro Marks :** Gestion des deltas avec attributs (bold, italic, code, link).
+*   [ ] **2.4.2. Input Interception :** Détection des patterns Markdown inline (ex: `**gras**`).
+*   [ ] **2.4.3. UI de Sélection :** Toolbar flottante pour appliquer des styles sur une plage de texte.
 
 ---
 

@@ -94,6 +94,19 @@ export class TextBehavior {
     /** @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [selection] */
     handleInsertText(event, selection = this.selection) {
         if (!selection) return;
+
+        // Hook system (Markdown shortcuts, etc.)
+        const hooks = this.nabu.hooks.get("onBeforeInput");
+        if (hooks) {
+            for (const hook of hooks) {
+                const result = hook(this.nabu, event, this.block);
+                if (result === this.nabu.BREAK) {
+                    event.preventDefault();
+                    return true; 
+                }
+            }
+        }
+
         const textToInsert = event.data || "";
         if (!selection.isCollapsed) this.delete({index: selection.from, length: selection.to - selection.from}, selection);
         this.insert(selection.from, textToInsert);

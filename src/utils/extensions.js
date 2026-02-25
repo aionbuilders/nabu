@@ -11,6 +11,8 @@
  * onBeforeTransaction: function(Nabu, Array<{type: string, block: Block}>): void,
  * onAfterTransaction: function(Nabu, Array<{type: string, block: Block}>): void,
  * onSplit: function(Nabu, Block, Event, {offset: number, delta: import('loro-crdt').Delta<string>}): {block: Block},
+ * onBeforeInput: function(Nabu, InputEvent, Block): void,
+ * onInput: function(Nabu, InputEvent, Block): void,
  * } & Object<string, function>} ExtensionHooks
  */
 
