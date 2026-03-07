@@ -1,7 +1,8 @@
-import { LoroDoc } from 'loro-crdt';
+import { LoroDoc, UndoManager } from 'loro-crdt';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte';
 import { NabuSelection } from './selection.svelte';
+import { tick } from 'svelte';
 
 
 /**
@@ -32,8 +33,38 @@ export class Nabu {
         this.selection = new NabuSelection(this);
         this.tree = /** @type {LoroTree<Record<string, NabuNode>>} */ (this.doc.getTree("blocks"));
         this.content = this.doc.getMap("content");
-        
-        
+
+        // Initialize Undo/Redo Manager
+        this.undoManager = new UndoManager(this.doc, {
+            maxUndoSteps: 100,
+            mergeInterval: 1000,
+            onPush: () => {
+                // Save cursor position for restoration on undo/redo
+                const sel = this.selection;
+                if (!sel || !sel.anchorBlock) return { value: null, cursors: [] };
+
+                return {
+                    value: {
+                        blockId: sel.anchorBlock.id,
+                        offset: sel.startOffset
+                    },
+                    cursors: []
+                };
+            },
+            onPop: (_, storedValue) => {
+                // Restore cursor position after undo/redo
+                const value = /** @type {{blockId: string, offset: number} | null} */ (storedValue?.value);
+                if (value && typeof value === 'object' && 'blockId' in value) {
+                    tick().then(() => {
+                        const block = this.blocks.get(value.blockId);
+                        if (block && block.behaviors?.has('text')) {
+                            this.selection.setCursor(block, value.offset);
+                        }
+                    });
+                }
+            }
+        });
+
         this.extensions = init.extensions || [];
         
         if (this.extensions?.length) {
@@ -172,7 +203,25 @@ export class Nabu {
         console.warn("Committing transaction...");
         this.doc.commit();
     }
-    
+
+    /**
+     * Undo the last operation
+     */
+    undo() {
+        if (this.undoManager.canUndo()) {
+            this.undoManager.undo();
+        }
+    }
+
+    /**
+     * Redo the last undone operation
+     */
+    redo() {
+        if (this.undoManager.canRedo()) {
+            this.undoManager.redo();
+        }
+    }
+
     /**
     * Insère un nouveau bloc dans le document
     * @param {string} type - Le type du bloc (ex: 'paragraph')
@@ -263,6 +312,20 @@ export class Nabu {
 
     /** @param {KeyboardEvent} e */
     handleKeydown(e) {
+        // Undo: Ctrl+Z or Cmd+Z (without Shift)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            this.undo();
+            return;
+        }
+
+        // Redo: Ctrl+Y, Cmd+Y, or Ctrl+Shift+Z, Cmd+Shift+Z
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+            e.preventDefault();
+            this.redo();
+            return;
+        }
+
         this.dispatchEventToSelection('keydown', e, 'onKeyDown');
     }
     

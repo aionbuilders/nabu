@@ -46,9 +46,60 @@
 *   [ ] **2.4.2. Input Interception :** Détection des patterns Markdown inline (ex: `**gras**`).
 *   [ ] **2.4.3. UI de Sélection :** Toolbar flottante pour appliquer des styles sur une plage de texte.
 
-### 2.5. Bugs & Améliorations prioritaires
+### 2.4. Undo/Redo (TERMINÉE) ✅
+*   [x] **2.4.1. UndoManager Loro :** Intégration de l'UndoManager de Loro-CRDT avec gestion locale des opérations (100 steps max, merge 1s).
+*   [x] **2.4.2. Shortcuts Clavier :** Ctrl+Z / Cmd+Z (undo), Ctrl+Y / Cmd+Y / Ctrl+Shift+Z / Cmd+Shift+Z (redo).
+*   [x] **2.4.3. Cursor Restoration :** Sauvegarde et restauration automatique de la position du curseur via callbacks onPush/onPop.
+
+### 2.5. Rich Text & Marks (Inline Formatting) - PROCHAINE ÉTAPE
+*   [ ] **2.5.1. Loro Marks :** Gestion des deltas avec attributs (bold, italic, code, link).
+*   [ ] **2.5.2. Input Interception :** Détection des patterns Markdown inline (ex: `**gras**`).
+*   [ ] **2.5.3. UI de Sélection :** Toolbar flottante pour appliquer des styles sur une plage de texte.
+
+### 2.6. Bugs & Améliorations prioritaires
 *   [ ] **Bug Merging ListItem :** La fusion de deux items de liste perd les enfants (sous-listes) du second item.
 *   [ ] **Surgical Multi-block Deletion :** Affiner la suppression de sélection traversant des structures imbriquées.
+
+---
+
+---
+
+## 📊 ÉTAT ACTUEL DU PROJET (2026-03-07)
+
+### Progression Globale : **60-70% vers MVP Bêta**
+
+#### ✅ Points Forts
+- **Architecture exceptionnelle** : Single ContentEditable + Loro-CRDT + Extension System
+- **Selection Bridge** : Mapping DOM ↔ Modèle parfaitement fonctionnel
+- **4 types de blocs stables** : Paragraph, Heading (h1-h6), List, ListItem
+- **Performance optimale** : O(1) accès, fine-grained reactivity Svelte 5
+- **DX excellente** : JSDoc strict, 7 ADRs documentés, code modulaire
+
+#### 🔴 Blockers Critiques pour Bêta
+1. **Rich Text Marks** (3-4j) - URGENT
+   - Aucun gras, italique, liens, code inline
+   - Loro Marks non implémentés
+   - Pas de toolbar pour appliquer styles
+
+2. **Persistence** (2-3j) - IMPORTANT
+   - Aucune sauvegarde (tout en mémoire)
+   - Pas d'IndexedDB ni export
+   - Perte de données au refresh
+
+3. **Bug ListItem Merge** (1-2j) - IMPORTANT
+   - Fusion de deux items perd les enfants du second
+   - Suppression multi-blocs à affiner
+
+#### 🟡 Nice-to-Have pour Polish MVP
+- Toolbar flottante
+- Menu slash (/)
+- Placeholders
+- Drag handles
+- Tests E2E
+
+### Estimation Bêta MVP
+- **Optimiste** : 6-7 jours (Rich Text + Persistence + Bug fixes)
+- **Réaliste** : 14 jours (avec polish UX + tests)
 
 ---
 
@@ -56,3 +107,4 @@
 1.  **Réconciliation :** Utilisation fine des Runes pour éviter les re-renders globaux.
 2.  **Mapping de Sélection :** Transformation DOM Range <-> Loro Path.
 3.  **OOP vs Functional :** Avantages des classes Svelte 5 pour l'encapsulation de l'état Loro.
+4.  **Prochaine priorité :** Phase 2.4 (Rich Text Marks) est le blocker #1 pour une bêta utilisable.
