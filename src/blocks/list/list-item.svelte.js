@@ -4,7 +4,7 @@ import { LoroText } from "loro-crdt";
 import { TextBehavior } from "../../behaviors/text";
 
 /**
- * @import { Nabu, NabuNode } from "../nabu.svelte";
+ * @import { Nabu, NabuNode, Block } from "..";
  */
 
 /**
@@ -151,7 +151,9 @@ export class ListItem extends MegaBlock {
     getDOMPoint(targetOffset) { return this.behavior.getDOMPoint(targetOffset); }
 
     /** @param {import('../block.svelte').Block} block */
-    mergeWith(block) { return this.behavior.mergeWith(block); }
+    absorbs(block) { return this.behavior.absorbs(block); }
+
+    
 
     /** @param {number} index @param {string} text */
     insert(index, text) { return this.behavior.insert(index, text); }

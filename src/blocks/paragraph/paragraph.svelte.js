@@ -1,7 +1,6 @@
 import { Block } from "../block.svelte";
 import { LoroText } from "loro-crdt";
 import ParagraphComponent from "./Paragraph.svelte";
-import { tick } from "svelte";
 import { TextBehavior } from "../../behaviors/text";
 
 /**
@@ -50,7 +49,7 @@ export class Paragraph extends Block {
     }
 
     /** @param {Block} block */
-    mergeWith(block) { return this.behavior.mergeWith(block); }
+    absorbs(block) { return this.behavior.absorbs(block); }
 
     /** @param {number} index @param {string} text */
     insert(index, text) { return this.behavior.insert(index, text); }

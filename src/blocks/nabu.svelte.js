@@ -1,5 +1,5 @@
 import { LoroDoc } from 'loro-crdt';
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte';
 import { NabuSelection } from './selection.svelte';
 
@@ -33,6 +33,7 @@ export class Nabu {
         this.tree = /** @type {LoroTree<Record<string, NabuNode>>} */ (this.doc.getTree("blocks"));
         this.content = this.doc.getMap("content");
         
+        
         this.extensions = init.extensions || [];
         
         if (this.extensions?.length) {
@@ -62,15 +63,14 @@ export class Nabu {
         this.tree.subscribe((event) => {
             event.events.forEach(e => {
                 if (e.diff.type === "tree") {
-                    console.log("Tree event:", e);
                     e.diff.diff.forEach(action => {
-                        //WARN: maybe delete actions should be handled differently, since the block will already be deleted at this point
-                        console.log("Tree action:", action);
-                        if ((action.action === 'create' || action.action === 'move' || action.action === 'delete')) {
+                        if (action.action === 'create' || action.action === 'move' || action.action === 'delete') {
                             if (action.parent) {
                                 const parentId = action.parent.toString();
                                 const parentBlock = this.blocks.get(parentId);
                                 if (parentBlock) parentBlock.updateChildren();
+                            } else {
+                                this.updateRoots();
                             }
 
                             if (action.oldParent) {
@@ -81,23 +81,20 @@ export class Nabu {
                         }
                     })
                 }
-            })
-            
-            
-            const roots = /** @type {NabuNode[]} */ (this.tree.roots());
-            const newChildren = [];
-            for (const root of roots) {
-                const id = root.id.toString();
-                let block = this.blocks.get(id);
-                const currentType = root.data.get("type");
-                
-                if (!block || block.type !== currentType) {
-                    if (block) this.blocks.delete(id);
-                    block = Block.load(this, root);
+
+                if (e.diff.type === "map") {
+                    
+                    const newType = e.diff.updated["type"];
+                    if (newType !== undefined) {
+                        const nodeId = e.path[1].toString();
+                        const block = this.blocks.get(nodeId);
+                        if (block && block.type !== newType) {
+                            if (block.parent) block.parent.updateChildren();
+                            else this.updateRoots();
+                        }
+                    }
                 }
-                newChildren.push(block);
-            }
-            this.children = newChildren;
+            })
         });
         
         this.init();
@@ -116,6 +113,12 @@ export class Nabu {
     components = new SvelteMap();
     /** @type {SvelteMap<string, Block>} */
     blocks = new SvelteMap();
+
+    /** @type {SvelteMap<string, SvelteSet<Block>>} */
+    blocksByType = new SvelteMap();
+
+    /** @type {SvelteMap<string, any>} */
+    systems = new SvelteMap();
     
     hooks = new Map();
     
@@ -128,6 +131,46 @@ export class Nabu {
     
     init() {
         this.hooks.get("onInit")?.forEach(hook => hook(this));
+    }
+
+    /** Rafraîchit les blocs racines de l'éditeur */
+    updateRoots() {
+        const roots = /** @type {NabuNode[]} */ (this.tree.roots());
+        this.children = roots.map((root, i) => {
+            const id = root.id.toString();
+            let block = this.blocks.get(id);
+            const currentType = root.data.get("type");
+            
+            if (!block || block.type !== currentType) {
+                if (block) {
+                    this.blocks.delete(id);
+                    this.blocksByType.get(block.type)?.delete(block);
+                }
+
+                block = Block.load(this, root);
+            }
+            block.index = i;
+            block.parent = null;
+            return block;
+        });
+    }
+
+    trigger(hookName, ...args) {
+        const hooks = this.hooks.get(hookName) || [];
+        for (const hook of hooks) {
+            const result = hook(this, ...args);
+            if (result === this.BREAK) {
+                break;
+            }
+
+        }
+    }
+
+
+    commit() {
+        this.trigger("onBeforeTransaction", this);
+        console.warn("Committing transaction...");
+        this.doc.commit();
     }
     
     /**
@@ -147,7 +190,7 @@ export class Nabu {
         const block = BlockClass.create(this, type, props, parentId, index);
         
         
-        this.doc.commit();
+        this.commit();
         return block;
     }
     
@@ -167,7 +210,6 @@ export class Nabu {
         const block = this.blocks.get(nodeId);
         if (!block) return;
         this.tree.delete(block.node.id);
-        // this.doc.commit();
     }
     
     // EVENT HANDLING
@@ -248,7 +290,7 @@ export class Nabu {
             if (start) start.delete();
             if (end && end !== start) end.delete();
             start?.mergeWith(end);
-            this.doc.commit();
+            this.commit();
             start.focus({offset: focusData.options.startOffset});
         } else if (e.inputType === "insertText" || e.inputType === "insertLineBreak") {
             const textToInsert = e.inputType === "insertText" ? (e.data || "") : "\n";
@@ -257,7 +299,7 @@ export class Nabu {
             if (end && end !== start) end.delete();
             start.insert(focusData.options.startOffset, textToInsert);
             start?.mergeWith(end);
-            this.doc.commit();
+            this.commit();
             start.focus({offset: focusData.options.startOffset + textToInsert.length});
         } else if (e.inputType === "insertParagraph") {
             intermediates.forEach(block => block.destroy());
@@ -266,7 +308,7 @@ export class Nabu {
             const {block: newBlock} = start.split({offset: focusData.options.startOffset}) || {};
             if (!newBlock) return;
             newBlock.mergeWith(end);
-            this.doc.commit();
+            this.commit();
             newBlock.focus({offset: 0});
         }
     }

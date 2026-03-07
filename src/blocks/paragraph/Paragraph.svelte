@@ -16,6 +16,7 @@
 <style>
     .nabu-paragraph {
         white-space: pre-wrap;
+        margin-bottom: 0.5em;
         &.selected {
             background-color: rgba(59, 130, 246, 0.25);
         }

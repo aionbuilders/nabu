@@ -131,14 +131,16 @@ export class TextBehavior {
         if (!sel) return;
         if (sel.isCollapsed && sel.from === 0) {
             const previousBlock = this.block.findBackward(b => b.behaviors.has("text") && b.behaviors.get("text") instanceof TextBehavior);
+            if (!previousBlock) return;
             const previousBehavior = previousBlock?.behaviors.get("text");
             if (previousBehavior && previousBehavior instanceof TextBehavior) {
                 event.preventDefault();
                 const previousLength = previousBehavior.text.length;
-                previousBehavior.delta([
-                    { retain: previousLength },
-                    ...this.container.toDelta()
-                ])
+                // previousBehavior.delta([
+                //     { retain: previousLength },
+                //     ...this.container.toDelta()
+                // ])
+                previousBlock.consume(this.block);
                 this.block.destroy();
                 this.block.commit();
                 
@@ -161,13 +163,17 @@ export class TextBehavior {
         if (!sel) return;
         if (sel.isCollapsed && sel.from === this.text.length) {
             const nextBlock = this.block.findForward(b => b.behaviors.has("text") && b.behaviors.get("text") instanceof TextBehavior);
+            if (!nextBlock) return;
             const nextBehavior = nextBlock?.behaviors.get("text");
             if (nextBehavior && nextBehavior instanceof TextBehavior) {
                 event.preventDefault();
-                this.delta([
-                    { retain: this.container.length },
-                    ...nextBehavior.container.toDelta()
-                ]);
+                // this.delta([
+                //     { retain: this.container.length },
+                //     ...nextBehavior.container.toDelta()
+                // ]);
+                this.block.consume(nextBlock);
+
+
                 nextBehavior.block.destroy();
                 this.block.commit();
                 
@@ -247,14 +253,14 @@ export class TextBehavior {
     }
     
     /** @param {Block} other */
-    mergeWith(other) {
+    absorbs(other) {
         const otherBehavior = other.behaviors.get("text");
         if (!otherBehavior || !(otherBehavior instanceof TextBehavior)) return false;
         this.delta([
             { retain: this.container.length },
             ...otherBehavior.container.toDelta()
         ]);
-        other.destroy();
+        // other.destroy();
         return true;
     }
     

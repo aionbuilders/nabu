@@ -4,7 +4,7 @@
  */
 
 import { tick } from "svelte";
-import { SvelteMap } from "svelte/reactivity";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
 
 export class Block {
@@ -16,6 +16,11 @@ export class Block {
         this.id = node.id.toString()
         this.type = metadata.get("type") || "block";
         this.nabu.blocks.set(this.id, this);
+        const blocksOfType = this.nabu.blocksByType.get(this.type) || new SvelteSet();
+        blocksOfType.add(this);
+        this.nabu.blocksByType.set(this.type, blocksOfType);
+        
+
 
         const parent = node.parent();
         if (parent) {
@@ -40,6 +45,11 @@ export class Block {
 
     /** @type {MegaBlock | null} */
     parent = $state(null);
+    index = $state(0);
+    /** @type {Block?} */
+    previous = $derived(this.index > 0 && this.parent ? this.parent.children[this.index - 1] : null);
+    /** @type {Block?} */
+    next = $derived(this.parent && this.index < this.parent.children.length - 1 ? this.parent.children[this.index + 1] : null);
 
     parents = $derived.by(() => {
         const parents = [];
@@ -56,50 +66,109 @@ export class Block {
     /** @type {HTMLElement | null} */
     element = $state(null);
 
-
     /** @param {(block: Block) => boolean} predicate @returns {Block | null} */
     findForward(predicate) {
-        const parent = this.parent || this.nabu;
-        const i = parent?.children.indexOf(this) ?? -1;
-        if (i === -1) return null;
-        // On traverse les frères suivants
-        for (let j = i + 1; j < (parent?.children.length ?? 0); j++) {
-            const found = parent?.children[j];
-            if (found && predicate(found)) {
-                return found;
-            } else if (found && found.children?.length) {
-                // Si c'est un MegaBlock, on cherche récursivement dedans
-                const foundInChild = found.findForward(predicate);
-                if (foundInChild) return foundInChild;
+        // 1. Chercher dans les enfants (descendre)
+        // @ts-ignore
+        if (this.children?.length) {
+            // @ts-ignore
+            for (const child of this.children) {
+                if (predicate(child)) return child;
+                const found = child.findForward(predicate);
+                if (found) return found;
             }
         }
-        // Si pas trouvé, on remonte dans les parents et on recommence
-        if (this.parent) {
-            return this.parent.findForward(predicate);
+
+        // 2. Chercher dans les frères suivants et remonter
+        let current = this;
+        while (current) {
+            const parent = current.parent || current.nabu;
+            const i = parent.children.indexOf(current);
+            if (i !== -1) {
+                for (let j = i + 1; j < parent.children.length; j++) {
+                    const sibling = parent.children[j];
+                    if (predicate(sibling)) return sibling;
+                    const found = sibling.findForward(predicate);
+                    if (found) return found;
+                }
+            }
+            current = current.parent;
         }
         return null;
     }
 
     /** @param {(block: Block) => boolean} predicate @returns {Block | null} */
     findBackward(predicate) {
-        const parent = this.parent || this.nabu;
-        const i = parent?.children.indexOf(this) ?? -1;
-        console.log("findBackward in block", this.id, "with predicate", predicate, "parent:", parent?.id, "index in parent:", i);
-        if (i === -1) return null;
-        // On traverse les frères précédents
-        for (let j = i - 1; j >= 0; j--) {
-            const found = parent?.children[j];
-            if (found && predicate(found)) {
-                return found;
-            } else if (found && found.children?.length) {
-                // Si c'est un MegaBlock, on cherche récursivement dedans (en partant de la fin)
-                const foundInChild = found.findBackward(predicate);
-                if (foundInChild) return foundInChild;
+        let current = this;
+        while (current) {
+            const parent = current.parent || current.nabu;
+            const i = parent.children.indexOf(current);
+            
+            if (i !== -1) {
+                // On parcourt les frères précédents de bas en haut
+                for (let j = i - 1; j >= 0; j--) {
+                    const sibling = parent.children[j];
+                    
+                    // Si le frère a des enfants, le "précédent" est le DERNIER de ses descendants
+                    // @ts-ignore
+                    if (sibling.children?.length) {
+                        // @ts-ignore
+                        const lastDescendant = sibling.findLastDescendant(predicate);
+                        if (lastDescendant) return lastDescendant;
+                    }
+                    
+                    if (predicate(sibling)) return sibling;
+                }
+            }
+            
+            // Si aucun frère précédent ne match, on teste le parent lui-même
+            if (current.parent) {
+                if (predicate(current.parent)) return current.parent;
+                current = current.parent;
+            } else {
+                break;
             }
         }
-        // Si pas trouvé, on remonte dans les parents et on recommence
-        if (this.parent) {
-            return this.parent.findBackward(predicate);
+        return null;
+    }
+
+    /**
+     * Returns real, uncommitted siblings, which is useful for extensions that want to check the document structure before the transaction is committed.
+     */
+    getAdjacentSiblings() {
+        const parent = this.node.parent();
+        const siblings = parent ? parent.children() : this.nabu.tree.roots();
+        if (!siblings) return { previous: null, next: null };
+        
+        const index = this.node.index();
+        if (index === null || index === undefined) return { previous: null, next: null };
+        
+        const previousNode = index > 0 ? siblings[index - 1] : null;
+        const nextNode = index < siblings.length - 1 ? siblings[index + 1] : null;
+        const previous = previousNode ? this.nabu.blocks.get(previousNode.id.toString()) : null;
+        const next = nextNode ? this.nabu.blocks.get(nextNode.id.toString()) : null;
+
+        return {
+            previous,
+            next,
+            previousNode,
+            nextNode
+        };
+    }
+
+    /** 
+     * Helper pour trouver le dernier descendant profond qui matche
+     * @param {(block: Block) => boolean} predicate 
+     * @returns {Block | null} 
+     */
+    findLastDescendant(predicate) {
+        // @ts-ignore
+        const children = this.children || [];
+        for (let i = children.length - 1; i >= 0; i--) {
+            const child = children[i];
+            const found = child.findLastDescendant(predicate);
+            if (found) return found;
+            if (predicate(child)) return child;
         }
         return null;
     }
@@ -133,9 +202,64 @@ export class Block {
         console.warn("Not implemented: delete block", this.id, "with deletion range", deletion);
     }
 
-    /** @param {Block} block */
+    /** @param {Block} block @returns {any} */
+    absorbs(block) {
+        console.warn("Not implemented: check if block", this.id, "absorbs block", block.id);
+        return false;
+    }
+
+
+    /** @param {Block} block @returns {any} */
     mergeWith(block) {
-        console.warn("Not implemented: merge block", this.id, "with block", block.id);
+        // console.warn("Not implemented: merge block", this.id, "with block", block.id);
+        const success = this.absorbs(block);
+        if (success) {
+            block.destroy();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Consumes another block, handling children relocation intelligently.
+     * @param {Block} otherBlock - The block to consume or be consumed by
+     * @param {'into' | 'from'} direction - 'into' = this merges into other, 'from' = other merges into this
+     * @returns {Block} The surviving block
+     */
+    consume(otherBlock, direction = 'from') {
+        const [survivor, victim] = direction === 'into'
+            ? [otherBlock, this]
+            : [this, otherBlock];
+
+        const absorbed = survivor.absorbs(victim);
+
+        // Handle children relocation if victim has any
+        // @ts-ignore - MegaBlock has children
+        if (victim.children?.length) {
+            if (absorbed && survivor.adoptChildren) {
+                // MegaBlock survivor adopts children
+                // @ts-ignore
+                survivor.adoptChildren(victim.children);
+            } else {
+                // Non-MegaBlock survivor: promote children as siblings
+                // @ts-ignore
+                victim.children.forEach(child => {
+                    child.node.moveAfter(survivor.node);
+                });
+            }
+        }
+
+        // Handle the victim block itself if not absorbed
+        if (!absorbed) {
+            victim.node.moveAfter(survivor.node);
+        }
+
+        return survivor;
+    }
+
+    /** @param {Block[]} children @param {number | null} [index] */
+    adoptChildren(children, index = null) {
+        console.warn("Not implemented: adopt children", children.map(c => c.id), "into block", this.id, "at index", index);
     }
 
     /** @param {{from?: number, to?: number, index?: number, length?: number, offset?: number}} options @returns {{block: Block} | null} */
@@ -207,8 +331,7 @@ export class Block {
     // -- UTILS --
 
     commit() {
-        console.log("Committing changes in block", this.id);
-        this.nabu.doc.commit();
+        this.nabu.commit();
     }
 
 

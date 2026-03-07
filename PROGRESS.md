@@ -32,18 +32,23 @@
 *   [x] **2.2.4. Orchestration du Split :**
     *   [x] **Entrée systématique :** Appuyer sur Entrée dans un titre doit toujours créer un Paragraph à la suite. (Terminé)
 
-### 2.3. Gestion des Listes Imbriquées (MegaBlocks)
-*   [ ] **2.3.1. Architecture MegaBlock :** Implémentation du conteneur `List` (ul/ol) et des items `ListItem`.
-*   [ ] **2.3.2. Hiérarchie LoroTree :** Manipulation du parentage Loro pour l'imbrication.
-*   [ ] **2.3.3. Raccourcis Clavier :**
-    *   [ ] **Tab :** Indenter l'item (le faire devenir enfant du précédent).
-    *   [ ] **Shift+Tab :** Désindenter l'item (remonter d'un niveau).
-    *   [ ] **Entrée sur item vide :** Sortir de la liste (transformer en paragraphe).
+### 2.3. Gestion des Listes Imbriquées (TERMINÉE)
+*   [x] **2.3.1. Architecture MegaBlock :** Implémentation du conteneur `List` (ul/ol) et des items `ListItem`. (Validé)
+*   [x] **2.3.2. Hiérarchie LoroTree :** Manipulation du parentage Loro pour l'imbrication. (Validé)
+*   [x] **2.3.3. Raccourcis Clavier :**
+    *   [x] **Tab :** Indenter l'item (le faire devenir enfant du précédent - Indent with Hoist). (Validé)
+    *   [x] **Shift+Tab :** Désindenter l'item (remonter d'un niveau - Unindent with Carry). (Validé)
+    *   [x] **Entrée sur item vide :** Sortir de la liste (transformer en paragraphe). (Validé)
+*   [x] **2.3.4. Nettoyage Structurel :** Fusion automatique des listes adjacentes via hook `onBeforeTransaction`. (Validé)
 
-### 2.4. Rich Text & Marks (Inline Formatting)
+### 2.4. Rich Text & Marks (Inline Formatting) - PROCHAINE ÉTAPE
 *   [ ] **2.4.1. Loro Marks :** Gestion des deltas avec attributs (bold, italic, code, link).
 *   [ ] **2.4.2. Input Interception :** Détection des patterns Markdown inline (ex: `**gras**`).
 *   [ ] **2.4.3. UI de Sélection :** Toolbar flottante pour appliquer des styles sur une plage de texte.
+
+### 2.5. Bugs & Améliorations prioritaires
+*   [ ] **Bug Merging ListItem :** La fusion de deux items de liste perd les enfants (sous-listes) du second item.
+*   [ ] **Surgical Multi-block Deletion :** Affiner la suppression de sélection traversant des structures imbriquées.
 
 ---
 

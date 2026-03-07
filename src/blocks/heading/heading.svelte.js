@@ -54,7 +54,7 @@ export class Heading extends Block {
     getDOMPoint(targetOffset) { return this.behavior.getDOMPoint(targetOffset); }
 
     /** @param {Block} block */
-    mergeWith(block) { return this.behavior.mergeWith(block); }
+    absorbs(block) { return this.behavior.absorbs(block); }
 
     /** @param {number} index @param {string} text */
     insert(index, text) { return this.behavior.insert(index, text); }
