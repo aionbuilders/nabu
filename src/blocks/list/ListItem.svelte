@@ -1,6 +1,7 @@
 <script>
     import Block from "../Block.svelte";
-    
+    import RichText from '../../behaviors/text/RichText.svelte';
+
     /** @type {{block: import('./list-item.svelte.js').ListItem}}*/
     let {block} = $props();
 </script>
@@ -13,7 +14,7 @@
     class:first={block.isSelectionStart}
     class:last={block.isSelectionEnd}
 >
-    <div bind:this={block.element} class="item-content">{block.text || "\n"}</div><!-- 
+    <div bind:this={block.element} class="item-content"><RichText delta={block.delta} /></div><!-- 
     -->{#if block.children && block.children.length > 0}
     <div class="item-children">
         {#each block.children as child (child.id)}

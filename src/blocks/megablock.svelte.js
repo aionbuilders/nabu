@@ -59,6 +59,7 @@ export class MegaBlock extends Block {
 
     /** @param {InputEvent} event */
     beforeinput(event) {
+        console.clear();
         const startBlock = /** @type {Block} */ (this.nabu.selection.startBlock);    
         const endBlock = /** @type {Block} */ (this.nabu.selection.endBlock);
 

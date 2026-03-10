@@ -268,12 +268,14 @@ export class Block {
         return null;
     }
 
-    /** @param {{start?: number, end?: number, offset?: number}} options @param {boolean} [passive=false] */
+    /** @param {{start?: number, end?: number, offset?: number} | null } options @param {boolean} [passive=false] */
     focus(options = {}, passive = false) {
-        let start = options.start ?? options.offset ?? this.selection?.from ?? 0;
-        let end = options.end ?? options.offset ?? this.selection?.to ?? 0;
+        console.log("Focusing block", this.id, "with options", options, "and passive =", passive);
+        let start = options?.start ?? options?.offset ?? this.selection?.from ?? 0;
+        let end = options?.end ?? options?.offset ?? this.selection?.to ?? 0;
         const startPoint = this.getDOMPoint(start);
         const endPoint = this.getDOMPoint(end);
+        console.log("Calculated DOM points for focus:", { startPoint, endPoint });
         if (!passive && startPoint && endPoint) {
             tick().then(() => {
                 console.log("REFOCUS");

@@ -222,6 +222,28 @@ export class Nabu {
         }
     }
 
+
+
+    /** @param {{from: {offset: number, block: Block}, to: {offset: number, block: Block}}} [options={}]  */
+    focus(options) {
+        tick().then(() => {
+            const sel = this.selection;
+            const fromBlock = options?.from?.block || sel.anchorBlock;
+            const toBlock = options?.to?.block || sel.focusBlock;
+            const fromOffset = options?.from?.offset ?? sel.startOffset ?? 0;
+            const toOffset = options?.to?.offset ?? sel.endOffset ?? 0;
+            console.log("Focusing Nabu with options", options, "Current selection:", { anchorBlock: sel.anchorBlock?.id, focusBlock: sel.focusBlock?.id, startOffset: sel.startOffset, endOffset: sel.endOffset });
+
+            if (fromBlock && toBlock) {
+                const fromPoint = fromBlock.getDOMPoint(fromOffset);
+                const toPoint = toBlock.getDOMPoint(toOffset);
+                console.log("Focusing Nabu with options", options, "Calculated points:", { fromPoint, toPoint });
+                if (fromPoint && toPoint) this.selection.setBaseAndExtent(fromPoint.node, fromPoint.offset, toPoint.node, toPoint.offset);
+            }
+        })
+
+    }
+
     /**
     * Insère un nouveau bloc dans le document
     * @param {string} type - Le type du bloc (ex: 'paragraph')
@@ -250,6 +272,8 @@ export class Nabu {
         this.deleteNode(block.node.id);
     }
     
+
+
     
     /**
     * @param {string} nodeId 

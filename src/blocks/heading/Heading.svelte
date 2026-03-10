@@ -1,4 +1,5 @@
 <script>
+    import RichText from '../../behaviors/text/RichText.svelte';
     /** @type {{block: import('./heading.svelte.js').Heading}}*/
     let {block} = $props();
 </script>
@@ -12,9 +13,7 @@
     class:selected={block.selected}
     class:first={block.isSelectionStart}
     class:last={block.isSelectionEnd}
->
-    {block.text || "\n"}
-</svelte:element>
+><RichText delta={block.delta} /></svelte:element>
 
 <style>
     .nabu-heading {

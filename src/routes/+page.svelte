@@ -1,13 +1,27 @@
 <script>
     import { ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, Nabu, NabuEditor } from "../blocks";
+    import { RichTextExtension } from "../behaviors/text";
+    import { untrack } from "svelte";
 
     let engine = new Nabu({
-        extensions: [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension]
+        extensions: [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, RichTextExtension]
     });
 
     if (typeof window !== 'undefined') {
         window.nabu = engine;
     }
+
+
+    $effect(() => {
+        untrack(() => {
+            engine.insert("paragraph", { text: "Bienvenue dans Nabu Editor!"});
+            engine.insert("paragraph", { text: "Ceci est un éditeur de texte riche construit avec Svelte."});
+            engine.insert("paragraph", { text: "Bienvenue dans Nabu Editor!"});
+            engine.insert("paragraph", { text: "Ceci est un éditeur de texte riche construit avec Svelte."});
+            engine.insert("paragraph", { text: "Bienvenue dans Nabu Editor!"});
+            engine.insert("paragraph", { text: "Ceci est un éditeur de texte riche construit avec Svelte."});
+        });
+    })
 </script>
 
 <div class="app-shell">

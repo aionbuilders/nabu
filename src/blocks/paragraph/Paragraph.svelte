@@ -1,4 +1,5 @@
 <script>
+    import RichText from '../../behaviors/text/RichText.svelte';
     /** @type {{block: import('./paragraph.svelte').Paragraph}}*/
     let {block} = $props();
 </script>
@@ -11,7 +12,7 @@
     class:selected={block.selected}
     class:first={block.isSelectionStart}
     class:last={block.isSelectionEnd}
->{block.text || "\n"}</div>
+><RichText delta={block.delta} /></div>
 
 <style>
     .nabu-paragraph {

@@ -30,6 +30,10 @@ export class ListItem extends MegaBlock {
         return this.behavior.text;
     }
 
+    get delta() {
+        return this.behavior.delta;
+    }
+
     selection = $derived(this.behavior.selection);
 
     sublist = $derived(this.children.find(child => child.node.data.get("type") === "list"));
@@ -162,7 +166,7 @@ export class ListItem extends MegaBlock {
     delete(deletion) { return this.behavior.delete(deletion); }
 
     /** @param {import('loro-crdt').Delta<string>[]} data */
-    delta(data = []) { return this.behavior.delta(data); } 
+    applyDelta(data = []) { return this.behavior.applyDelta(data); }
 
     /** @param {Parameters<import('../block.svelte').Block["split"]>[0]} [options] @returns {ReturnType<import('../block.svelte').Block["split"]>} */
     split(options) { 

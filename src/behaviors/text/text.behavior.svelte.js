@@ -18,14 +18,16 @@ export class TextBehavior {
         /** @type {LoroText} */
         this.container = container ?? node.data.get("text") ?? node.data.setContainer("text", new LoroText());
         this.text = $state(this.container.toString());
-        this.container.subscribe(() => this.text = this.container.toString());
+        this.delta = $state(this.container.toDelta());
+        this.container.subscribe(() => {
+            this.text = this.container.toString();
+            this.delta = this.container.toDelta();
+        });
     }
     
     selection = $derived(this.block.element && this.block.nabu.selection && this.getSelection(this.block.element, this.block.nabu.selection));
     
     /**
-    * 
-    * @param {Boolean} selected 
     * @param {HTMLElement} element 
     * @param {NabuSelection} globalSelection 
     */
@@ -197,6 +199,7 @@ export class TextBehavior {
     * @param {HTMLElement?} [element]
     */
     getDOMPoint(targetOffset, element = this.block.element) {
+        console.log("Getting DOM point for offset", targetOffset, "in element", element);
         if (!element) return null;
         
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -234,7 +237,7 @@ export class TextBehavior {
     }
     
     /** @param {import('loro-crdt').Delta<string>[]} data */
-    delta(data = []) {
+    applyDelta(data = []) {
         this.container.applyDelta(data);
     }
     
@@ -252,11 +255,49 @@ export class TextBehavior {
         return this.block.ascend("onSplit", null, { offset: from, delta: this.container.sliceDelta(from, to)});
     }
     
+    /** @param {string} markName @param {any} value @param {ReturnType<TextBehavior["getSelection"]>} sel */
+    applyMark(markName, value, sel) {
+        if (!sel || sel.isCollapsed) return;
+        this.container.mark({ start: sel.from, end: sel.to }, markName, value);
+    }
+
+    /** @param {string} markName @param {ReturnType<TextBehavior["getSelection"]>} sel */
+    removeMark(markName, sel) {
+        if (!sel || sel.isCollapsed) return;
+        this.container.unmark({ start: sel.from, end: sel.to }, markName);
+    }
+
+    /** @param {string} markName @param {ReturnType<TextBehavior["getSelection"]>} sel */
+    isMarkActive(markName, sel) {
+        if (!sel || sel.isCollapsed) return false;
+        const delta = this.container.toDelta();
+        let offset = 0;
+        for (const op of delta) {
+            if (typeof op.insert !== 'string') continue;
+            const opEnd = offset + op.insert.length;
+            if (opEnd <= sel.from) { offset = opEnd; continue; }
+            if (offset >= sel.to) break;
+            if (!op.attributes?.[markName]) return false;
+            offset = opEnd;
+        }
+        return true;
+    }
+
+    /** @param {string} markName @param {any} value @param {ReturnType<TextBehavior["getSelection"]>} sel */
+    toggleMark(markName, value, sel) {
+        if (!sel || sel.isCollapsed) return;
+        if (this.isMarkActive(markName, sel)) {
+            this.removeMark(markName, sel);
+        } else {
+            this.applyMark(markName, value, sel);
+        }
+    }
+
     /** @param {Block} other */
     absorbs(other) {
         const otherBehavior = other.behaviors.get("text");
         if (!otherBehavior || !(otherBehavior instanceof TextBehavior)) return false;
-        this.delta([
+        this.applyDelta([
             { retain: this.container.length },
             ...otherBehavior.container.toDelta()
         ]);

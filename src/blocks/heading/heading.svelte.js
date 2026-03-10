@@ -40,6 +40,10 @@ export class Heading extends Block {
         return this.behavior.text;
     }
 
+    get delta() {
+        return this.behavior.delta;
+    }
+
     selection = $derived(this.behavior.selection);
 
     /** @param {InputEvent} event */
@@ -63,7 +67,7 @@ export class Heading extends Block {
     delete(deletion) { return this.behavior.delete(deletion); }
 
     /** @param {import('loro-crdt').Delta<string>[]} data */
-    delta(data = []) { return this.behavior.delta(data); } 
+    applyDelta(data = []) { return this.behavior.applyDelta(data); }
 
     /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
     split(options) { return this.behavior.split(options); }
