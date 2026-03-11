@@ -34,5 +34,9 @@ Ce document définit les règles d'or, la philosophie et les standards de travai
 *   **Block Registry :** Un dictionnaire associant `block_type` -> `SvelteComponent`.
 *   **Loro Wrapper :** Couche réactive transformant les mutations Loro en états Svelte 5.
 
+## 5. NOTE — CLAUDE CODE
+
+Depuis Mars 2026, **Claude Code** (claude-sonnet-4-6) est également utilisé comme copilote en complément. Les mêmes règles s'appliquent : Single CE dogme, Loro-First, modularité totale. Le fichier de référence pour Claude est `CLAUDE.md` (s'il existe) ou `PROJECT_CONTEXT.md`.
+
 ---
-*Dernière mise à jour : 18 Février 2026*
+*Dernière mise à jour : 12 Mars 2026*

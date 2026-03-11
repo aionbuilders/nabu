@@ -1,110 +1,133 @@
 # PROGRESS.md - Suivi de l'avancement Nabu
 
-## 🟢 PHASE 0 : Préparation du Terrain (DX & Socle)
+---
 
-*   [x] **0.1. Validation JSDoc :** Configurer `jsconfig.json` pour un check strict des types JSDoc. (Validé)
-*   [x] **0.2. Installation de la Source de Vérité :** `loro-crdt` + Vite WASM. (Terminé)
-*   [x] **0.3. Le Contrat de Bloc :** Définition des classes `Nabu`, `Block` et `MegaBlock` (Registry/Map plate). (Terminé)
+## 🟢 PHASE 0 : Préparation du Terrain (DX & Socle) — TERMINÉE
+
+- [x] **0.1** Configurer `jsconfig.json` pour un check strict des types JSDoc
+- [x] **0.2** Installation `loro-crdt` + Vite WASM
+- [x] **0.3** Définition des classes `Nabu`, `Block`, `MegaBlock` (Registry + Map plate)
 
 ---
 
-## 🟠 PHASE 1 : Le Moteur "Single CE" (TERMINÉE)
+## 🟢 PHASE 1 : Moteur "Single CE" — TERMINÉE
 
-*   [x] **1.1. Setup & Rendu :** Affichage récursif via Svelte 5 et LoroTree. (Validé)
-*   [x] **1.2. Selection Engine :** Mapping DOM ↔ Modèle via Virtual Range et restauration du curseur (`getDOMPoint`). Stabilisation "Sync-on-Mutation" pour les frappes rapides. (Validé)
-*   [x] **1.3. Input Handler (Text) :** Interception `beforeinput`, mutations Loro et réconciliation réactive. (Validé)
-*   [x] **1.4. Structural Input :** Split (Entrée) et Merge (Backspace/Suppr) via hooks d'extensions et Loro Deltas. (Validé)
-
----
-
-## 🟡 PHASE 2 : Structure & Types (EN COURS)
-
-### 2.1. Écosystème de Blocs Textuels
-*   [x] **2.1.1. TextBehavior :** Extraction de la logique textuelle universelle (LoroText + DOM Sync).
-*   [x] **2.1.2. Moteur "Type Swap" :** Capacité du moteur Nabu à ré-instancier un bloc dont le type change dans Loro.
-*   [x] **2.1.3. Signaux de Hook :** Introduction de `Nabu.BREAK` et `Nabu.CONTINUE` pour le contrôle de flux.
-
-### 2.2. Perfectionnement des Titres (Headings)
-*   [x] **2.2.1. Extension Heading :** Support des tags h1-h6 réactifs et mapping Loro. (Terminé)
-*   [x] **2.2.2. Markdown Shortcuts :** Conversion automatique via `# + Espace`. (Terminé)
-*   [x] **2.2.3. UX de Dé-transformation :**
-    *   [x] **Backspace au début :** Si curseur à l'offset 0 d'un Heading -> Transformer en Paragraph. (Terminé)
-*   [x] **2.2.4. Orchestration du Split :**
-    *   [x] **Entrée systématique :** Appuyer sur Entrée dans un titre doit toujours créer un Paragraph à la suite. (Terminé)
-
-### 2.3. Gestion des Listes Imbriquées (TERMINÉE)
-*   [x] **2.3.1. Architecture MegaBlock :** Implémentation du conteneur `List` (ul/ol) et des items `ListItem`. (Validé)
-*   [x] **2.3.2. Hiérarchie LoroTree :** Manipulation du parentage Loro pour l'imbrication. (Validé)
-*   [x] **2.3.3. Raccourcis Clavier :**
-    *   [x] **Tab :** Indenter l'item (le faire devenir enfant du précédent - Indent with Hoist). (Validé)
-    *   [x] **Shift+Tab :** Désindenter l'item (remonter d'un niveau - Unindent with Carry). (Validé)
-    *   [x] **Entrée sur item vide :** Sortir de la liste (transformer en paragraphe). (Validé)
-*   [x] **2.3.4. Nettoyage Structurel :** Fusion automatique des listes adjacentes via hook `onBeforeTransaction`. (Validé)
-
-### 2.4. Rich Text & Marks (Inline Formatting) - PROCHAINE ÉTAPE
-*   [ ] **2.4.1. Loro Marks :** Gestion des deltas avec attributs (bold, italic, code, link).
-*   [ ] **2.4.2. Input Interception :** Détection des patterns Markdown inline (ex: `**gras**`).
-*   [ ] **2.4.3. UI de Sélection :** Toolbar flottante pour appliquer des styles sur une plage de texte.
-
-### 2.4. Undo/Redo (TERMINÉE) ✅
-*   [x] **2.4.1. UndoManager Loro :** Intégration de l'UndoManager de Loro-CRDT avec gestion locale des opérations (100 steps max, merge 1s).
-*   [x] **2.4.2. Shortcuts Clavier :** Ctrl+Z / Cmd+Z (undo), Ctrl+Y / Cmd+Y / Ctrl+Shift+Z / Cmd+Shift+Z (redo).
-*   [x] **2.4.3. Cursor Restoration :** Sauvegarde et restauration automatique de la position du curseur via callbacks onPush/onPop.
-
-### 2.5. Rich Text & Marks (Inline Formatting) - PROCHAINE ÉTAPE
-*   [ ] **2.5.1. Loro Marks :** Gestion des deltas avec attributs (bold, italic, code, link).
-*   [ ] **2.5.2. Input Interception :** Détection des patterns Markdown inline (ex: `**gras**`).
-*   [ ] **2.5.3. UI de Sélection :** Toolbar flottante pour appliquer des styles sur une plage de texte.
-
-### 2.6. Bugs & Améliorations prioritaires
-*   [ ] **Bug Merging ListItem :** La fusion de deux items de liste perd les enfants (sous-listes) du second item.
-*   [ ] **Surgical Multi-block Deletion :** Affiner la suppression de sélection traversant des structures imbriquées.
+- [x] **1.1** Setup & rendu récursif via Svelte 5 + LoroTree
+- [x] **1.2** Selection Engine : mapping DOM ↔ Modèle via `getDOMPoint` / `calculateOffset`, restauration curseur, Sync-on-Mutation
+- [x] **1.3** Input Handler : interception `beforeinput`, mutations LoroText, réconciliation réactive
+- [x] **1.4** Structural Input : Split (Entrée) + Merge (Backspace) via hooks d'extensions + Loro Deltas
 
 ---
 
+## 🟢 PHASE 2 : Structure, Types & Rich Text — TERMINÉE (fonctionnel) / PARTIELLE (UX)
+
+### 2.1 Écosystème de Blocs Textuels ✅
+- [x] **2.1.1** `TextBehavior` : extraction de la logique textuelle universelle (LoroText + DOM Sync)
+- [x] **2.1.2** Moteur "Type Swap" : ré-instanciation d'un bloc dont le type change dans Loro
+- [x] **2.1.3** Signaux de Hook : `Nabu.BREAK` / `Nabu.CONTINUE` pour le contrôle de flux
+
+### 2.2 Headings ✅
+- [x] **2.2.1** Extension Heading : h1-h6 réactifs + mapping Loro
+- [x] **2.2.2** Markdown shortcuts : `# + Espace` → transformation automatique
+- [x] **2.2.3** Backspace au début d'un Heading → transformation en Paragraph
+- [x] **2.2.4** Entrée dans un titre → crée toujours un Paragraph à la suite
+
+### 2.3 Listes Imbriquées ✅
+- [x] **2.3.1** Architecture MegaBlock : `List` (ul/ol) + `ListItem`
+- [x] **2.3.2** Hiérarchie LoroTree : manipulation du parentage pour l'imbrication
+- [x] **2.3.3** Tab → indent (hoist), Shift+Tab → unindent (carry), Entrée sur item vide → exit liste + Paragraph
+- [x] **2.3.4** Fusion automatique des listes adjacentes via hook `onBeforeTransaction`
+
+Détail des cas limites : voir `PROGRESS_LISTS.md`
+
+### 2.4 Undo/Redo ✅
+- [x] **2.4.1** `UndoManager` Loro : 100 steps max, merge 1s
+- [x] **2.4.2** Raccourcis Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z
+- [x] **2.4.3** Restauration automatique du curseur via callbacks `onPush`/`onPop`
+
+### 2.5 Rich Text & Marks (Inline Formatting) ✅ infra / ⬜ UX
+- [x] **2.5.1** `applyMark`, `removeMark`, `toggleMark`, `isMarkActive` sur `TextBehavior`
+- [x] **2.5.2** Rendu des spans via `RichText.svelte` : bold, italic, underline, code, strikethrough
+- [x] **2.5.3** `RichTextExtension` : Ctrl+B/I/U/E + Ctrl+Shift+X
+- [x] **2.5.4** **Comportement global de toggle** : si la mark est entièrement active sur toute la sélection → retrait global ; sinon → application globale. Fonctionne sur sélection multi-blocs. (ADR 009)
+- [ ] **2.5.5** Toolbar visuelle flottante (appliquer marks via click)
+- [ ] **2.5.6** Support des liens (`<a>` avec `href`) — marks Loro déjà compatibles
+- [ ] **2.5.7** Raccourcis Markdown inline (`**texte**` → gras, `_texte_` → italique)
+
+### 2.6 Refactoring Architecture Multi-Blocs ✅
+- [x] **2.6.1** Extraction de `handleContainerBeforeInput` dans `container.utils.js`
+  - Logique "spine" partagée entre `Nabu` et `MegaBlock`
+  - Suppression de l'ancienne logique naïve de `Nabu.beforeinput` (scan linéaire + API dépréciée)
+  - ADR 008 documenté
+- [x] **2.6.2** `MegaBlock.beforeinput` réduit à une délégation (100 lignes → 3 lignes)
+- [x] **2.6.3** `Nabu.beforeinput` mis au même niveau de robustesse que MegaBlock
+
+### 2.7 Bugs & Améliorations — EN COURS ⚠️
+- [ ] **Bug Merging ListItem** : fusion de deux items de liste peut perdre les enfants (sous-listes) du second item — `adoptChildren` dans MegaBlock a un `if (false)` TODO non implémenté
+- [ ] **Multi-block `insertParagraph`** dans structures très imbriquées — à stress-tester
+- [ ] **`setTimeout` vs `tick()`** : quelques points utilisent `setTimeout(..., 0)` au lieu de `tick().then()` — timing-dépendant
+
 ---
 
-## 📊 ÉTAT ACTUEL DU PROJET (2026-03-07)
+## 🔴 PHASE 3 : Persistance — NON COMMENCÉE
 
-### Progression Globale : **60-70% vers MVP Bêta**
+- [ ] **3.1** Sauvegarde IndexedDB automatique (snapshot Loro binaire)
+- [ ] **3.2** Chargement au démarrage depuis IndexedDB
+- [ ] **3.3** Export Markdown / JSON
+- [ ] **3.4** Import depuis Markdown / JSON
 
-#### ✅ Points Forts
-- **Architecture exceptionnelle** : Single ContentEditable + Loro-CRDT + Extension System
-- **Selection Bridge** : Mapping DOM ↔ Modèle parfaitement fonctionnel
-- **4 types de blocs stables** : Paragraph, Heading (h1-h6), List, ListItem
-- **Performance optimale** : O(1) accès, fine-grained reactivity Svelte 5
-- **DX excellente** : JSDoc strict, 7 ADRs documentés, code modulaire
+---
 
-#### 🔴 Blockers Critiques pour Bêta
-1. **Rich Text Marks** (3-4j) - URGENT
-   - Aucun gras, italique, liens, code inline
-   - Loro Marks non implémentés
-   - Pas de toolbar pour appliquer styles
+## 🟠 PHASE 4 : UX & Navigation — NON COMMENCÉE
 
-2. **Persistence** (2-3j) - IMPORTANT
-   - Aucune sauvegarde (tout en mémoire)
-   - Pas d'IndexedDB ni export
-   - Perte de données au refresh
+- [ ] **4.1** Menu Slash (`/`) : insertion de blocs à la volée
+- [ ] **4.2** Toolbar marks flottante (apparaît sur sélection non-collapsée)
+- [ ] **4.3** Drag Handle au survol (overlay indépendant du `contenteditable`)
+- [ ] **4.4** Déplacement de blocs via `LoroTree.move`
+- [ ] **4.5** Placeholders sur blocs vides
 
-3. **Bug ListItem Merge** (1-2j) - IMPORTANT
-   - Fusion de deux items perd les enfants du second
-   - Suppression multi-blocs à affiner
+---
 
-#### 🟡 Nice-to-Have pour Polish MVP
-- Toolbar flottante
-- Menu slash (/)
-- Placeholders
+## 📊 ÉTAT ACTUEL — 12 Mars 2026
+
+### Progression globale : **75-80% vers MVP Bêta**
+
+#### ✅ Points forts
+- Architecture Single CE + Loro-CRDT + Extension System : solide
+- Selection Bridge DOM ↔ Modèle : correct, spans-aware confirmé
+- 4 types de blocs stables : Paragraph, Heading, List, ListItem
+- Rich Text marks : infrastructure complète, toggle comportement standard
+- Multi-blocs : logique spine correcte et unifiée
+- Undo/Redo avec restauration curseur
+- 9 ADRs documentés
+
+#### 🔴 Bloquant MVP
+1. **Persistence** — aucun stockage, données perdues au refresh
+2. **Toolbar visuelle marks** — aucune UI pour appliquer le formatage
+
+#### 🟡 Important mais non bloquant
+- Bug merge ListItem avec enfants
+- Nettoyage des `console.log` de debug (REFOCUS, "Committing transaction...", etc.)
+- Stress-test des edge cases multi-blocs imbriqués profonds
+
+#### ⬜ Nice-to-have
+- Menu slash
 - Drag handles
+- Markdown inline shortcuts
 - Tests E2E
 
-### Estimation Bêta MVP
-- **Optimiste** : 6-7 jours (Rich Text + Persistence + Bug fixes)
-- **Réaliste** : 14 jours (avec polish UX + tests)
-
 ---
 
-## 🗒️ Zone de Réflexion
-1.  **Réconciliation :** Utilisation fine des Runes pour éviter les re-renders globaux.
-2.  **Mapping de Sélection :** Transformation DOM Range <-> Loro Path.
-3.  **OOP vs Functional :** Avantages des classes Svelte 5 pour l'encapsulation de l'état Loro.
-4.  **Prochaine priorité :** Phase 2.4 (Rich Text Marks) est le blocker #1 pour une bêta utilisable.
+## 🗒️ Décisions architecturales (ADRs)
+
+| ADR | Sujet | Statut |
+|-----|-------|--------|
+| 001 | Single ContentEditable | ✅ Accepté |
+| 002 | OOP via classes Svelte 5 | ✅ Accepté |
+| 003 | Flat-Map + rendu récursif | ✅ Accepté |
+| 004 | Rich Text via LoroText.mark | ✅ Accepté |
+| 005 | JSDoc strict | ✅ Accepté |
+| 006 | Selection Bridge (Range + TreeWalker) | ✅ Accepté |
+| 007 | Event Ascension (Chain of Responsibility) | ✅ Accepté |
+| 008 | Container beforeinput — logique spine partagée | ✅ Accepté |
+| 009 | Rich Text toggle global multi-blocs | ✅ Accepté |
