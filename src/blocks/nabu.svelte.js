@@ -2,6 +2,7 @@ import { LoroDoc, UndoManager } from 'loro-crdt';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte';
 import { NabuSelection } from './selection.svelte';
+import { handleContainerBeforeInput } from './container.utils.js';
 import { tick } from 'svelte';
 
 
@@ -355,49 +356,7 @@ export class Nabu {
     
     /** @param {InputEvent} e */
     beforeinput(e) {
-        console.log("Nabu beforeinput", e.inputType, e);
-        
-        
-        /** @type {Block} */
-        let start;
-        /** @type {Block} */
-        let end;
-        /** @type {Block[]} */
-        let intermediates = [];
-        this.children.forEach(block => {
-            if (!start && block.selected) start = block;
-            else if (start && block.isIntermediate) intermediates = [...(intermediates || []), block];
-            if (block.selected) end = block;
-        });
-        if (!start || !end) return;
-        const focusData = start.focus(undefined, true);
-        console.log("Intermediate blocks in selection:", intermediates);
-        if (e.inputType === "deleteContentBackward" || e.inputType === "deleteContentForward") {
-            intermediates.forEach(block => block.destroy());
-            if (start) start.delete();
-            if (end && end !== start) end.delete();
-            start?.mergeWith(end);
-            this.commit();
-            start.focus({offset: focusData.options.startOffset});
-        } else if (e.inputType === "insertText" || e.inputType === "insertLineBreak") {
-            const textToInsert = e.inputType === "insertText" ? (e.data || "") : "\n";
-            intermediates.forEach(block => block.destroy());
-            if (start) start.delete();
-            if (end && end !== start) end.delete();
-            start.insert(focusData.options.startOffset, textToInsert);
-            start?.mergeWith(end);
-            this.commit();
-            start.focus({offset: focusData.options.startOffset + textToInsert.length});
-        } else if (e.inputType === "insertParagraph") {
-            intermediates.forEach(block => block.destroy());
-            if (start) start.delete();
-            if (end && end !== start) end.delete();
-            const {block: newBlock} = start.split({offset: focusData.options.startOffset}) || {};
-            if (!newBlock) return;
-            newBlock.mergeWith(end);
-            this.commit();
-            newBlock.focus({offset: 0});
-        }
+        return handleContainerBeforeInput(this, this, e);
     }
     
     
