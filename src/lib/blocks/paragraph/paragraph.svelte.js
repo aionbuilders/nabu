@@ -1,10 +1,10 @@
-import { Block } from "../block.svelte";
+import { Block } from "../block.svelte.js";
 import { LoroText } from "loro-crdt";
 import ParagraphComponent from "./Paragraph.svelte";
 import { TextBehavior } from "../../behaviors/text";
 
 /**
- * @import { Nabu, NabuNode } from "../nabu.svelte";
+ * @import { Nabu, NabuNode } from "../nabu.svelte.js";
  */
 
 /**

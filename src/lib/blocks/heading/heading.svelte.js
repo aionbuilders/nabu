@@ -1,10 +1,10 @@
 import { TextBehavior } from "../../behaviors/text";
 import HeadingComponent from "./Heading.svelte";
-import { Block } from "../block.svelte";
+import { Block } from "../block.svelte.js";
 import { LoroText } from "loro-crdt";
 
 /**
- * @import { Nabu, NabuNode } from "../nabu.svelte";
+ * @import { Nabu, NabuNode } from "../nabu.svelte.js";
  * @import { TextNode } from "../../behaviors/text";
  */
 

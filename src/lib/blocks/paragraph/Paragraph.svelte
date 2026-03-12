@@ -1,6 +1,6 @@
 <script>
     import RichText from '../../behaviors/text/RichText.svelte';
-    /** @type {{block: import('./paragraph.svelte').Paragraph}}*/
+    /** @type {{block: import('./paragraph.svelte.js').Paragraph}}*/
     let {block} = $props();
 </script>
 

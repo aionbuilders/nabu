@@ -1,9 +1,9 @@
 import { extension } from "../../utils/extensions";
-import { List } from "./list.svelte";
+import { List } from "./list.svelte.js";
 import ListComponent from "./List.svelte";
-import { ListItem } from "./list-item.svelte";
+import { ListItem } from "./list-item.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
-import { ListBehavior } from "./list.behavior.svelte";
+import { ListBehavior } from "./list.behavior.svelte.js";
 
 /**
  * @import {SvelteSet} from "svelte/reactivity";

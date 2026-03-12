@@ -1,6 +1,6 @@
 import { tick } from "svelte";
 import { TextBehavior } from "../../../behaviors/text";
-import {Heading} from "../heading.svelte";
+import {Heading} from "../heading.svelte.js";
 
 /**
  * @import { Nabu, Block } from "../..";

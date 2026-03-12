@@ -1,12 +1,12 @@
 import { tick } from "svelte";
 import { TextBehavior } from "../../behaviors/text";
 import { extension } from "../../utils/extensions";
-import { Heading } from "./heading.svelte";
+import { Heading } from "./heading.svelte.js";
 import HeadingComponent from "./Heading.svelte";
 import { onBeforeInput } from "./hooks/onBeforeInput.hook";
 
 /**
- * @import { Nabu } from "../nabu.svelte";
+ * @import { Nabu } from "../nabu.svelte.js";
  */
 
 const HeadingExtension = extension("heading", {

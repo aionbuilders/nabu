@@ -1,8 +1,8 @@
-import { Block } from "./block.svelte";
+import { Block } from "./block.svelte.js";
 import { handleContainerBeforeInput } from "./container.utils.js";
 
 /**
- * @import { Nabu, NabuNode } from "./nabu.svelte";
+ * @import { Nabu, NabuNode } from "./nabu.svelte.js";
  */
 
 export class MegaBlock extends Block {

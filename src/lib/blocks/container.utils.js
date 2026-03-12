@@ -1,6 +1,6 @@
 /**
- * @import { Block } from './block.svelte';
- * @import { Nabu } from './nabu.svelte';
+ * @import { Block } from './block.svelte.js';
+ * @import { Nabu } from './nabu.svelte.js';
  */
 
 /**

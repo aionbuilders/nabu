@@ -1,7 +1,7 @@
 import { LoroDoc, UndoManager } from 'loro-crdt';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { Block } from './block.svelte';
-import { NabuSelection } from './selection.svelte';
+import { Block } from './block.svelte.js';
+import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput } from './container.utils.js';
 import { tick } from 'svelte';
 

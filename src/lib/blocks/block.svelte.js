@@ -1,6 +1,6 @@
 /**
- * @import { Nabu, NabuNode } from "./nabu.svelte";
- * @import { MegaBlock } from "./megablock.svelte";
+ * @import { Nabu, NabuNode } from "./nabu.svelte.js";
+ * @import { MegaBlock } from "./megablock.svelte.js";
  */
 
 import { tick } from "svelte";

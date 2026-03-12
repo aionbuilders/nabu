@@ -1,9 +1,9 @@
 import { extension } from "../../utils/extensions";
-import { Paragraph } from "./paragraph.svelte";
+import { Paragraph } from "./paragraph.svelte.js";
 import ParagraphComponent from "./Paragraph.svelte";
 
 /**
- * @import { Nabu } from "../nabu.svelte";
+ * @import { Nabu } from "../nabu.svelte.js";
  */
 
 const ParagraphExtension = extension("paragraph", {

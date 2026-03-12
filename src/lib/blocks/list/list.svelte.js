@@ -1,9 +1,9 @@
-import { MegaBlock } from "../megablock.svelte";
-import { ListBehavior } from "./list.behavior.svelte";
+import { MegaBlock } from "../megablock.svelte.js";
+import { ListBehavior } from "./list.behavior.svelte.js";
 import ListComponent from "./List.svelte";
 
 /**
- * @import { Nabu, NabuNode } from "../nabu.svelte";
+ * @import { Nabu, NabuNode } from "../nabu.svelte.js";
  */
 
 /**

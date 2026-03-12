@@ -1,4 +1,4 @@
-import { MegaBlock } from "../megablock.svelte";
+import { MegaBlock } from "../megablock.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
 import { LoroText } from "loro-crdt";
 import { TextBehavior } from "../../behaviors/text";
@@ -178,7 +178,7 @@ export class ListItem extends MegaBlock {
      */
     getDOMPoint(targetOffset) { return this.behavior.getDOMPoint(targetOffset); }
 
-    /** @param {import('../block.svelte').Block} block */
+    /** @param {import('../block.svelte.js').Block} block */
     absorbs(block) { return this.behavior.absorbs(block); }
 
     
@@ -186,13 +186,13 @@ export class ListItem extends MegaBlock {
     /** @param {number} index @param {string} text */
     insert(index, text) { return this.behavior.insert(index, text); }
     
-    /** @param {Parameters<import('../block.svelte').Block["delete"]>[0]} [deletion] */
+    /** @param {Parameters<import('../block.svelte.js').Block["delete"]>[0]} [deletion] */
     delete(deletion) { return this.behavior.delete(deletion); }
 
     /** @param {import('loro-crdt').Delta<string>[]} data */
     applyDelta(data = []) { return this.behavior.applyDelta(data); }
 
-    /** @param {Parameters<import('../block.svelte').Block["split"]>[0]} [options] @returns {ReturnType<import('../block.svelte').Block["split"]>} */
+    /** @param {Parameters<import('../block.svelte.js').Block["split"]>[0]} [options] @returns {ReturnType<import('../block.svelte.js').Block["split"]>} */
     split(options) { 
         return this.ascend("onSplit", null, { 
             offset: options?.offset || 0,
