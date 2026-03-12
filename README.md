@@ -1,34 +1,186 @@
-# 🖋️ NABU — Next-Generation Block Engine
+# Nabu — Block Editor Engine
 
-Nabu is a modular, local-first block editor engine built on a **Single ContentEditable** architecture. It bridges the gap between the intuitive selection of document-based editors (Google Docs, ProseMirror) and the structural flexibility of block-based editors (Notion).
+> **Alpha** — API in active development. Breaking changes expected.
 
-## 🏗️ Core Architecture
+Nabu is a modular, local-first block editor engine for **Svelte 5**. It combines the intuitive cross-block selection of document editors (Google Docs, ProseMirror) with the structural flexibility of block editors (Notion), built on a **Single ContentEditable** architecture and a **CRDT core** (Loro).
 
-### Single ContentEditable Root
-Unlike traditional block editors that use isolated editable zones, Nabu manages a single native selection at the root. This guarantees seamless cross-block selection, native copy-paste, and superior browser performance.
+## Installation
 
-### Reactive CRDT Core (Loro-CRDT)
-Nabu treats the UI as a pure reflection of a distributed state. Built on **Loro-CRDT (WASM)**, it provides out-of-the-box support for:
-- **Local-First:** High-performance local state with offline-first capabilities.
-- **Collaboration:** Conflict-free merging of concurrent edits.
-- **Rich Text:** Native support for spans and marks via Loro Deltas.
+```bash
+npm install @aionbuilders/nabu
+# or
+bun add @aionbuilders/nabu
+```
 
-### Svelte 5 Integration
-Leveraging Svelte 5's Runes (`$state`, `$derived`), Nabu achieves fine-grained reactivity. Only modified blocks or selection states trigger re-renders, ensuring a fluid 60fps experience even in massive documents.
+## Required: Vite Setup
 
-## 🛠️ Key Technical Features
+Nabu depends on `loro-crdt`, which ships as a WebAssembly module. You must configure your Vite bundler to handle it.
 
-- **Selection Bridge:** A high-precision mapping engine between DOM Nodes/Offsets and Model IDs/Indexes, enabling stable cursor restoration and robust cross-block ranges.
-- **Event Ascension:** A modular "Chain of Responsibility" pattern. Blocks handle local interactions while structural changes (split, merge) are escalated to parents or engine-level hooks.
-- **Delta-Based Mutations:** All structural operations (splitting, merging) utilize Loro Deltas to preserve formatting and metadata integrity during transformation.
-- **Block Registry:** A highly decoupled extension system allowing developers to define custom logic and UI for any block type.
+**1. Install the required Vite plugins:**
 
-## 🚀 Tech Stack
+```bash
+npm install -D vite-plugin-wasm vite-plugin-top-level-await
+```
 
-- **UI Framework:** Svelte 5
-- **State/CRDT:** Loro-CRDT (WASM)
-- **Typing:** Strict JSDoc
-- **Architecture:** OOP-based Block Registry & Extensions
+**2. Add them to your `vite.config.js`:**
+
+```js
+import { defineConfig } from 'vite';
+import { sveltekit } from '@sveltejs/kit/vite'; // or svelte()
+import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
+
+export default defineConfig({
+  plugins: [
+    sveltekit(),
+    wasm(),
+    topLevelAwait()
+  ]
+});
+```
+
+Without this setup, Nabu will fail to load.
+
+## Basic Usage
+
+**With a preset (recommended):**
+
+```svelte
+<script>
+  import { NabuEditor, createFullEditor } from '@aionbuilders/nabu';
+
+  const engine = createFullEditor();
+</script>
+
+<NabuEditor {engine} />
+```
+
+**Manual setup:**
+
+```svelte
+<script>
+  import {
+    Nabu,
+    NabuEditor,
+    ParagraphExtension,
+    HeadingExtension,
+    ListExtension,
+    ListItemExtension,
+    RichTextExtension
+  } from '@aionbuilders/nabu';
+
+  const engine = new Nabu({
+    extensions: [
+      ParagraphExtension,
+      HeadingExtension,
+      ListExtension,
+      ListItemExtension,
+      RichTextExtension
+    ]
+  });
+</script>
+
+<NabuEditor {engine} />
+```
+
+## Presets
+
+Nabu ships with ready-to-use presets for common use cases.
+
+### Preset arrays
+
+Composable — spread and extend them with your own extensions:
+
+```js
+import { FullPreset, createEditor } from '@aionbuilders/nabu';
+
+const engine = createEditor({
+  preset: FullPreset,
+  extensions: [MyCustomExtension]
+});
+```
+
+| Preset | Includes |
+|---|---|
+| `MinimalPreset` | Paragraph only |
+| `TextPreset` | Paragraph + rich text marks |
+| `DocumentPreset` | Paragraph + Headings + rich text |
+| `FullPreset` | All built-in blocks + rich text |
+
+### Factory functions
+
+One-liner shortcuts for the most common cases:
+
+```js
+import {
+  createMinimalEditor,  // paragraph only — textarea replacement
+  createTextEditor,     // paragraph + bold/italic/...
+  createDocumentEditor, // paragraph + headings + rich text
+  createFullEditor,     // everything
+  createEditor          // generic — takes any preset
+} from '@aionbuilders/nabu';
+
+const engine = createFullEditor();
+
+// Add custom extensions on top of a preset
+const engine = createTextEditor({ extensions: [MyExtension] });
+```
+
+## Extensions
+
+All block types and behaviors are provided as extensions. Pass them to the `Nabu` constructor:
+
+| Extension | Provides | Keyboard shortcuts |
+|---|---|---|
+| `ParagraphExtension` | `paragraph` block | — |
+| `HeadingExtension` | `heading` block (h1–h6) | `# ` → h1, `## ` → h2, ... |
+| `ListExtension` | `list` container (bullet/ordered) | — |
+| `ListItemExtension` | `list-item` block | `Tab` indent, `Shift+Tab` unindent |
+| `RichTextExtension` | Inline marks (bold, italic...) | `Ctrl+B/I/U/E`, `Ctrl+Shift+X` |
+
+## Programmatic API
+
+```js
+// Insert blocks
+engine.insert('paragraph', { text: 'Hello' });
+engine.insert('heading', { level: 1, text: 'Title' });
+engine.insert('list', { listType: 'bullet' });
+
+// Undo / Redo
+engine.undo();
+engine.redo();
+
+// Serialize
+const markdown = engine.serialize('markdown');
+const json = engine.serialize('json');
+```
+
+## Architecture
+
+### Single ContentEditable
+The entire editor lives in a single `contenteditable` root. This enables seamless cross-block selection, native copy-paste, and consistent browser performance.
+
+### CRDT Core (Loro)
+All state is stored in a [Loro](https://loro.dev) document — a WASM-based CRDT. This provides:
+- **Local-first**: offline editing out of the box
+- **Collaboration-ready**: conflict-free concurrent edits
+- **Rich text**: native delta/mark support via `LoroText`
+
+### Extension System
+Every block type is an extension. You can build custom block types by extending the `Block` or `MegaBlock` base classes and registering them via the `extension()` helper.
+
+### Svelte 5 Runes
+Nabu uses `$state` and `$derived` throughout for fine-grained reactivity — only modified blocks re-render.
 
 ---
-*Architected for performance, built for the future of collaborative writing.*
+
+## Status
+
+This is an **alpha release**. The core editing experience is functional, but some features are still in development:
+
+- [ ] Persistence (IndexedDB)
+- [ ] Floating toolbar UI
+- [ ] Slash command menu
+- [ ] Link support
+
+Contributions and feedback welcome.

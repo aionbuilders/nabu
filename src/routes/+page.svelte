@@ -1,6 +1,6 @@
 <script>
-    import { ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, Nabu, NabuEditor } from "../blocks";
-    import { RichTextExtension } from "../behaviors/text";
+    import { ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, Nabu, NabuEditor } from "../lib/blocks";
+    import { RichTextExtension } from "../lib/behaviors/text";
     import { untrack } from "svelte";
 
     let engine = new Nabu({

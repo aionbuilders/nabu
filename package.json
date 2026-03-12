@@ -1,12 +1,12 @@
 {
 	"name": "@aionbuilders/nabu",
-	"version": "0.1.0-alpha.0",
+	"version": "0.1.0-alpha.1",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"prepack": "svelte-kit sync && svelte-package && publint",
+		"prepack": "bunx svelte-kit sync && bunx svelte-package && bunx publint",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch"
 	},
@@ -43,8 +43,30 @@
 		"vite-plugin-top-level-await": "^1.6.0",
 		"vite-plugin-wasm": "^3.5.0"
 	},
+	"description": "Modular, local-first block editor engine for Svelte 5, built on a single contenteditable architecture and Loro-CRDT.",
+	"author": {
+		"name": "Killian Di Vincenzo",
+		"url": "https://github.com/killiandvcz"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/aionbuilders/nabu"
+	},
+	"homepage": "https://github.com/aionbuilders/nabu#readme",
 	"keywords": [
-		"svelte"
+		"svelte",
+		"svelte5",
+		"editor",
+		"block-editor",
+		"rich-text",
+		"crdt",
+		"loro",
+		"local-first",
+		"collaborative"
 	],
 	"dependencies": {
 		"loro-crdt": "^1.10.6"
