@@ -19,6 +19,19 @@ export class List extends MegaBlock {
 
         this.behavior = new ListBehavior(this);
         this.behaviors.set("list", this.behavior);
+
+        this.serializers.set('markdown', () =>
+            this.children
+                .map(child => child.serialize('markdown'))
+                .filter(Boolean)
+                .join('\n')
+        );
+        this.serializers.set('json', () => ({
+            id: this.id,
+            type: 'list',
+            props: { listType: this.listType },
+            children: this.children.map(child => child.serialize('json')).filter(Boolean)
+        }));
     }
 
     listType = $derived(this.behavior.listType);

@@ -22,6 +22,7 @@
  * @property {import('svelte').Component} [component]
  * @property {typeof Block} [block]
  * @property {Partial<ExtensionHooks>} [hooks]
+ * @property {Record<string, (nabu: Nabu) => any>} [serializers]
  */
 
 export class Extension {
@@ -32,6 +33,8 @@ export class Extension {
         this.block = init.block;
         /** @type {Partial<ExtensionHooks>} */
         this.hooks = init.hooks || {};
+        /** @type {Record<string, (nabu: Nabu) => any>} */
+        this.serializers = init.serializers || {};
     }
 }
 

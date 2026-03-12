@@ -6,6 +6,26 @@ import { LoroText } from "loro-crdt";
 import { tick } from "svelte";
 
 /**
+ * Converts a Loro text delta to inline Markdown.
+ * @param {import('loro-crdt').Delta<string>[]} delta
+ * @returns {string}
+ */
+export function deltaToMarkdown(delta) {
+    return delta.map(op => {
+        if (typeof op.insert !== 'string') return '';
+        const text = op.insert;
+        const attrs = op.attributes || {};
+        if (attrs.code) return `\`${text}\``;
+        if (attrs.bold && attrs.italic) return `***${text}***`;
+        if (attrs.bold) return `**${text}**`;
+        if (attrs.italic) return `*${text}*`;
+        if (attrs.strikethrough) return `~~${text}~~`;
+        if (attrs.underline) return `<u>${text}</u>`;
+        return text;
+    }).join('');
+}
+
+/**
 * @typedef {NabuNode<{type: "paragraph", text: LoroText}>} TextNode
 */
 
@@ -291,6 +311,25 @@ export class TextBehavior {
         } else {
             this.applyMark(markName, value, sel);
         }
+    }
+
+    /** @returns {string} */
+    toMarkdown() {
+        return deltaToMarkdown(this.delta);
+    }
+
+    /**
+     * Converts the text delta to a Slate-like JSON format.
+     * @returns {{text: string, [mark: string]: any}[]}
+     */
+    toJSON() {
+        return this.delta
+            .filter(op => typeof op.insert === 'string')
+            .map(op => {
+                const run = { text: /** @type {string} */ (op.insert) };
+                if (op.attributes) Object.assign(run, op.attributes);
+                return run;
+            });
     }
 
     /** @param {Block} other */

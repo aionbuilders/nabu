@@ -22,6 +22,12 @@
             engine.insert("paragraph", { text: "Ceci est un éditeur de texte riche construit avec Svelte."});
         });
     })
+
+    /** @param {string} format */
+    function serialize(format) {
+        const result = engine.serialize(format);
+        console.log(`Serialized (${format}):`, result);
+    }
 </script>
 
 <div class="app-shell">
@@ -32,6 +38,8 @@
             <p>start: {JSON.stringify(engine.selection.startBlock?.selection)} / end: {JSON.stringify(engine.selection.endBlock?.selection)}</p>
         </div>
         <div class="actions">
+            <button onclick={() => serialize('markdown')}>Serialize Markdown</button>
+            <button onclick={() => serialize('json')}>Serialize JSON</button>
             <button onclick={() => engine.insert("heading", { level: 1, text: "Nouveau Titre" })}>+ Heading H1</button>
             <button onclick={() => engine.insert("paragraph", { text: "" })}>+ Paragraph</button>
             <button onclick={() => {

@@ -24,6 +24,14 @@ export class Heading extends Block {
         this.behaviors.set("text", this.behavior);
 
         this.level = data.get("level") || 1;
+
+        this.serializers.set('markdown', () => `${'#'.repeat(this.level)} ${this.behavior.toMarkdown()}`);
+        this.serializers.set('json', () => ({
+            id: this.id,
+            type: 'heading',
+            props: { level: this.level },
+            content: this.behavior.toJSON()
+        }));
         
         // Synchronisation du niveau
         this.node.data.subscribe(() => {

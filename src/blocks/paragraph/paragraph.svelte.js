@@ -22,7 +22,13 @@ export class Paragraph extends Block {
         /** @type {TextBehavior} */
         this.behavior = new TextBehavior(this, this.container);
         this.behaviors.set("text", this.behavior);
-        
+
+        this.serializers.set('markdown', () => this.behavior.toMarkdown());
+        this.serializers.set('json', () => ({
+            id: this.id,
+            type: 'paragraph',
+            content: this.behavior.toJSON()
+        }));
     }
 
     component = $derived(this.nabu.components.get("paragraph") || ParagraphComponent);

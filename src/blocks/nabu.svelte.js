@@ -80,7 +80,13 @@ export class Nabu {
                         this.hooks.get(hookName).push(hookFn);
                     }
                 }
-                
+
+                if (ext.serializers) {
+                    for (const [format, fn] of Object.entries(ext.serializers)) {
+                        this.serializers.set(format, fn);
+                    }
+                }
+
             }
         }
         
@@ -153,12 +159,39 @@ export class Nabu {
     systems = new SvelteMap();
     
     hooks = new Map();
-    
+
+    /**
+     * Root-level serializers. Each function receives the Nabu instance and returns the serialized document.
+     * @type {Map<string, (nabu: Nabu) => any>}
+     */
+    serializers = new Map([
+        ['markdown', (nabu) =>
+            nabu.children
+                .map(b => b.serialize('markdown'))
+                .filter(Boolean)
+                .join('\n\n')
+        ],
+        ['json', (nabu) => ({
+            version: '1',
+            blocks: nabu.children.map(b => b.serialize('json')).filter(Boolean)
+        })]
+    ]);
+
     /** @type {Block[]} */
     children = $state([]);
     
     get isEmpty() {
         return this.children.length === 0;
+    }
+
+    /** @param {string} format */
+    serialize(format) {
+        const fn = this.serializers.get(format);
+        if (!fn) {
+            console.warn(`No serializer registered for format "${format}" on Nabu`);
+            return null;
+        }
+        return fn(this);
     }
     
     init() {

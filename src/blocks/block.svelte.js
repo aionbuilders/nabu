@@ -28,6 +28,7 @@ export class Block {
         }
     }
 
+    serializers = new SvelteMap();
     behaviors = new SvelteMap();
     selected = $state(false);
     isSelectionStart = $state(false);
@@ -334,6 +335,18 @@ export class Block {
 
     commit() {
         this.nabu.commit();
+    }
+
+
+    /** @param {string} format */
+    serialize(format) {
+        const serializer = this.serializers.get(format);
+        if (serializer) {
+            return serializer(this);
+        } else {
+            console.warn(`No serializer found for format "${format}" on block type "${this.type}"`);
+            return null;
+        }
     }
 
 

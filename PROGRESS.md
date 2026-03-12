@@ -69,11 +69,17 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ---
 
-## 🔴 PHASE 3 : Persistance — NON COMMENCÉE
+## 🟠 PHASE 3 : Persistance — EN COURS
 
 - [ ] **3.1** Sauvegarde IndexedDB automatique (snapshot Loro binaire)
 - [ ] **3.2** Chargement au démarrage depuis IndexedDB
-- [ ] **3.3** Export Markdown / JSON
+- [x] **3.3** Export Markdown / JSON
+  - `nabu.serialize('markdown')` → string Markdown
+  - `nabu.serialize('json')` → `{version, blocks[]}` format Slate-like
+  - `deltaToMarkdown()` : util inline (bold, italic, code, strikethrough, underline)
+  - `TextBehavior.toMarkdown()` / `.toJSON()` : briques réutilisables
+  - Bindings réactifs Svelte 5 natifs via `$derived(nabu.serialize(...))`
+  - Architecture extensible : `Extension.serializers` pour formats custom
 - [ ] **3.4** Import depuis Markdown / JSON
 
 ---
@@ -90,7 +96,7 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ## 📊 ÉTAT ACTUEL — 12 Mars 2026
 
-### Progression globale : **75-80% vers MVP Bêta**
+### Progression globale : **80-85% vers MVP Bêta**
 
 #### ✅ Points forts
 - Architecture Single CE + Loro-CRDT + Extension System : solide
@@ -99,10 +105,11 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - Rich Text marks : infrastructure complète, toggle comportement standard
 - Multi-blocs : logique spine correcte et unifiée
 - Undo/Redo avec restauration curseur
-- 9 ADRs documentés
+- **Serializer system : export Markdown + JSON opérationnels, réactifs Svelte 5**
+- 9 ADRs documentés + ADR 010 (Serializer pattern)
 
 #### 🔴 Bloquant MVP
-1. **Persistence** — aucun stockage, données perdues au refresh
+1. **Persistence** — export opérationnel, mais pas de sauvegarde IndexedDB (données perdues au refresh)
 2. **Toolbar visuelle marks** — aucune UI pour appliquer le formatage
 
 #### 🟡 Important mais non bloquant
@@ -131,3 +138,4 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 | 007 | Event Ascension (Chain of Responsibility) | ✅ Accepté |
 | 008 | Container beforeinput — logique spine partagée | ✅ Accepté |
 | 009 | Rich Text toggle global multi-blocs | ✅ Accepté |
+| 010 | Serializer pattern : Map sur Block/Nabu, TextBehavior comme brique, format Slate-like | ✅ Accepté |

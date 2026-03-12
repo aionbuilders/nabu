@@ -22,6 +22,30 @@ export class ListItem extends MegaBlock {
         /** @type {TextBehavior} */
         this.behavior = new TextBehavior(this, this.container);
         this.behaviors.set("text", this.behavior);
+
+        this.serializers.set('markdown', () => {
+            const depth = this.parents.filter(p => p.type === 'listItem').length;
+            const indent = '  '.repeat(depth);
+            const listType = /** @type {any} */ (this.parent)?.listType ?? 'bullet';
+            const prefix = listType === 'ordered' ? `${this.index + 1}.` : '-';
+            const lines = [`${indent}${prefix} ${this.behavior.toMarkdown()}`];
+            if (this.sublist) {
+                const sublistMd = this.sublist.serialize('markdown');
+                if (sublistMd) lines.push(sublistMd);
+            }
+            return lines.join('\n');
+        });
+        this.serializers.set('json', () => {
+            /** @type {Record<string, any>} */
+            const result = {
+                id: this.id,
+                type: 'list-item',
+                content: this.behavior.toJSON()
+            };
+            const childrenJson = this.children.map(c => c.serialize('json')).filter(Boolean);
+            if (childrenJson.length) result.children = childrenJson;
+            return result;
+        });
     }
 
     component = $derived(this.nabu.components.get("list-item") || ListItemComponent);
