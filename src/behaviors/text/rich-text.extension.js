@@ -26,7 +26,6 @@ function onKeyDown(nabu, event) {
     const startBlock = nabu.selection.startBlock;
     const startFocusData = startBlock?.focus(null, true);
     const endFocusData = endBlock?.focus(null, true);
-    console.log("Keydown event:", { key: event.key, ctrl: event.ctrlKey, meta: event.metaKey, shift: event.shiftKey });
 
     let markName = null;
     if (!event.shiftKey) {
@@ -63,9 +62,7 @@ function onKeyDown(nabu, event) {
 
     if (applied) {
         nabu.commit();
-        console.log('Applied mark:', markName);
         if (!startBlock || !endBlock) return;
-        console.log("Refocusing blocks after mark application:", { startBlockId: startBlock.id, endBlockId: endBlock.id, startFocusData, endFocusData });
         nabu.focus({ from: { block: startBlock, offset: startFocusData?.start?.offset }, to: { block: endBlock, offset: endFocusData?.end?.offset } });
         
 

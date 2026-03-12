@@ -100,8 +100,6 @@ export class List extends MegaBlock {
         // 2. On trouve l'index de l'item source dans la liste
         const currentIndex = sourceItem.node.index();
 
-        console.log("Index de l'item source:", currentIndex);
-
         
         // 3. On demande à Nabu d'insérer un nouveau list-item au même niveau
         const newItem = this.nabu.insert(
@@ -129,13 +127,6 @@ export class List extends MegaBlock {
         
         return { block: newItem };
     }
-
-
-    /** @param {InputEvent} event */
-    // beforeinput(event) {
-    //     console.log("List beforeinput event:", event);
-
-    // }
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {

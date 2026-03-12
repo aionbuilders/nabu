@@ -184,7 +184,6 @@ export class Block {
      * @param {Object} [props={}] 
      */
     transformTo(newType, props = {}) {
-        console.log(`Transforming block ${this.id} from ${this.type} to ${newType}`, props);
         const data = this.node.data;
         data.set("type", newType);
         for (const [key, value] of Object.entries(props)) {
@@ -212,7 +211,6 @@ export class Block {
 
     /** @param {Block} block @returns {any} */
     mergeWith(block) {
-        // console.warn("Not implemented: merge block", this.id, "with block", block.id);
         const success = this.absorbs(block);
         if (success) {
             block.destroy();
@@ -271,15 +269,12 @@ export class Block {
 
     /** @param {{start?: number, end?: number, offset?: number} | null } options @param {boolean} [passive=false] */
     focus(options = {}, passive = false) {
-        console.log("Focusing block", this.id, "with options", options, "and passive =", passive);
         let start = options?.start ?? options?.offset ?? this.selection?.from ?? 0;
         let end = options?.end ?? options?.offset ?? this.selection?.to ?? 0;
         const startPoint = this.getDOMPoint(start);
         const endPoint = this.getDOMPoint(end);
-        console.log("Calculated DOM points for focus:", { startPoint, endPoint });
         if (!passive && startPoint && endPoint) {
             tick().then(() => {
-                console.log("REFOCUS");
                 this.nabu.selection.setBaseAndExtent(startPoint.node, startPoint.offset || 0, endPoint.node || null, endPoint.offset || 0)
             })
         }
@@ -300,7 +295,6 @@ export class Block {
 
     /** @param {string} eventName @param {Event} event @param {Object} [data={}] */
     ascend(eventName, event, data = {}) {
-        console.log(`My parent is`, this.parent, `and I'm ascending event ${eventName} with data`, data);
         //@ts-ignore
         if (this.parent && typeof this.parent[eventName] === "function") {
             //@ts-ignore

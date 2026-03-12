@@ -234,7 +234,6 @@ export class Nabu {
 
     commit() {
         this.trigger("onBeforeTransaction", this);
-        console.warn("Committing transaction...");
         this.doc.commit();
     }
 
@@ -266,12 +265,10 @@ export class Nabu {
             const toBlock = options?.to?.block || sel.focusBlock;
             const fromOffset = options?.from?.offset ?? sel.startOffset ?? 0;
             const toOffset = options?.to?.offset ?? sel.endOffset ?? 0;
-            console.log("Focusing Nabu with options", options, "Current selection:", { anchorBlock: sel.anchorBlock?.id, focusBlock: sel.focusBlock?.id, startOffset: sel.startOffset, endOffset: sel.endOffset });
 
             if (fromBlock && toBlock) {
                 const fromPoint = fromBlock.getDOMPoint(fromOffset);
                 const toPoint = toBlock.getDOMPoint(toOffset);
-                console.log("Focusing Nabu with options", options, "Calculated points:", { fromPoint, toPoint });
                 if (fromPoint && toPoint) this.selection.setBaseAndExtent(fromPoint.node, fromPoint.offset, toPoint.node, toPoint.offset);
             }
         })

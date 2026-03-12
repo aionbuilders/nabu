@@ -33,7 +33,6 @@ export class MegaBlock extends Block {
             }
             block.parent = this;
             block.index = i;
-            console.log("Loaded block:", block.text, "with type:", block.type);
             return block;
         });
     }

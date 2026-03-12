@@ -15,7 +15,6 @@ const ListExtension = extension("list", {
     hooks: {
         onBeforeTransaction(nabu) {
             const lists = /** @type {SvelteSet<List>} */ (nabu.blocksByType.get("list"));
-            // if (lists) console.log(`There are currently ${lists.size} list(s) in the document.`);
             lists?.forEach(list => {
                 const behavior = list.behaviors.get("list");
                 if (!behavior || !(behavior instanceof ListBehavior)) return;
@@ -24,8 +23,7 @@ const ListExtension = extension("list", {
                 if (!previous) return;
                 const previousBehavior = previous.behaviors.get("list");
                 if (!previousBehavior || !(previousBehavior instanceof ListBehavior)) return;
-
-                console.warn("Adjacent lists detected! This may cause rendering issues. Consider merging them into a single list.");
+                
                 previousBehavior.absorbs(list);
                 list.destroy();
 

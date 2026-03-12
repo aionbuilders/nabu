@@ -219,7 +219,6 @@ export class TextBehavior {
     * @param {HTMLElement?} [element]
     */
     getDOMPoint(targetOffset, element = this.block.element) {
-        console.log("Getting DOM point for offset", targetOffset, "in element", element);
         if (!element) return null;
         
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
