@@ -194,17 +194,17 @@ export class Block {
 
     /** @param {number} index @param {string} text */
     insert(index, text) {
-        console.warn("Not implemented: insert text", text, "at index", index, "in block", this.id);
+        this.nabu.warn("Not implemented: insert text", text, "at index", index, "in block", this.id);
     }
 
     /** @param {{from?: number, to?: number, index?: number, length?: number}} [deletion] */
     delete(deletion) {
-        console.warn("Not implemented: delete block", this.id, "with deletion range", deletion);
+        this.nabu.warn("Not implemented: delete block", this.id, "with deletion range", deletion);
     }
 
     /** @param {Block} block @returns {any} */
     absorbs(block) {
-        console.warn("Not implemented: check if block", this.id, "absorbs block", block.id);
+        this.nabu.warn("Not implemented: check if block", this.id, "absorbs block", block.id);
         return false;
     }
 
@@ -258,12 +258,12 @@ export class Block {
 
     /** @param {Block[]} children @param {number | null} [index] */
     adoptChildren(children, index = null) {
-        console.warn("Not implemented: adopt children", children.map(c => c.id), "into block", this.id, "at index", index);
+        this.nabu.warn("Not implemented: adopt children", children.map(c => c.id), "into block", this.id, "at index", index);
     }
 
     /** @param {{from?: number, to?: number, index?: number, length?: number, offset?: number}} options @returns {{block: Block} | null} */
     split(options) {
-        console.warn("Not implemented: split block", this.id, "with options", options);
+        this.nabu.warn("Not implemented: split block", this.id, "with options", options);
         return null;
     }
 
@@ -287,7 +287,7 @@ export class Block {
      * @returns {{node: Node, offset: number} | null}
      */
     getDOMPoint(offset) {
-        console.warn("getDOMPoint not implemented for block", this.type, this.id);
+        this.nabu.warn("getDOMPoint not implemented for block", this.type, this.id);
         return null;
     }
 
@@ -338,7 +338,7 @@ export class Block {
         if (serializer) {
             return serializer(this);
         } else {
-            console.warn(`No serializer found for format "${format}" on block type "${this.type}"`);
+            this.nabu.warn(`No serializer found for format "${format}" on block type "${this.type}"`);
             return null;
         }
     }

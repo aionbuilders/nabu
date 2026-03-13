@@ -10,6 +10,7 @@
     data-block-id={block.id}
     data-block-type="list-item"
     class="nabu-list-item"
+    class:debug={block.nabu.debugging}
     class:selected={block.selected}
     class:first={block.isSelectionStart}
     class:last={block.isSelectionEnd}
@@ -28,9 +29,12 @@
     .nabu-list-item {
         margin: 0.25rem 0;
         
-        &.selected > .item-content {
-            background-color: rgba(59, 130, 246, 0.25);
+        &.debug{
+            &.selected > .item-content {
+                background-color: rgba(59, 130, 246, 0.25);
+            }
         }
+        
     }
     
     .item-content {

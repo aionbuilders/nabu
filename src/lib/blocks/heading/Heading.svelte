@@ -10,6 +10,7 @@
     data-block-id={block.id}
     data-block-type="heading"
     class="nabu-heading"
+    class:debug={block.nabu.debugging}
     class:selected={block.selected}
     class:first={block.isSelectionStart}
     class:last={block.isSelectionEnd}
@@ -22,14 +23,17 @@
         white-space: pre-wrap;
         outline: none;
         
-        &.selected {
-            background-color: rgba(59, 130, 246, 0.25);
-        }
-        &.first {
-            border-top: 1px solid rgba(59, 130, 246, 0.5);
-        }
-        &.last {
-            border-bottom: 1px solid rgba(59, 130, 246, 0.5);
+
+        &.debug{
+            &.selected {
+                background-color: rgba(59, 130, 246, 0.25);
+            }
+            &.first {
+                border-top: 1px solid rgba(59, 130, 246, 0.5);
+            }
+            &.last {
+                border-bottom: 1px solid rgba(59, 130, 246, 0.5);
+            }
         }
     }
 

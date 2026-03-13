@@ -160,6 +160,8 @@ export class Nabu {
     
     hooks = new Map();
 
+    debugging = $state(false);
+
     /**
      * Root-level serializers. Each function receives the Nabu instance and returns the serialized document.
      * @type {Map<string, (nabu: Nabu) => any>}
@@ -188,7 +190,7 @@ export class Nabu {
     serialize(format) {
         const fn = this.serializers.get(format);
         if (!fn) {
-            console.warn(`No serializer registered for format "${format}" on Nabu`);
+            this.warn(`No serializer registered for format "${format}" on Nabu`);
             return null;
         }
         return fn(this);
@@ -389,7 +391,14 @@ export class Nabu {
         return handleContainerBeforeInput(this, this, e);
     }
     
-    
+
+
+
+
+    /** @param  {...any} args */
+    warn(...args) {
+        if (this.debugging) console.warn("[Nabu]", ...args);
+    }
 }
 
 

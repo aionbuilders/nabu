@@ -87,7 +87,7 @@ export function handleContainerBeforeInput(container, nabu, event) {
         const text = event.data || (inputType === 'insertLineBreak' ? '\n' : '');
         startBlock.insert(focusData.options.startOffset, text);
     } else {
-        console.warn('Unhandled input type in container:', inputType);
+        nabu.warn('Unhandled input type in container:', inputType);
         return false;
     }
 

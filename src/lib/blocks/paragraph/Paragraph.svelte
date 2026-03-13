@@ -9,6 +9,7 @@
     data-block-id={block.id}
     data-block-type="paragraph"
     class="nabu-paragraph"
+    class:debug={block.nabu.debugging}
     class:selected={block.selected}
     class:first={block.isSelectionStart}
     class:last={block.isSelectionEnd}
@@ -18,21 +19,16 @@
     .nabu-paragraph {
         white-space: pre-wrap;
         margin-bottom: 0.5em;
-        &.selected {
-            background-color: rgba(59, 130, 246, 0.25);
+        &.debug{
+            &.selected {
+                background-color: rgba(59, 130, 246, 0.25);
+            }
+            &.first {
+                border-top: 1px solid rgba(59, 130, 246, 0.5);
+            }
+            &.last {
+                border-bottom: 1px solid rgba(59, 130, 246, 0.5);
+            }
         }
-        &.first {
-            border-top: 1px solid rgba(59, 130, 246, 0.5);
-        }
-        &.last {
-            border-bottom: 1px solid rgba(59, 130, 246, 0.5);
-        }
-        
-
-        /* &::before {
-            content: " ";
-            display: inline-block;
-            width: 0;
-        } */
     }
 </style>

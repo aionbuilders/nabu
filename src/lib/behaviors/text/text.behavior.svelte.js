@@ -120,7 +120,7 @@ export class TextBehavior {
             case "insertParagraph":
                 return this.handleInsertParagraph(event, selection);
             default:
-                console.warn("Unhandled input type:", event.inputType);
+                this.nabu.warn("Unhandled input type:", event.inputType);
                 return;
         }
     }

@@ -1,6 +1,6 @@
 {
 	"name": "@aionbuilders/nabu",
-	"version": "0.1.0-alpha.2",
+	"version": "0.1.0-alpha.3",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",

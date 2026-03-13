@@ -47,7 +47,7 @@ export class MegaBlock extends Block {
             if (!childNode) return;
             if (false) {
                 //TODO: conditions de skip, ex: si le block est déjà dans la mega block, ou si c'est un block parent de la mega block, etc.
-                console.warn("Skipping child with id", child.id, "because ...");
+                this.nabu.warn("Skipping child with id", child.id, "because ...");
                 return skipped.push(child);
             }
             this.nabu.tree.move(childNode.id, this.node.id, index);
