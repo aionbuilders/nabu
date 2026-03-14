@@ -70,3 +70,9 @@ export const createDocumentEditor = (options = {}) =>
  */
 export const createFullEditor = (options = {}) =>
     createEditor({ preset: FullPreset, ...options });
+
+// ---------------------------------------------------------------------------
+// Persisted factory
+// ---------------------------------------------------------------------------
+
+export { createPersistedEditor } from './persistence/persistence.js';

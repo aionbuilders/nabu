@@ -1,31 +1,36 @@
 <script>
-    import { ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, Nabu, NabuEditor } from "../lib/blocks";
-    import { RichTextExtension } from "../lib/behaviors/text";
-    import { untrack } from "svelte";
+    import { onMount, untrack } from "svelte";
+    import { NabuEditor } from "../lib/blocks";
+    import { createPersistedEditor } from "../lib/persistence/persistence.js";
+    import { FullPreset } from "../lib/presets.js";
 
-    let engine = new Nabu({
-        extensions: [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, RichTextExtension]
-    });
-
-    if (typeof window !== 'undefined') {
-        window.nabu = engine;
-    }
-
+    /** @type {import('../lib/blocks/nabu.svelte.js').Nabu | null} */
+    let engine = $state(null);
 
     $effect(() => {
         untrack(() => {
-            engine.insert("paragraph", { text: "Bienvenue dans Nabu Editor!"});
-            engine.insert("paragraph", { text: "Ceci est un éditeur de texte riche construit avec Svelte."});
-            engine.insert("paragraph", { text: "Bienvenue dans Nabu Editor!"});
-            engine.insert("paragraph", { text: "Ceci est un éditeur de texte riche construit avec Svelte."});
-            engine.insert("paragraph", { text: "Bienvenue dans Nabu Editor!"});
-            engine.insert("paragraph", { text: "Ceci est un éditeur de texte riche construit avec Svelte."});
-        });
-    })
+            createPersistedEditor({
+                docId: 'nabu-demo',
+                preset: FullPreset,
+            }).then(eng => {
+                engine = eng;
+                if (engine.isNew) {
+                    engine.insert("paragraph", { text: "Bienvenue dans Nabu Editor!" });
+                    engine.insert("paragraph", { text: "Ceci est un éditeur de texte riche construit avec Svelte." });
+                }
+
+                if (typeof window !== 'undefined') {
+                    window.nabu = engine;
+                }
+            })
+        })
+
+        
+    });
 
     /** @param {string} format */
     function serialize(format) {
-        const result = engine.serialize(format);
+        const result = engine?.serialize(format);
         console.log(`Serialized (${format}):`, result);
     }
 </script>
@@ -35,35 +40,42 @@
         <div class="brand">
             <h1>Nabu</h1>
             <span class="badge">alpha</span>
-            <p>start: {JSON.stringify(engine.selection.startBlock?.selection)} / end: {JSON.stringify(engine.selection.endBlock?.selection)}</p>
+            <p>start: {JSON.stringify(engine?.selection.startBlock?.selection)} / end: {JSON.stringify(engine?.selection.endBlock?.selection)}</p>
         </div>
         <div class="actions">
             <button onclick={() => serialize('markdown')}>Serialize Markdown</button>
             <button onclick={() => serialize('json')}>Serialize JSON</button>
-            <button onclick={() => engine.insert("heading", { level: 1, text: "Nouveau Titre" })}>+ Heading H1</button>
-            <button onclick={() => engine.insert("paragraph", { text: "" })}>+ Paragraph</button>
+            <button onclick={() => engine?.insert("heading", { level: 1, text: "Nouveau Titre" })}>+ Heading H1</button>
+            <button onclick={() => engine?.insert("paragraph", { text: "" })}>+ Paragraph</button>
             <button onclick={() => {
+                if (!engine) return;
                 // 1. Liste Racine
                 const mainList = engine.insert("list", { listType: "bullet" });
-                
+
                 // 2. Items simples
                 engine.insert("list-item", { text: "Item racine 1" }, mainList.node.id.toString(), 0);
                 const item2 = engine.insert("list-item", { text: "Item racine 2 (Parent)" }, mainList.node.id.toString(), 1);
-                
+
                 // 3. Sous-liste (enfant de l'Item 2)
                 const subList = engine.insert("list", { listType: "ordered" }, item2.node.id.toString());
-                
+
                 // 4. Sous-items
                 engine.insert("list-item", { text: "Sous-item A" }, subList.node.id.toString(), 0);
                 engine.insert("list-item", { text: "Sous-item B" }, subList.node.id.toString(), 1);
             }}>+ Nested List Test</button>
+            <button onclick={() => engine?.saveNow()}>Save Now</button>
+            <button onclick={async () => { await engine?.clearPersistence(); location.reload(); }}>Clear & Reload</button>
             <button onclick={() => console.log(engine)}>Log Engine</button>
         </div>
     </header>
 
     <main class="editor-viewport">
         <div class="paper-sheet">
-            <NabuEditor {engine} />
+            {#if engine}
+                <NabuEditor {engine} />
+            {:else}
+                <div class="loading">Chargement…</div>
+            {/if}
         </div>
     </main>
 </div>
@@ -160,5 +172,11 @@
     button:active {
         background-color: #f3f4f6;
         transform: translateY(1px);
+    }
+
+    .loading {
+        padding: 2rem;
+        color: #9ca3af;
+        font-size: 0.875rem;
     }
 </style>

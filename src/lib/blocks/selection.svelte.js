@@ -13,7 +13,8 @@ export class NabuSelection extends SvelteSelection {
         super();
         this.nabu = nabu;
 
-        $effect(() => {
+        $effect.root(() => {
+            $effect(() => {
             if (this.blocks) {
                 this.previous.forEach(block => block.clearSelection());
                 let i = 0;
@@ -27,6 +28,10 @@ export class NabuSelection extends SvelteSelection {
                 this.previous = new Set(this.blocks);
             }
         })
+
+        })
+
+        
     }
     
     anchorBlock = $derived.by(() => {
