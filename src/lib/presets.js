@@ -2,6 +2,7 @@ import { Nabu } from './blocks/nabu.svelte.js';
 import { ParagraphExtension } from './blocks/paragraph/index.js';
 import { HeadingExtension } from './blocks/heading/index.js';
 import { ListExtension, ListItemExtension } from './blocks/list/index.js';
+import { DialogueExtension } from './blocks/dialogue/index.js';
 import { RichTextExtension } from './behaviors/text/index.js';
 
 // ---------------------------------------------------------------------------
@@ -18,7 +19,7 @@ export const TextPreset = [ParagraphExtension, RichTextExtension];
 export const DocumentPreset = [ParagraphExtension, HeadingExtension, RichTextExtension];
 
 /** All built-in block types + rich text. */
-export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, RichTextExtension];
+export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension];
 
 // ---------------------------------------------------------------------------
 // Factory — generic createEditor

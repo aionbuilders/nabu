@@ -8,5 +8,6 @@ export * from "./container.utils";
 export * from "./paragraph";
 export * from "./heading";
 export * from "./list";
+export * from "./dialogue";
 
 export * from "./selection.svelte.js";

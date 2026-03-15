@@ -129,7 +129,20 @@ export class TextBehavior {
     handleInsertText(event, selection = this.selection) {
         if (!selection) return;
 
-        const textToInsert = event.data || "";
+        let textToInsert = event.data || "";
+
+        // Substitution typographique : `-- ` → `— ` (em-dash)
+        if (textToInsert === " " && selection.isCollapsed) {
+            const textBeforeCursor = this.text.slice(0, selection.from);
+            if (textBeforeCursor.endsWith("--")) {
+                this.delete({ index: selection.from - 2, length: 2 }, selection);
+                this.insert(selection.from - 2, "— ");
+                this.block.commit();
+                tick().then(() => this.nabu.selection.setCursor(this.block, selection.from - 2 + 2));
+                return;
+            }
+        }
+
         if (!selection.isCollapsed) this.delete({index: selection.from, length: selection.to - selection.from}, selection);
         this.insert(selection.from, textToInsert);
         this.block.commit();

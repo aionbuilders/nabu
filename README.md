@@ -66,6 +66,7 @@ Without this setup, Nabu will fail to load.
     HeadingExtension,
     ListExtension,
     ListItemExtension,
+    DialogueExtension,
     RichTextExtension
   } from '@aionbuilders/nabu';
 
@@ -75,6 +76,7 @@ Without this setup, Nabu will fail to load.
       HeadingExtension,
       ListExtension,
       ListItemExtension,
+      DialogueExtension,
       RichTextExtension
     ]
   });
@@ -105,7 +107,7 @@ const engine = createEditor({
 | `MinimalPreset` | Paragraph only |
 | `TextPreset` | Paragraph + rich text marks |
 | `DocumentPreset` | Paragraph + Headings + rich text |
-| `FullPreset` | All built-in blocks + rich text |
+| `FullPreset` | All built-in blocks + rich text (including Dialogue) |
 
 ### Factory functions
 
@@ -136,7 +138,16 @@ All block types and behaviors are provided as extensions. Pass them to the `Nabu
 | `HeadingExtension` | `heading` block (h1–h6) | `# ` → h1, `## ` → h2, ... |
 | `ListExtension` | `list` container (bullet/ordered) | — |
 | `ListItemExtension` | `list-item` block | `Tab` indent, `Shift+Tab` unindent |
+| `DialogueExtension` | `dialogue` block | `-- ` → dialogue, `Backspace` at start → paragraph |
 | `RichTextExtension` | Inline marks (bold, italic...) | `Ctrl+B/I/U/E`, `Ctrl+Shift+X` |
+
+### Typographic substitutions
+
+When `RichTextExtension` or any text-bearing block is active, Nabu automatically applies typographic substitutions as you type:
+
+| Input | Output | Description |
+|---|---|---|
+| `--` + space | `— ` | Em-dash (French dialogue convention) |
 
 ## Programmatic API
 
@@ -145,6 +156,7 @@ All block types and behaviors are provided as extensions. Pass them to the `Nabu
 engine.insert('paragraph', { text: 'Hello' });
 engine.insert('heading', { level: 1, text: 'Title' });
 engine.insert('list', { listType: 'bullet' });
+engine.insert('dialogue', { text: 'Tu viens ce soir ?' });
 
 // Undo / Redo
 engine.undo();
@@ -152,6 +164,8 @@ engine.redo();
 
 // Serialize
 const markdown = engine.serialize('markdown');
+// dialogue blocks serialize as: — Tu viens ce soir ?
+
 const json = engine.serialize('json');
 ```
 

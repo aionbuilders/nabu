@@ -62,7 +62,19 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - [x] **2.6.2** `MegaBlock.beforeinput` réduit à une délégation (100 lignes → 3 lignes)
 - [x] **2.6.3** `Nabu.beforeinput` mis au même niveau de robustesse que MegaBlock
 
-### 2.7 Bugs & Améliorations — EN COURS ⚠️
+### 2.7 Bloc Dialogue ✅
+- [x] **2.7.1** Extension `DialogueBlock` : bloc texte avec em-dash préfixé (CSS `::before`, non-DOM)
+- [x] **2.7.2** Markdown shortcut : `-- ` en début de paragraphe → transformation automatique en dialogue
+- [x] **2.7.3** Backspace au début d'un dialogue → transformation en Paragraph
+- [x] **2.7.4** Entrée dans un dialogue non-vide → crée un nouveau bloc dialogue à la suite
+- [x] **2.7.5** Entrée dans un dialogue vide → sortie du mode dialogue, crée un Paragraph
+- [x] **2.7.6** Rich Text marks fonctionnels dans les blocs dialogue (héritage `TextBehavior`)
+- [x] **2.7.7** Sérialisation Markdown : `— texte` (em-dash unicode, différencié des listes `- item`)
+- [x] **2.7.8** Sérialisation JSON : `{ type: 'dialogue', content: [...] }`
+- [x] **2.7.9** Substitution typographique globale : `--` + espace → `—` dans tout bloc texte
+- [ ] **2.7.10** Speaker/locuteur optionnel (roadmap Phase 4.6 — use cases théâtre, scénario, transcription)
+
+### 2.8 Bugs & Améliorations — EN COURS ⚠️
 - [ ] **Bug Merging ListItem** : fusion de deux items de liste peut perdre les enfants (sous-listes) du second item — `adoptChildren` dans MegaBlock a un `if (false)` TODO non implémenté
 - [ ] **Multi-block `insertParagraph`** dans structures très imbriquées — à stress-tester
 - [ ] **`setTimeout` vs `tick()`** : quelques points utilisent `setTimeout(..., 0)` au lieu de `tick().then()` — timing-dépendant
@@ -91,21 +103,27 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - [ ] **4.3** Drag Handle au survol (overlay indépendant du `contenteditable`)
 - [ ] **4.4** Déplacement de blocs via `LoroTree.move`
 - [ ] **4.5** Placeholders sur blocs vides
+- [ ] **4.6** DialogueBlock — champ `speaker` optionnel (théâtre, scénario, transcription)
+  - Metadata Loro sur le nœud dialogue
+  - Mécanisme d'accès à définir (label cliquable au-dessus du bloc, raccourci dédié, etc.)
+  - Sérialisation : `Jean — Tu viens ce soir ?`
+  - Use cases : pièces de théâtre, scénarios, interviews
 
 ---
 
-## 📊 ÉTAT ACTUEL — 12 Mars 2026
+## 📊 ÉTAT ACTUEL — 15 Mars 2026
 
-### Progression globale : **80-85% vers MVP Bêta**
+### Progression globale : **85% vers MVP Bêta**
 
 #### ✅ Points forts
 - Architecture Single CE + Loro-CRDT + Extension System : solide
 - Selection Bridge DOM ↔ Modèle : correct, spans-aware confirmé
-- 4 types de blocs stables : Paragraph, Heading, List, ListItem
+- 5 types de blocs stables : Paragraph, Heading, List, ListItem, **Dialogue**
 - Rich Text marks : infrastructure complète, toggle comportement standard
 - Multi-blocs : logique spine correcte et unifiée
 - Undo/Redo avec restauration curseur
 - **Serializer system : export Markdown + JSON opérationnels, réactifs Svelte 5**
+- **Substitution typographique : `--` + espace → `—` (em-dash) dans tout bloc texte**
 - 9 ADRs documentés + ADR 010 (Serializer pattern)
 
 #### 🔴 Bloquant MVP
