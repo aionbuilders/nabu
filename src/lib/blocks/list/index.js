@@ -4,6 +4,7 @@ import ListComponent from "./List.svelte";
 import { ListItem } from "./list-item.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
 import { ListBehavior } from "./list.behavior.svelte.js";
+import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
 
 /**
  * @import {SvelteSet} from "svelte/reactivity";
@@ -13,6 +14,7 @@ const ListExtension = extension("list", {
     block: List,
     component: ListComponent,
     hooks: {
+        onBeforeInput,
         onBeforeTransaction(nabu) {
             const lists = /** @type {SvelteSet<List>} */ (nabu.blocksByType.get("list"));
             lists?.forEach(list => {
