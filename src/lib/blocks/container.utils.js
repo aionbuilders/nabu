@@ -4,6 +4,45 @@
  */
 
 /**
+ * Ensures a block respects its structural parent constraint after being relocated.
+ * If the block's current Loro parent doesn't match its `requiredParent` type,
+ * creates a wrapper block at the same position WITHOUT committing.
+ *
+ * Uses BlockClass.create() instead of nabu.insert() to avoid premature commits.
+ * New wrapper blocks are registered in nabu.blocksByType immediately, so the
+ * onBeforeTransaction hook will see and merge adjacent wrappers of the same type.
+ *
+ * @param {Nabu} nabu
+ * @param {Block} block
+ */
+function wrapOrphan(nabu, block) {
+    const req = block.requiredParent;
+    if (!req) return;
+
+    // Read the CURRENT Loro parent (not the stale Svelte $state)
+    const currentLoroParent = block.node.parent();
+    const currentParentType = currentLoroParent?.data?.get("type") ?? null;
+
+    // Already in the correct parent context — nothing to do
+    if (currentParentType === req.type) return;
+
+    const WrapperClass = nabu.registry.get(req.type);
+    if (!WrapperClass) {
+        nabu.warn(`wrapOrphan: block type "${req.type}" is not registered`);
+        return;
+    }
+
+    // Create wrapper at the block's current position (no commit)
+    const loroParentId = currentLoroParent?.id?.toString() || null;
+    const index = block.node.index() ?? undefined; // null-guard for safety
+
+    const wrapper = WrapperClass.create(nabu, req.type, req.props?.() || {}, loroParentId, index);
+
+    // Move block into wrapper (no commit)
+    nabu.tree.move(block.node.id, wrapper.node.id);
+}
+
+/**
  * Shared beforeinput logic for block containers (Nabu root and MegaBlock).
  *
  * Uses a "spine" approach: for each selection boundary, we walk up the parent
@@ -100,7 +139,15 @@ export function handleContainerBeforeInput(container, nabu, event) {
         const index = brotherhood.indexOf(block);
         if (index !== -1) {
             const nextSiblings = brotherhood.slice(index + 1);
-            if (nextSiblings.length) nextSiblings.forEach(sibling => sibling.node.moveAfter(focusBlock.node));
+            if (nextSiblings.length) {
+                // Reverse to preserve original order: moveAfter(focus) inserts right
+                // after focus each time, so forward iteration would reverse the result.
+                // wrapOrphan ensures structural integrity (e.g. ListItem → needs List parent).
+                [...nextSiblings].reverse().forEach(sibling => {
+                    sibling.node.moveAfter(focusBlock.node);
+                    wrapOrphan(nabu, sibling);
+                });
+            }
         }
     });
 

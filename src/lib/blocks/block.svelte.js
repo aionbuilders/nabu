@@ -235,14 +235,17 @@ export class Block {
         // Handle children relocation if victim has any
         // @ts-ignore - MegaBlock has children
         if (victim.children?.length) {
+            // @ts-ignore - adoptChildren only exists on MegaBlock, not on Block base class
             if (absorbed && survivor.adoptChildren) {
                 // MegaBlock survivor adopts children
                 // @ts-ignore
                 survivor.adoptChildren(victim.children);
             } else {
-                // Non-MegaBlock survivor: promote children as siblings
+                // Non-MegaBlock survivor: promote children as siblings after survivor.
+                // Reverse to preserve original order (each moveAfter inserts right after
+                // survivor, so forward iteration would reverse the result).
                 // @ts-ignore
-                victim.children.forEach(child => {
+                [...victim.children].reverse().forEach(child => {
                     child.node.moveAfter(survivor.node);
                 });
             }
@@ -256,10 +259,13 @@ export class Block {
         return survivor;
     }
 
-    /** @param {Block[]} children @param {number | null} [index] */
-    adoptChildren(children, index = null) {
-        this.nabu.warn("Not implemented: adopt children", children.map(c => c.id), "into block", this.id, "at index", index);
-    }
+    /**
+     * Declares a required parent type for structural integrity.
+     * Override in subclasses (e.g. ListItem requires a "list" parent).
+     * Used by wrapOrphan() after block relocations.
+     * @returns {{ type: string, props: () => Record<string, any> } | null}
+     */
+    get requiredParent() { return null; }
 
     /** @param {{from?: number, to?: number, index?: number, length?: number, offset?: number}} options @returns {{block: Block} | null} */
     split(options) {
