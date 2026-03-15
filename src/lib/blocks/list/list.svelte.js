@@ -130,7 +130,7 @@ export class List extends MegaBlock {
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index || undefined);
+        const node = nabu.tree.createNode(parentId || undefined, index != null ? index : undefined);
         node.data.set("type", "list");
         node.data.set("listType", props.listType || "bullet");
         const block = new List(nabu, node);
