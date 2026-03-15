@@ -63,6 +63,23 @@ export class ListItem extends MegaBlock {
     sublist = $derived(this.children.find(child => child.node.data.get("type") === "list"));
 
     /**
+     * A ListItem must always live inside a List.
+     * wrapOrphan() uses this to auto-create a List wrapper when a ListItem
+     * is relocated to a context that doesn't have a List parent.
+     * props() reads this.parent (stale Svelte state) which still points to the
+     * original List at relocation time, giving us the correct listType.
+     * @returns {{ type: string, props: () => Record<string, any> }}
+     */
+    get requiredParent() {
+        return {
+            type: "list",
+            props: () => ({
+                listType: this.parent?.behaviors?.get("list")?.listType || "bullet"
+            })
+        };
+    }
+
+    /**
      * Retourne la sous-liste existante, ou en crée une nouvelle à la fin des enfants.
      * @param {"bullet" | "ordered"} [listType="bullet"] 
      */

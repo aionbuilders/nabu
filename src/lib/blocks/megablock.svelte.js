@@ -40,20 +40,14 @@ export class MegaBlock extends Block {
 
     /** @param {Block[]} children @param {number | null} [index] */
     adoptChildren(children, index = null) {
-        /** @type {Block[]} */
-        let skipped = [];
-        children.reverse().forEach(child => {
-            const childNode = child.node;
-            if (!childNode) return;
-            if (false) {
-                //TODO: conditions de skip, ex: si le block est déjà dans la mega block, ou si c'est un block parent de la mega block, etc.
-                this.nabu.warn("Skipping child with id", child.id, "because ...");
-                return skipped.push(child);
-            }
-            this.nabu.tree.move(childNode.id, this.node.id, index);
-        })
-
-        return {skipped: skipped.length ? skipped.reverse() : false};
+        // Reverse so that when index is specified, children are inserted in original
+        // order (each insert at the same position pushes others down, so reverse of
+        // reverse = original). With index=null (append), order doesn't matter.
+        // Spread to avoid mutating the input array (which may be a reactive Svelte array).
+        [...children].reverse().forEach(child => {
+            if (!child.node) return;
+            this.nabu.tree.move(child.node.id, this.node.id, index);
+        });
     }
 
 
