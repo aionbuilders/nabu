@@ -112,6 +112,33 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ---
 
+## 🔴 PHASE 3.5 : Copy / Paste — EN CONCEPTION
+
+> Réflexion complète documentée dans `docs/design/copy-paste.md`.
+> ADR 012 à rédiger avant implémentation.
+
+### Architecture décidée
+- **3 formats clipboard** : `application/x-nabu+json` (fidélité totale) + `text/html` (interop) + `text/plain` (fallback)
+- **Chaîne d'interpréteurs** : propriété `pasteInterpreters` sur `Extension`, priorité numérique, retour `PasteFragment | null`
+- **Plain text = texte pur par défaut** ; `MarkdownPasteExtension` en opt-in
+- **Algorithme d'insertion** : règle des bornes (type currentBlock survit à gauche, type dernier bloc collé survit à droite) + `wrapOrphan` pour la compatibilité structurelle
+- **Atomicité** : paste = une transaction Loro = un seul step d'undo
+
+### Tâches
+
+- [ ] **3.5.0** Câblage événements `copy` / `cut` / `paste` sur le CE root (`Nabu.svelte`) + `preventDefault()` sur paste
+- [ ] **3.5.1** Infrastructure : propriété `pasteInterpreters` sur `Extension`, types JSDoc `PasteFragment` + `PasteBlock`, stub `nabu.handlePaste()`
+- [ ] **3.5.2** `PlainTextPasteExtension` + insertion **inline** (1 bloc, curseur collapsé)
+- [ ] **3.5.3** Algorithme d'insertion **multi-blocs** : split au curseur, fusion aux bornes, blocs intermédiaires
+- [ ] **3.5.4** `nabu.handleCopy()` : sérialisation de la sélection vers `application/x-nabu+json`
+- [ ] **3.5.5** `NabuPasteExtension` : lecture du format interne → round-trip fidèle (marks + types de blocs)
+- [ ] **3.5.6** Cut atomique : `handleCopy()` + suppression sélection (spine) en une seule transaction
+- [ ] **3.5.7** `HtmlPasteExtension` : sanitisation + mapping HTML → blocs Nabu
+- [ ] **3.5.8** `MarkdownPasteExtension` (opt-in) : `text/plain` parsé comme Markdown
+- [ ] **3.5.9** Edge cases : sélection range avant paste, début/fin de doc, paste dans ListItem (wrapOrphan), paste dans document vide
+
+---
+
 ## 🟠 PHASE 4 : UX & Navigation — NON COMMENCÉE
 
 - [ ] **4.1** Menu Slash (`/`) : insertion de blocs à la volée
@@ -127,7 +154,7 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ---
 
-## 📊 ÉTAT ACTUEL — 16 Mars 2026
+## 📊 ÉTAT ACTUEL — 17 Mars 2026
 
 ### Progression globale : **95% vers MVP Bêta**
 
@@ -143,9 +170,11 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - **Substitution typographique : `--` + espace → `—` (em-dash) dans tout bloc texte**
 - **Action Bus `nabu.exec()` : toutes les actions editor accessibles depuis UI externe**
 - 11 ADRs documentés
+- **Copy/Paste : architecture conçue, design doc complet (`docs/design/copy-paste.md`)**
 
 #### 🔴 Bloquant MVP
-1. **Toolbar visuelle** — infrastructure exec prête, manque l'UI Svelte + `nabu.isMarkActive()` pour les états actifs des boutons
+1. **Copy / Paste** — réflexion terminée, implémentation à démarrer (Phase 3.5)
+2. **Toolbar visuelle** — infrastructure exec prête, manque l'UI Svelte + `nabu.isMarkActive()` pour les états actifs des boutons
 
 #### 🟡 Important mais non bloquant
 - Bug merge ListItem avec enfants
@@ -175,3 +204,4 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 | 009 | Rich Text toggle global multi-blocs | ✅ Accepté |
 | 010 | Serializer pattern : Map sur Block/Nabu, TextBehavior comme brique, format Slate-like | ✅ Accepté |
 | 011 | Action Bus : `nabu.exec()` wrappant Pulse, `actions` déclaratif sur Extension | ✅ Accepté |
+| 012 | Copy/Paste — Architecture (interpréteurs, fragment, insertion) | 🔲 À rédiger |
