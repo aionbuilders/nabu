@@ -74,7 +74,18 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - [x] **2.7.9** Substitution typographique globale : `--` + espace → `—` dans tout bloc texte
 - [ ] **2.7.10** Speaker/locuteur optionnel (roadmap Phase 4.6 — use cases théâtre, scénario, transcription)
 
-### 2.8 Bugs & Améliorations — EN COURS ⚠️
+### 2.8 Action Bus (`nabu.exec`) ✅
+
+- [x] **2.8.1** `nabu.exec(topic, data?)` comme unique point d'entrée public pour déclencher des actions — Pulse caché en interne (`#pulse` private field)
+- [x] **2.8.2** Propriété `actions` sur `Extension` — même pattern déclaratif que `hooks` et `serializers`
+- [x] **2.8.3** `RichTextExtension` : actions `mark:toggle`, `mark:apply`, `mark:remove` + aliases `bold`, `italic`, `underline`, `code`, `strikethrough`
+- [x] **2.8.4** `BlockExtension` : action `block:transform` + restauration curseur via `tick()`
+- [x] **2.8.5** `HeadingExtension` : aliases `heading:1`…`heading:6` → délèguent à `block:transform`
+- [x] **2.8.6** `ParagraphExtension` : alias `paragraph` → délègue à `block:transform`
+- [x] **2.8.7** `ListItemExtension` : actions `list:indent` / `list:unindent` (logique extraite de `keydown()`)
+- [x] **2.8.8** Core actions `undo` / `redo` toujours disponibles (enregistrées directement sur `#pulse`)
+
+### 2.9 Bugs & Améliorations — EN COURS ⚠️
 - [ ] **Bug Merging ListItem** : fusion de deux items de liste peut perdre les enfants (sous-listes) du second item — `adoptChildren` dans MegaBlock a un `if (false)` TODO non implémenté
 - [ ] **Multi-block `insertParagraph`** dans structures très imbriquées — à stress-tester
 - [ ] **`setTimeout` vs `tick()`** : quelques points utilisent `setTimeout(..., 0)` au lieu de `tick().then()` — timing-dépendant
@@ -116,9 +127,9 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ---
 
-## 📊 ÉTAT ACTUEL — 15 Mars 2026
+## 📊 ÉTAT ACTUEL — 16 Mars 2026
 
-### Progression globale : **92% vers MVP Bêta**
+### Progression globale : **95% vers MVP Bêta**
 
 #### ✅ Points forts
 - Architecture Single CE + Loro-CRDT + Extension System : solide
@@ -130,10 +141,11 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - **Persistence IndexedDB : auto-save + restore au démarrage, `createPersistedEditor`**
 - **Serializer system : export Markdown + JSON opérationnels, réactifs Svelte 5**
 - **Substitution typographique : `--` + espace → `—` (em-dash) dans tout bloc texte**
-- 9 ADRs documentés + ADR 010 (Serializer pattern)
+- **Action Bus `nabu.exec()` : toutes les actions editor accessibles depuis UI externe**
+- 11 ADRs documentés
 
 #### 🔴 Bloquant MVP
-1. **Toolbar visuelle marks** — aucune UI pour appliquer le formatage (raccourcis clavier seulement)
+1. **Toolbar visuelle** — infrastructure exec prête, manque l'UI Svelte + `nabu.isMarkActive()` pour les états actifs des boutons
 
 #### 🟡 Important mais non bloquant
 - Bug merge ListItem avec enfants
@@ -162,3 +174,4 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 | 008 | Container beforeinput — logique spine partagée | ✅ Accepté |
 | 009 | Rich Text toggle global multi-blocs | ✅ Accepté |
 | 010 | Serializer pattern : Map sur Block/Nabu, TextBehavior comme brique, format Slate-like | ✅ Accepté |
+| 011 | Action Bus : `nabu.exec()` wrappant Pulse, `actions` déclaratif sur Extension | ✅ Accepté |
