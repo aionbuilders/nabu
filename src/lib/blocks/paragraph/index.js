@@ -9,6 +9,9 @@ import ParagraphComponent from "./Paragraph.svelte";
 const ParagraphExtension = extension("paragraph", {
     block: Paragraph,
     component: ParagraphComponent,
+    actions: {
+        'paragraph': (nabu) => nabu.exec('block:transform', { type: 'paragraph' }),
+    },
     hooks: {
         onInit: (nabu) => {
             if (nabu.children.length === 0) {

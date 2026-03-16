@@ -12,6 +12,14 @@ import { onBeforeInput } from "./hooks/onBeforeInput.hook";
 const HeadingExtension = extension("heading", {
     block: Heading,
     component: HeadingComponent,
+    actions: {
+        'heading:1': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 1 } }),
+        'heading:2': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 2 } }),
+        'heading:3': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 3 } }),
+        'heading:4': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 4 } }),
+        'heading:5': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 5 } }),
+        'heading:6': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 6 } }),
+    },
     hooks: {
         /** @param {Nabu} nabu @param {Heading} block @param {Event} event @param {{offset: number, delta: import('loro-crdt').Delta<string>}} data */
         onSplit: (nabu, block, event, data) => {

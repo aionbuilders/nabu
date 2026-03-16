@@ -11,6 +11,73 @@ import { TextBehavior } from "../../behaviors/text";
  * @typedef {NabuNode<{type: "list-item", text: LoroText}>} ListItemNode
  */
 
+/**
+ * Indent a list item (Tab behavior): move into previous sibling's sublist, hoist own children.
+ * @param {ListItem} item
+ * @returns {boolean}
+ */
+export function indentListItem(item) {
+    const currentIndex = item.node.index();
+    if (currentIndex === 0) return false;
+
+    const parentList = item.node.parent();
+    if (!parentList) return false;
+
+    const previousNode = parentList.children()?.[currentIndex - 1];
+    if (!previousNode) return false;
+    const previousItem = item.nabu.blocks.get(previousNode.id.toString());
+    if (!previousItem || previousItem.type !== 'list-item') return false;
+
+    // @ts-ignore
+    const targetSublist = previousItem.getOrCreateSublist();
+    const targetSublistId = targetSublist.node.id.toString();
+
+    item.nabu.tree.move(item.node.id.toString(), targetSublistId);
+
+    if (item.sublist) {
+        for (const childNode of item.sublist.node.children()) {
+            item.nabu.tree.move(childNode.id.toString(), targetSublistId);
+        }
+    }
+
+    item.commit();
+    setTimeout(() => item.behavior.block.focus(), 0);
+    return true;
+}
+
+/**
+ * Unindent a list item (Shift+Tab behavior): move out of parent sublist, carry followers.
+ * @param {ListItem} item
+ * @returns {boolean}
+ */
+export function unindentListItem(item) {
+    const parentListNode = item.node.parent();
+    if (!parentListNode) return false;
+
+    const grandParentItemNode = parentListNode.parent();
+    if (!grandParentItemNode || grandParentItemNode.data.get('type') !== 'list-item') return false;
+
+    const myIndex = item.node.index();
+    const followers = parentListNode.children().slice(myIndex + 1);
+
+    if (followers.length > 0) {
+        const mySublist = item.getOrCreateSublist();
+        for (const follower of followers) {
+            item.nabu.tree.move(follower.id.toString(), mySublist.node.id.toString());
+        }
+    }
+
+    const targetParentListNode = grandParentItemNode.parent();
+    if (!targetParentListNode) return false;
+
+    const targetIndex = grandParentItemNode.index() + 1;
+    item.nabu.tree.move(item.node.id.toString(), targetParentListNode.id.toString(), targetIndex);
+
+    item.commit();
+    setTimeout(() => item.behavior.block.focus(), 0);
+    return true;
+}
+
 export class ListItem extends MegaBlock {
     /** @param {Nabu} nabu @param {ListItemNode} node */
     constructor(nabu, node) {
@@ -93,94 +160,15 @@ export class ListItem extends MegaBlock {
 
     /** @param {KeyboardEvent} event */
     keydown(event) {
-        if (event.key === "Tab") {
-            event.preventDefault(); // On bloque le comportement natif
-            
+        if (event.key === 'Tab') {
+            event.preventDefault();
             if (event.shiftKey) {
-                // --- Shift+Tab (Unindent with Carry) ---
-                
-                // 1. Notre parent immédiat (une List)
-                const parentListNode = this.node.parent();
-                if (!parentListNode) return true;
-                
-                // 2. Le ListItem qui contient cette liste (le "grand-parent" logique)
-                const grandParentItemNode = parentListNode.parent();
-                
-                // Si on n'a pas de ListItem au-dessus (on est déjà au premier niveau)
-                if (!grandParentItemNode || grandParentItemNode.data.get("type") !== "list-item") {
-                    return true;
-                }
-
-                // 3. Gérer le "Carry" : emporter les frères suivants avec nous
-                const myIndex = this.node.index();
-                const siblings = parentListNode.children();
-                const followers = siblings.slice(myIndex + 1);
-                
-                if (followers.length > 0) {
-                    // On s'assure d'avoir notre propre sous-liste pour accueillir nos anciens frères
-                    const mySublist = this.getOrCreateSublist();
-                    for (const follower of followers) {
-                        this.nabu.tree.move(follower.id.toString(), mySublist.node.id.toString());
-                    }
-                }
-                
-                // 4. Le parent cible est la List qui contient notre grand-parent
-                const targetParentListNode = grandParentItemNode.parent();
-                if (!targetParentListNode) return true;
-                
-                // 5. On se place juste après notre ancien grand-parent
-                const targetIndex = grandParentItemNode.index() + 1;
-                
-                this.nabu.tree.move(this.node.id.toString(), targetParentListNode.id.toString(), targetIndex);
-                
-                this.commit();
-                
-                // 6. Restauration du focus
-                setTimeout(() => this.behavior.block.focus(), 0);
+                unindentListItem(this);
             } else {
-                // --- Tab (Indent with Hoist) ---
-                
-                // 1. On trouve notre index actuel
-                const currentIndex = this.node.index();
-                if (currentIndex === 0) return true; // Impossible d'indenter le premier item
-                
-                // 2. On trouve le frère précédent (qui va devenir notre parent "logique")
-                const parentList = this.node.parent();
-                if (!parentList) return true;
-                
-                const previousNode = parentList.children()?.[currentIndex - 1];
-                if (!previousNode) return true;
-                const previousItem = this.nabu.blocks.get(previousNode.id.toString());
-                
-                // Si le frère précédent n'est pas un ListItem
-                if (!previousItem || previousItem.type !== "list-item") return true;
-                
-                // 3. On demande au frère précédent sa sous-liste (ou de la créer)
-                // @ts-ignore : On sait que c'est un ListItem
-                const targetSublist = previousItem.getOrCreateSublist();
-                const targetSublistId = targetSublist.node.id.toString();
-                
-                // 4. On se déplace à la fin de cette sous-liste cible
-                this.nabu.tree.move(this.node.id.toString(), targetSublistId);
-                
-                // 5. Si on avait des enfants (Hoist), on les remonte avec nous en tant que frères
-                if (this.sublist) {
-                    const childrenNodes = this.sublist.node.children();
-                    for (const childNode of childrenNodes) {
-                        // Ils se placeront après nous dans la nouvelle liste
-                        this.nabu.tree.move(childNode.id.toString(), targetSublistId);
-                    }
-                }
-
-                this.commit();
-                
-                // 6. On restaure le curseur
-                setTimeout(() => this.behavior.block.focus(), 0);
+                indentListItem(this);
             }
             return true;
         }
-        
-        // On délègue les flèches etc.
         return false;
     }
 

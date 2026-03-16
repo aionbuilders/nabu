@@ -23,6 +23,7 @@
  * @property {typeof Block} [block]
  * @property {Partial<ExtensionHooks>} [hooks]
  * @property {Record<string, (nabu: Nabu) => any>} [serializers]
+ * @property {Record<string, (nabu: Nabu, data: any, topic: string) => any>} [actions]
  */
 
 export class Extension {
@@ -35,6 +36,8 @@ export class Extension {
         this.hooks = init.hooks || {};
         /** @type {Record<string, (nabu: Nabu) => any>} */
         this.serializers = init.serializers || {};
+        /** @type {Record<string, (nabu: Nabu, data: any, topic: string) => any>} */
+        this.actions = init.actions || {};
     }
 }
 

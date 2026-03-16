@@ -1,7 +1,7 @@
 import { extension } from "../../utils/extensions";
 import { List } from "./list.svelte.js";
 import ListComponent from "./List.svelte";
-import { ListItem } from "./list-item.svelte.js";
+import { ListItem, indentListItem, unindentListItem } from "./list-item.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
 import { ListBehavior } from "./list.behavior.svelte.js";
 import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
@@ -38,6 +38,18 @@ const ListExtension = extension("list", {
 const ListItemExtension = extension("list-item", {
     block: ListItem,
     component: ListItemComponent,
+    actions: {
+        'list:indent': (nabu) => {
+            const block = nabu.selection.anchorBlock;
+            if (block?.type !== 'list-item') return;
+            indentListItem(/** @type {ListItem} */ (block));
+        },
+        'list:unindent': (nabu) => {
+            const block = nabu.selection.anchorBlock;
+            if (block?.type !== 'list-item') return;
+            unindentListItem(/** @type {ListItem} */ (block));
+        },
+    }
 });
 
 export { ListExtension, ListItemExtension, List, ListItem, ListComponent, ListItemComponent };

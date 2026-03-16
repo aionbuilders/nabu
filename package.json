@@ -1,6 +1,6 @@
 {
 	"name": "@aionbuilders/nabu",
-	"version": "0.1.0-alpha.4",
+	"version": "0.1.0-alpha.5",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -69,6 +69,7 @@
 		"collaborative"
 	],
 	"dependencies": {
+		"@aionbuilders/pulse": "^1.0.1",
 		"loro-crdt": "^1.10.6"
 	}
 }

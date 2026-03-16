@@ -1,4 +1,5 @@
 export * from "./block.svelte.js";
+export * from "./block.extension.js";
 export * from "./nabu.svelte.js";
 export * from "./megablock.svelte.js";
 export { default as NabuEditor } from "./Nabu.svelte";

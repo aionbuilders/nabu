@@ -81,10 +81,15 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ---
 
-## 🟠 PHASE 3 : Persistance — EN COURS
+## 🟢 PHASE 3 : Persistance — TERMINÉE
 
-- [ ] **3.1** Sauvegarde IndexedDB automatique (snapshot Loro binaire)
-- [ ] **3.2** Chargement au démarrage depuis IndexedDB
+- [x] **3.1** Sauvegarde IndexedDB automatique (snapshot Loro binaire)
+  - Auto-save debounced 2s via `doc.subscribe()` après chaque changement committed
+  - `nabu.saveNow()` pour forcer une sauvegarde immédiate
+- [x] **3.2** Chargement au démarrage depuis IndexedDB
+  - `createPersistedEditor({ docId })` : restore le snapshot Loro au démarrage
+  - `nabu.isNew` : `true` si aucun snapshot existant (nouveau document)
+  - `nabu.clearPersistence()` : supprime le snapshot stocké
 - [x] **3.3** Export Markdown / JSON
   - `nabu.serialize('markdown')` → string Markdown
   - `nabu.serialize('json')` → `{version, blocks[]}` format Slate-like
@@ -113,7 +118,7 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ## 📊 ÉTAT ACTUEL — 15 Mars 2026
 
-### Progression globale : **85% vers MVP Bêta**
+### Progression globale : **92% vers MVP Bêta**
 
 #### ✅ Points forts
 - Architecture Single CE + Loro-CRDT + Extension System : solide
@@ -122,13 +127,13 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - Rich Text marks : infrastructure complète, toggle comportement standard
 - Multi-blocs : logique spine correcte et unifiée
 - Undo/Redo avec restauration curseur
+- **Persistence IndexedDB : auto-save + restore au démarrage, `createPersistedEditor`**
 - **Serializer system : export Markdown + JSON opérationnels, réactifs Svelte 5**
 - **Substitution typographique : `--` + espace → `—` (em-dash) dans tout bloc texte**
 - 9 ADRs documentés + ADR 010 (Serializer pattern)
 
 #### 🔴 Bloquant MVP
-1. **Persistence** — export opérationnel, mais pas de sauvegarde IndexedDB (données perdues au refresh)
-2. **Toolbar visuelle marks** — aucune UI pour appliquer le formatage
+1. **Toolbar visuelle marks** — aucune UI pour appliquer le formatage (raccourcis clavier seulement)
 
 #### 🟡 Important mais non bloquant
 - Bug merge ListItem avec enfants

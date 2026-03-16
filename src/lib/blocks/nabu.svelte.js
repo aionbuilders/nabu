@@ -4,6 +4,7 @@ import { Block } from './block.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput } from './container.utils.js';
 import { tick } from 'svelte';
+import { Pulse } from '@aionbuilders/pulse';
 
 
 /**
@@ -24,6 +25,9 @@ import { tick } from 'svelte';
 */
 
 export class Nabu {
+    /** @type {Pulse} */
+    #pulse = new Pulse();
+
     /** @param {NabuInit} init */
     constructor(init = {}) {
         this.doc = new LoroDoc();
@@ -87,9 +91,19 @@ export class Nabu {
                     }
                 }
 
+                if (ext.actions) {
+                    for (const [topic, handler] of Object.entries(ext.actions)) {
+                        this.#pulse.on(topic, ({ event }) => handler(this, event.data, event.topic));
+                    }
+                }
+
             }
         }
-        
+
+        // Core actions — always available
+        this.#pulse.on('undo', () => this.undo());
+        this.#pulse.on('redo', () => this.redo());
+
         const roots = /** @type {NabuNode[]} */ (this.tree.roots());
         if (roots?.length) {
             for (const root of roots) {
@@ -220,6 +234,16 @@ export class Nabu {
             block.parent = null;
             return block;
         });
+    }
+
+    /**
+     * Dispatch an action to all registered handlers for the given topic.
+     * @param {string} topic
+     * @param {any} [data]
+     * @returns {Promise<import('@aionbuilders/pulse').PulseEvent>}
+     */
+    exec(topic, data) {
+        return this.#pulse.emit(topic, data);
     }
 
     trigger(hookName, ...args) {
