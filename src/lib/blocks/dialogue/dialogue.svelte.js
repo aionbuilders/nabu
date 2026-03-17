@@ -29,6 +29,7 @@ export class Dialogue extends Block {
             type: 'dialogue',
             content: this.behavior.toJSON()
         }));
+        this.serializers.set('application/x-nabu+json', (ctx) => this.behavior.toClipboardBlock(ctx));
     }
 
     component = $derived(this.nabu.components.get("dialogue") || DialogueComponent);

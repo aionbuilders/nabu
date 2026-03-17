@@ -344,6 +344,21 @@ export class TextBehavior {
             });
     }
 
+    /**
+     * Serializes a (partial) range of this block's text as a PasteBlock.
+     * @param {{ from?: number, to?: number, partial?: 'start'|'end'|'both'|false, props?: Record<string,any> }} [context]
+     * @returns {import('../utils/extensions.js').PasteBlock}
+     */
+    toClipboardBlock({ from = 0, to = null, partial = false, props = {} } = {}) {
+        const end = to ?? this.container.length;
+        return {
+            type: this.block.type,
+            partial,
+            delta: this.container.sliceDelta(from, end),
+            props
+        };
+    }
+
     /** @param {Block} other */
     absorbs(other) {
         const otherBehavior = other.behaviors.get("text");

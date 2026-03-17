@@ -28,6 +28,7 @@ export class Block {
         }
     }
 
+    /** @type {SvelteMap<string, function(any): void>} */
     serializers = new SvelteMap();
     behaviors = new SvelteMap();
     selected = $state(false);
@@ -338,11 +339,11 @@ export class Block {
     }
 
 
-    /** @param {string} format */
-    serialize(format) {
+    /** @param {string} format @param {Record<string, any>} [context] */
+    serialize(format, context = {}) {
         const serializer = this.serializers.get(format);
         if (serializer) {
-            return serializer(this);
+            return serializer(context);
         } else {
             this.nabu.warn(`No serializer found for format "${format}" on block type "${this.type}"`);
             return null;

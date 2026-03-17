@@ -113,6 +113,7 @@ export class ListItem extends MegaBlock {
             if (childrenJson.length) result.children = childrenJson;
             return result;
         });
+        this.serializers.set('application/x-nabu+json', (ctx = {}) => this.behavior.toClipboardBlock(ctx));
     }
 
     component = $derived(this.nabu.components.get("list-item") || ListItemComponent);

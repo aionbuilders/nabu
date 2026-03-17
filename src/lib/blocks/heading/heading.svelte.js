@@ -32,6 +32,7 @@ export class Heading extends Block {
             props: { level: this.level },
             content: this.behavior.toJSON()
         }));
+        this.serializers.set('application/x-nabu+json', (ctx) => this.behavior.toClipboardBlock({ ...ctx, props: { level: this.level } }));
         
         // Synchronisation du niveau
         this.node.data.subscribe(() => {

@@ -36,6 +36,8 @@ export class List extends MegaBlock {
 
     listType = $derived(this.behavior.listType);
 
+    get clipboardProps() { return { listType: this.listType }; }
+
     component = $derived(this.nabu.components.get("list") || ListComponent);
 
     root = $derived(!this.parent);

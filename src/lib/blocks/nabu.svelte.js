@@ -2,7 +2,7 @@ import { LoroDoc, UndoManager } from 'loro-crdt';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
-import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent } from './container.utils.js';
+import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf } from './container.utils.js';
 import { tick } from 'svelte';
 import { Pulse } from '@aionbuilders/pulse';
 
@@ -431,9 +431,66 @@ export class Nabu {
 
     /** @param {ClipboardEvent} e */
     handleCopy(e) {
+        if (this.selection.isCollapsed) return;
         e.preventDefault();
-        // Stub — sérialisation de la sélection en tâche 3.5.4
-        this.warn('handleCopy: not yet implemented');
+
+        const startBlock = this.selection.startBlock;
+        const endBlock   = this.selection.endBlock;
+        if (!startBlock || !endBlock || !e.clipboardData) return;
+
+        // Find the direct children of the Nabu root that span the selection.
+        // Same spine walk as container.utils — works because root blocks have parent = null.
+        const startRoot = findDirectChildOf(startBlock, this);
+        const endRoot   = findDirectChildOf(endBlock,   this);
+        if (!startRoot || !endRoot) return;
+
+        const si = this.children.indexOf(startRoot);
+        const ei = this.children.indexOf(endRoot);
+        if (si === -1 || ei === -1) return;
+
+        const rootBlocks = this.children.slice(si, ei + 1);
+        const lastI = rootBlocks.length - 1;
+        const startFrom = this.selection.start?.from ?? 0;
+        const endTo     = this.selection.end?.to ?? null;
+
+        const pasteBlocks = rootBlocks.map((block, i) => {
+            const isFirst = i === 0;
+            const isLast  = i === lastI;
+
+            // MegaBlocks use the generic recursive serializer
+            const mb = /** @type {any} */ (block);
+            if (typeof mb.serializeForClipboard === 'function') {
+                return mb.serializeForClipboard({
+                    startBlock: isFirst ? startBlock : null,
+                    startFrom:  isFirst ? startFrom  : 0,
+                    endBlock:   isLast  ? endBlock   : null,
+                    endTo:      isLast  ? endTo      : null,
+                });
+            }
+
+            // Leaf blocks use their own serializer with flat context
+            return block.serialize('application/x-nabu+json', {
+                from:    isFirst ? startFrom : 0,
+                to:      isLast  ? endTo     : null,
+                partial: isFirst && isLast ? 'both' : isFirst ? 'start' : isLast ? 'end' : false,
+            });
+        }).filter(Boolean);
+
+        if (!pasteBlocks.length) return;
+
+        const fragment = { blocks: pasteBlocks };
+        e.clipboardData.setData('application/x-nabu+json', JSON.stringify(fragment));
+
+        // text/plain: flatten all text content recursively
+        /** @param {import('../utils/extensions.js').PasteBlock} pb @returns {string} */
+        const extractText = (pb) =>
+            pb.children?.length
+                ? pb.children.map(extractText).join('\n')
+                : (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
+
+        e.clipboardData.setData('text/plain', pasteBlocks.map(extractText).join('\n\n'));
+
+        console.log('[handleCopy] fragment:', { blocks: pasteBlocks });
     }
 
     /** @param {ClipboardEvent} e */
@@ -466,8 +523,6 @@ export class Nabu {
 
     /**
      * Insère un PasteFragment à la position du curseur courant.
-     * Cas inline (1 bloc) : insère le delta à l'offset courant.
-     * Cas multi-blocs : tâche 3.5.3.
      * @param {import('../utils/extensions.js').PasteFragment} fragment
      */
     insertFragment(fragment) {
@@ -494,80 +549,144 @@ export class Nabu {
             return;
         }
 
-        if (blocks.length === 1) {
+        // ── Inline: single flat block ─────────────────────────────────────────
+        if (blocks.length === 1 && !blocks[0].children?.length) {
             const delta = blocks[0].delta || [];
-            const insertedLength = delta.reduce(
-                (sum, op) => sum + (typeof op.insert === 'string' ? op.insert.length : 0), 0
-            );
+            const len = delta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
             textBehavior.applyDelta([{ retain: offset }, ...delta]);
             this.commit();
-            tick().then(() => this.selection.setCursor(anchorBlock, offset + insertedLength));
+            tick().then(() => this.selection.setCursor(anchorBlock, offset + len));
             return;
         }
 
-        // --- Multi-blocs ---
-        const firstBlock = blocks[0];
-        const lastBlock  = blocks[blocks.length - 1];
-        const midBlocks  = blocks.slice(1, -1);
-
-        // 1. Sauvegarder le right fragment (texte après le curseur dans anchorBlock)
+        // ── Multi-block or container ──────────────────────────────────────────
+        // Save and cut right fragment
         const rightDelta = textBehavior.container.sliceDelta(offset, textBehavior.container.length);
-
-        // 2. Tronquer anchorBlock à l'offset (supprimer ce qui est après le curseur)
         if (textBehavior.container.length > offset) {
             textBehavior.delete({ index: offset, length: textBehavior.container.length - offset });
         }
 
-        // 3. Fusionner le premier bloc collé dans anchorBlock (type de anchorBlock survit)
-        const firstDelta = firstBlock.delta || [];
-        if (firstDelta.length) {
-            textBehavior.applyDelta([{ retain: offset }, ...firstDelta]);
-        }
-
-        // 4. Créer les blocs intermédiaires et le dernier, positionnés après anchorBlock
-        let prevNode = anchorBlock.node;
-
-        for (const pb of midBlocks) {
-            const BlockClass = this.registry.get(pb.type) || this.registry.get('paragraph');
-            if (!BlockClass) continue;
-            const newBlock = BlockClass.create(this, pb.type, pb.props || {});
-            newBlock.node.moveAfter(prevNode);
-            wrapOrphan(this, newBlock);
-            const tb = newBlock.behaviors?.get('text');
-            if (tb && pb.delta?.length) tb.applyDelta(pb.delta);
-            prevNode = newBlock.node;
-        }
-
-        // 5. Créer le dernier bloc : lastBlock.delta + rightDelta
-        const LastBlockClass = this.registry.get(lastBlock.type) || this.registry.get('paragraph');
+        const firstPb  = blocks[0];
+        const lastPb   = blocks[blocks.length - 1];
+        const midPbs   = blocks.slice(1, -1);
+        let prevNode   = anchorBlock.node;
         let focusBlock = anchorBlock;
-        let focusOffset = offset + (firstDelta.reduce(
-            (s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0
-        ));
+        let focusOffset = offset;
 
-        if (LastBlockClass) {
-            const newLast = LastBlockClass.create(this, lastBlock.type, lastBlock.props || {});
-            newLast.node.moveAfter(prevNode);
-            wrapOrphan(this, newLast);
-            const tb = newLast.behaviors?.get('text');
-            if (tb) {
-                const lastDelta = lastBlock.delta || [];
-                if (lastDelta.length || rightDelta.length) {
-                    tb.applyDelta([...lastDelta, ...rightDelta]);
-                }
-                focusOffset = lastDelta.reduce(
-                    (s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0
-                );
-            }
-            focusBlock = newLast;
+        // ── First block ───────────────────────────────────────────────────────
+        if (!firstPb.children?.length) {
+            // Leaf: merge content into anchor (anchor type survives)
+            const firstDelta = firstPb.delta || [];
+            if (firstDelta.length) textBehavior.applyDelta([{ retain: offset }, ...firstDelta]);
+            focusOffset = offset + firstDelta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
+        } else {
+            // Container (e.g. List): insert it after anchor
+            prevNode = this.#insertPasteBlock(firstPb, prevNode);
         }
 
-        // 6. Commit atomique + restauration curseur
+        // ── Middle blocks ─────────────────────────────────────────────────────
+        for (const pb of midPbs) {
+            prevNode = this.#insertPasteBlock(pb, prevNode);
+        }
+
+        // ── Last block (only when blocks.length > 1) ──────────────────────────
+        if (blocks.length > 1) {
+            if (!lastPb.children?.length) {
+                // Leaf last block: create it, append rightDelta
+                const LastClass = this.registry.get(lastPb.type) || this.registry.get('paragraph');
+                if (LastClass) {
+                    const newLast = LastClass.create(this, lastPb.type, lastPb.props || {});
+                    newLast.node.moveAfter(prevNode);
+                    const wrapper = wrapOrphan(this, newLast);
+                    const tb = newLast.behaviors?.get('text');
+                    if (tb) {
+                        const lastDelta = lastPb.delta || [];
+                        if (lastDelta.length || rightDelta.length) tb.applyDelta([...lastDelta, ...rightDelta]);
+                        focusOffset = lastDelta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
+                    }
+                    focusBlock = newLast;
+                    prevNode = wrapper ? wrapper.node : newLast.node;
+                }
+            } else {
+                // Container last block: insert it, put rightDelta in a new paragraph after
+                prevNode = this.#insertPasteBlock(lastPb, prevNode);
+                if (rightDelta.length) {
+                    const PClass = this.registry.get('paragraph');
+                    if (PClass) {
+                        const p = PClass.create(this, 'paragraph', {});
+                        p.node.moveAfter(prevNode);
+                        p.behaviors?.get('text')?.applyDelta(rightDelta);
+                        focusBlock = p;
+                        focusOffset = 0;
+                    }
+                }
+            }
+        } else {
+            // Single container block: rightDelta goes in a new paragraph after it
+            if (rightDelta.length) {
+                const PClass = this.registry.get('paragraph');
+                if (PClass) {
+                    const p = PClass.create(this, 'paragraph', {});
+                    p.node.moveAfter(prevNode);
+                    p.behaviors?.get('text')?.applyDelta(rightDelta);
+                    focusBlock = p;
+                    focusOffset = 0;
+                }
+            }
+        }
+
         this.commit();
         tick().then(() => {
             const fb = this.blocks.get(focusBlock.id) || focusBlock;
             this.selection.setCursor(fb, focusOffset);
         });
+    }
+
+    /**
+     * Inserts a PasteBlock after `afterNode`. Handles both leaf blocks (wrapOrphan)
+     * and container blocks (creates container, recurses into children).
+     * Returns the outer node to use as the next prevNode.
+     * @param {import('../utils/extensions.js').PasteBlock} pb
+     * @param {any} afterNode
+     * @returns {any}
+     */
+    #insertPasteBlock(pb, afterNode) {
+        if (pb.children?.length) {
+            const ContainerClass = this.registry.get(pb.type);
+            if (!ContainerClass) return afterNode;
+            const container = ContainerClass.create(this, pb.type, pb.props || {});
+            container.node.moveAfter(afterNode);
+            for (const child of pb.children) {
+                this.#createInContainer(child, container.node.id.toString());
+            }
+            return container.node;
+        }
+
+        const BlockClass = this.registry.get(pb.type) || this.registry.get('paragraph');
+        if (!BlockClass) return afterNode;
+        const block = BlockClass.create(this, pb.type, pb.props || {});
+        block.node.moveAfter(afterNode);
+        const wrapper = wrapOrphan(this, block);
+        const tb = block.behaviors?.get('text');
+        if (tb && pb.delta?.length) tb.applyDelta(pb.delta);
+        // After wrapOrphan, outer node is the wrapper (if created) or the block itself
+        return wrapper ? wrapper.node : block.node;
+    }
+
+    /**
+     * Creates a block inside a container, recursively handling nested children.
+     * @param {import('../utils/extensions.js').PasteBlock} pb
+     * @param {string} parentId
+     */
+    #createInContainer(pb, parentId) {
+        const BlockClass = this.registry.get(pb.type) || this.registry.get('paragraph');
+        if (!BlockClass) return;
+        const block = BlockClass.create(this, pb.type, pb.props || {}, parentId);
+        const tb = block.behaviors?.get('text');
+        if (tb && pb.delta?.length) tb.applyDelta(pb.delta);
+        for (const child of pb.children || []) {
+            this.#createInContainer(child, block.node.id.toString());
+        }
     }
 
     /** @param  {...any} args */

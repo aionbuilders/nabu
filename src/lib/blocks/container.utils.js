@@ -4,16 +4,37 @@
  */
 
 /**
+ * Walks up from `block` toward `container` and returns the direct child of
+ * `container` that is (or contains) `block`.
+ *
+ * Works for both Nabu (root blocks have parent = null, loop breaks before
+ * reaching Nabu) and MegaBlock (loop stops when parent === container).
+ *
+ * @param {Block} block
+ * @param {Block | Nabu} container
+ * @returns {Block | null}
+ */
+export function findDirectChildOf(block, container) {
+    const spine = [block];
+    while (spine.at(-1) && spine.at(-1) !== container) {
+        const current = spine.at(-1);
+        const parent = current?.parent;
+        if (!current || !parent) break;
+        spine.push(parent);
+    }
+    return spine.at(-1) === container ? spine.at(-2) ?? null : spine.at(-1) ?? null;
+}
+
+/**
  * Ensures a block respects its structural parent constraint after being relocated.
  * If the block's current Loro parent doesn't match its `requiredParent` type,
  * creates a wrapper block at the same position WITHOUT committing.
  *
- * Uses BlockClass.create() instead of nabu.insert() to avoid premature commits.
- * New wrapper blocks are registered in nabu.blocksByType immediately, so the
- * onBeforeTransaction hook will see and merge adjacent wrappers of the same type.
+ * Returns the wrapper block if one was created, otherwise undefined.
  *
  * @param {Nabu} nabu
  * @param {Block} block
+ * @returns {Block | undefined}
  */
 export function wrapOrphan(nabu, block) {
     const req = block.requiredParent;
@@ -40,6 +61,7 @@ export function wrapOrphan(nabu, block) {
 
     // Move block into wrapper (no commit)
     nabu.tree.move(block.node.id, wrapper.node.id);
+    return wrapper;
 }
 
 /**

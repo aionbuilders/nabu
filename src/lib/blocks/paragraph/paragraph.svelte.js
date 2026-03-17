@@ -29,6 +29,7 @@ export class Paragraph extends Block {
             type: 'paragraph',
             content: this.behavior.toJSON()
         }));
+        this.serializers.set('application/x-nabu+json', (ctx = {}) => this.behavior.toClipboardBlock(ctx));
     }
 
     component = $derived(this.nabu.components.get("paragraph") || ParagraphComponent);
