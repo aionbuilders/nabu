@@ -3,6 +3,27 @@
  */
 
 /**
+ * @typedef {Object} PasteBlock
+ * @property {string} type
+ * @property {'start' | 'end' | 'both' | false} partial
+ * @property {Record<string, any>} [props]
+ * @property {import('loro-crdt').Delta<string>[]} [delta]
+ * @property {PasteBlock[]} [children]
+ */
+
+/**
+ * @typedef {Object} PasteFragment
+ * @property {PasteBlock[]} blocks
+ */
+
+/**
+ * @typedef {Object} PasteInterpreter
+ * @property {string} format - MIME type géré ('application/x-nabu+json', 'text/html', 'text/plain')
+ * @property {number} [priority] - Plus haut = appelé en premier (default: 0)
+ * @property {(raw: string, nabu: Nabu) => PasteFragment | null} interpret
+ */
+
+/**
  * @typedef {{
  * onInit: function(Nabu): void,
  * onBlockCreate: function(Nabu, Block): void,
@@ -24,6 +45,7 @@
  * @property {Partial<ExtensionHooks>} [hooks]
  * @property {Record<string, (nabu: Nabu) => any>} [serializers]
  * @property {Record<string, (nabu: Nabu, data: any, topic: string) => any>} [actions]
+ * @property {PasteInterpreter[]} [pasteInterpreters]
  */
 
 export class Extension {
@@ -38,6 +60,8 @@ export class Extension {
         this.serializers = init.serializers || {};
         /** @type {Record<string, (nabu: Nabu, data: any, topic: string) => any>} */
         this.actions = init.actions || {};
+        /** @type {PasteInterpreter[]} */
+        this.pasteInterpreters = init.pasteInterpreters || [];
     }
 }
 

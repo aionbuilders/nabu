@@ -6,6 +6,7 @@
 
     /** @type {import('../lib/blocks/nabu.svelte.js').Nabu | null} */
     let engine = $state(null);
+    
 
     $effect(() => {
         untrack(() => {
@@ -22,6 +23,8 @@
                 if (typeof window !== 'undefined') {
                     window.nabu = engine;
                 }
+
+                engine.debugging = true;
             })
         })
 

@@ -14,6 +14,9 @@
     data-nabu-root="true"
     onbeforeinput={(e) => engine.handleBeforeinput(e)}
     onkeydown={(e) => engine.handleKeydown(e)}
+    oncopy={(e) => engine.handleCopy(e)}
+    oncut={(e) => engine.handleCut(e)}
+    onpaste={(e) => engine.handlePaste(e)}
 >
     {#each engine.children as block (block.id)}
         <Block {block} />

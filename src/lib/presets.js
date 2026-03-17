@@ -4,22 +4,23 @@ import { HeadingExtension } from './blocks/heading/index.js';
 import { ListExtension, ListItemExtension } from './blocks/list/index.js';
 import { DialogueExtension } from './blocks/dialogue/index.js';
 import { RichTextExtension } from './behaviors/text/index.js';
+import { PlainTextPasteExtension } from './paste/index.js';
 
 // ---------------------------------------------------------------------------
 // Presets — composable extension arrays
 // ---------------------------------------------------------------------------
 
 /** Paragraph only. The simplest possible editor. */
-export const MinimalPreset = [ParagraphExtension];
+export const MinimalPreset = [ParagraphExtension, PlainTextPasteExtension];
 
 /** Paragraph + rich text marks (bold, italic, underline, code, strikethrough). */
-export const TextPreset = [ParagraphExtension, RichTextExtension];
+export const TextPreset = [ParagraphExtension, RichTextExtension, PlainTextPasteExtension];
 
 /** Paragraph + headings + rich text. Document-like, no lists. */
-export const DocumentPreset = [ParagraphExtension, HeadingExtension, RichTextExtension];
+export const DocumentPreset = [ParagraphExtension, HeadingExtension, RichTextExtension, PlainTextPasteExtension];
 
 /** All built-in block types + rich text. */
-export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension];
+export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension, PlainTextPasteExtension];
 
 // ---------------------------------------------------------------------------
 // Factory — generic createEditor

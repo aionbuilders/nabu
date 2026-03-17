@@ -27,6 +27,8 @@ import { Pulse } from '@aionbuilders/pulse';
 export class Nabu {
     /** @type {Pulse} */
     #pulse = new Pulse();
+    /** @type {import('../utils/extensions.js').PasteInterpreter[]} */
+    #pasteInterpreters = [];
 
     /** @param {NabuInit} init */
     constructor(init = {}) {
@@ -94,6 +96,12 @@ export class Nabu {
                 if (ext.actions) {
                     for (const [topic, handler] of Object.entries(ext.actions)) {
                         this.#pulse.on(topic, ({ event }) => handler(this, event.data, event.topic));
+                    }
+                }
+
+                if (ext.pasteInterpreters?.length) {
+                    for (const interpreter of ext.pasteInterpreters) {
+                        this.#pasteInterpreters.push(interpreter);
                     }
                 }
 
@@ -418,6 +426,79 @@ export class Nabu {
 
 
 
+
+    // CLIPBOARD
+
+    /** @param {ClipboardEvent} e */
+    handleCopy(e) {
+        e.preventDefault();
+        // Stub — sérialisation de la sélection en tâche 3.5.4
+        this.warn('handleCopy: not yet implemented');
+    }
+
+    /** @param {ClipboardEvent} e */
+    handleCut(e) {
+        e.preventDefault();
+        // Stub — copy + delete atomique en tâche 3.5.6
+        this.warn('handleCut: not yet implemented');
+    }
+
+    /** @param {ClipboardEvent} e */
+    handlePaste(e) {
+        e.preventDefault();
+        const clipboard = e.clipboardData;
+        if (!clipboard) return;
+
+        const sorted = [...this.#pasteInterpreters].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+        for (const interpreter of sorted) {
+            const raw = clipboard.getData(interpreter.format);
+            if (!raw) continue;
+            const fragment = interpreter.interpret(raw, this);
+            if (fragment) {
+                this.insertFragment(fragment);
+                return;
+            }
+        }
+
+        this.warn('handlePaste: no interpreter matched');
+    }
+
+    /**
+     * Insère un PasteFragment à la position du curseur courant.
+     * Cas inline (1 bloc) : insère le delta à l'offset courant.
+     * Cas multi-blocs : tâche 3.5.3.
+     * @param {import('../utils/extensions.js').PasteFragment} fragment
+     */
+    insertFragment(fragment) {
+        const { blocks } = fragment;
+        if (!blocks?.length) return;
+
+        const anchorBlock = this.selection.anchorBlock;
+        if (!anchorBlock) return;
+
+        const textBehavior = anchorBlock.behaviors?.get('text');
+        if (!textBehavior) {
+            this.warn('insertFragment: anchorBlock has no text behavior');
+            return;
+        }
+
+        const offset = anchorBlock.selection?.from ?? 0;
+
+        if (blocks.length === 1) {
+            const delta = blocks[0].delta || [];
+            const insertedLength = delta.reduce(
+                (sum, op) => sum + (typeof op.insert === 'string' ? op.insert.length : 0), 0
+            );
+            textBehavior.applyDelta([{ retain: offset }, ...delta]);
+            this.commit();
+            tick().then(() => this.selection.setCursor(anchorBlock, offset + insertedLength));
+            return;
+        }
+
+        // Multi-blocs : tâche 3.5.3
+        this.warn('insertFragment: multi-block paste not yet implemented');
+    }
 
     /** @param  {...any} args */
     warn(...args) {

@@ -4,3 +4,4 @@ export * from './blocks';
 export * from "./utils";
 export * from './behaviors';
 export * from './presets';
+export * from './paste';
