@@ -2,7 +2,7 @@ import { LoroDoc, UndoManager } from 'loro-crdt';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
-import { handleContainerBeforeInput } from './container.utils.js';
+import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent } from './container.utils.js';
 import { tick } from 'svelte';
 import { Pulse } from '@aionbuilders/pulse';
 
@@ -474,16 +474,25 @@ export class Nabu {
         const { blocks } = fragment;
         if (!blocks?.length) return;
 
-        const anchorBlock = this.selection.anchorBlock;
-        if (!anchorBlock) return;
+        let anchorBlock;
+        let offset;
+
+        if (!this.selection.isCollapsed) {
+            const result = deleteSelectionContent(this, this);
+            if (!result) return;
+            anchorBlock = result.block;
+            offset = result.offset;
+        } else {
+            anchorBlock = this.selection.anchorBlock;
+            if (!anchorBlock) return;
+            offset = anchorBlock.selection?.from ?? 0;
+        }
 
         const textBehavior = anchorBlock.behaviors?.get('text');
         if (!textBehavior) {
             this.warn('insertFragment: anchorBlock has no text behavior');
             return;
         }
-
-        const offset = anchorBlock.selection?.from ?? 0;
 
         if (blocks.length === 1) {
             const delta = blocks[0].delta || [];
@@ -496,8 +505,69 @@ export class Nabu {
             return;
         }
 
-        // Multi-blocs : tâche 3.5.3
-        this.warn('insertFragment: multi-block paste not yet implemented');
+        // --- Multi-blocs ---
+        const firstBlock = blocks[0];
+        const lastBlock  = blocks[blocks.length - 1];
+        const midBlocks  = blocks.slice(1, -1);
+
+        // 1. Sauvegarder le right fragment (texte après le curseur dans anchorBlock)
+        const rightDelta = textBehavior.container.sliceDelta(offset, textBehavior.container.length);
+
+        // 2. Tronquer anchorBlock à l'offset (supprimer ce qui est après le curseur)
+        if (textBehavior.container.length > offset) {
+            textBehavior.delete({ index: offset, length: textBehavior.container.length - offset });
+        }
+
+        // 3. Fusionner le premier bloc collé dans anchorBlock (type de anchorBlock survit)
+        const firstDelta = firstBlock.delta || [];
+        if (firstDelta.length) {
+            textBehavior.applyDelta([{ retain: offset }, ...firstDelta]);
+        }
+
+        // 4. Créer les blocs intermédiaires et le dernier, positionnés après anchorBlock
+        let prevNode = anchorBlock.node;
+
+        for (const pb of midBlocks) {
+            const BlockClass = this.registry.get(pb.type) || this.registry.get('paragraph');
+            if (!BlockClass) continue;
+            const newBlock = BlockClass.create(this, pb.type, pb.props || {});
+            newBlock.node.moveAfter(prevNode);
+            wrapOrphan(this, newBlock);
+            const tb = newBlock.behaviors?.get('text');
+            if (tb && pb.delta?.length) tb.applyDelta(pb.delta);
+            prevNode = newBlock.node;
+        }
+
+        // 5. Créer le dernier bloc : lastBlock.delta + rightDelta
+        const LastBlockClass = this.registry.get(lastBlock.type) || this.registry.get('paragraph');
+        let focusBlock = anchorBlock;
+        let focusOffset = offset + (firstDelta.reduce(
+            (s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0
+        ));
+
+        if (LastBlockClass) {
+            const newLast = LastBlockClass.create(this, lastBlock.type, lastBlock.props || {});
+            newLast.node.moveAfter(prevNode);
+            wrapOrphan(this, newLast);
+            const tb = newLast.behaviors?.get('text');
+            if (tb) {
+                const lastDelta = lastBlock.delta || [];
+                if (lastDelta.length || rightDelta.length) {
+                    tb.applyDelta([...lastDelta, ...rightDelta]);
+                }
+                focusOffset = lastDelta.reduce(
+                    (s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0
+                );
+            }
+            focusBlock = newLast;
+        }
+
+        // 6. Commit atomique + restauration curseur
+        this.commit();
+        tick().then(() => {
+            const fb = this.blocks.get(focusBlock.id) || focusBlock;
+            this.selection.setCursor(fb, focusOffset);
+        });
     }
 
     /** @param  {...any} args */

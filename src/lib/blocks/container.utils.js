@@ -15,7 +15,7 @@
  * @param {Nabu} nabu
  * @param {Block} block
  */
-function wrapOrphan(nabu, block) {
+export function wrapOrphan(nabu, block) {
     const req = block.requiredParent;
     if (!req) return;
 
@@ -158,4 +158,86 @@ export function handleContainerBeforeInput(container, nabu, event) {
         offset: focusData.options.startOffset + (inputType === 'insertText' ? (event.data?.length || 0) : 0)
     });
     return true;
+}
+
+/**
+ * Deletes the current selection content without committing.
+ * Handles both single-block and multi-block selections.
+ * Returns the resulting insertion position {block, offset}, or null on failure.
+ *
+ * @param {{ children: import('./block.svelte.js').Block[] }} container
+ * @param {import('./nabu.svelte.js').Nabu} nabu
+ * @returns {{ block: import('./block.svelte.js').Block, offset: number } | null}
+ */
+export function deleteSelectionContent(container, nabu) {
+    const startBlock = /** @type {import('./block.svelte.js').Block} */ (nabu.selection.startBlock);
+    const endBlock = /** @type {import('./block.svelte.js').Block} */ (nabu.selection.endBlock);
+    if (!startBlock || !endBlock) return null;
+
+    // Single-block selection: delete the range only
+    if (startBlock === endBlock) {
+        const sel = startBlock.selection;
+        if (!sel || sel.isCollapsed) return { block: startBlock, offset: sel?.from ?? 0 };
+        const tb = startBlock.behaviors?.get('text');
+        if (tb) tb.delete({ from: sel.from, to: sel.to });
+        return { block: startBlock, offset: sel.from };
+    }
+
+    // Multi-block selection: same spine logic as handleContainerBeforeInput (no commit)
+    const startOffset = startBlock.focus(undefined, true).options.startOffset;
+
+    const startSpine = [startBlock];
+    while (startSpine.at(-1) && startSpine.at(-1) !== container) {
+        const current = startSpine.at(-1);
+        const parent = current?.parent;
+        if (!current || !parent) break;
+        startSpine.push(parent);
+        if (parent !== container) {
+            const nextSiblings = parent.children.slice(current.index + 1);
+            if (nextSiblings.length) nextSiblings.forEach(block => block.destroy());
+        }
+    }
+
+    const endSpine = [endBlock];
+    while (endSpine.at(-1) && endSpine.at(-1) !== container) {
+        const current = endSpine.at(-1);
+        const parent = current?.parent;
+        if (!current || !parent) break;
+        endSpine.push(parent);
+        if (parent !== container) {
+            const previousSiblings = parent.children.slice(0, current.index);
+            if (previousSiblings.length) previousSiblings.forEach(block => block.destroy());
+        }
+    }
+
+    const directChild = (spine) => spine.at(-1) === container ? spine.at(-2) : spine.at(-1);
+    const startOfStartSpine = directChild(startSpine);
+    const startOfEndSpine = directChild(endSpine);
+    if (!startOfStartSpine || !startOfEndSpine) return null;
+
+    const intermediates = container.children.slice(startOfStartSpine.index + 1, startOfEndSpine.index);
+    intermediates.forEach(block => block.destroy());
+
+    startBlock.delete();
+    endBlock.delete();
+    startBlock.consume(endBlock);
+
+    endSpine.forEach(block => {
+        if (block === container) return;
+        const brotherhood = block.parent?.children || [];
+        const index = brotherhood.indexOf(block);
+        if (index !== -1) {
+            const nextSiblings = brotherhood.slice(index + 1);
+            if (nextSiblings.length) {
+                [...nextSiblings].reverse().forEach(sibling => {
+                    sibling.node.moveAfter(startBlock.node);
+                    wrapOrphan(nabu, sibling);
+                });
+            }
+        }
+    });
+
+    startOfEndSpine?.destroy();
+
+    return { block: startBlock, offset: startOffset };
 }

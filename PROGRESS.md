@@ -129,7 +129,7 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - [x] **3.5.0** Câblage événements `copy` / `cut` / `paste` sur le CE root (`Nabu.svelte`) + `preventDefault()` sur paste
 - [x] **3.5.1** Infrastructure : propriété `pasteInterpreters` sur `Extension`, types JSDoc `PasteFragment` + `PasteBlock` + `PasteInterpreter`, stubs `handleCopy` / `handleCut` / `handlePaste` avec dispatch vers interpréteurs
 - [x] **3.5.2** `PlainTextPasteExtension` + insertion **inline** (1 bloc, curseur collapsé)
-- [ ] **3.5.3** Algorithme d'insertion **multi-blocs** : split au curseur, fusion aux bornes, blocs intermédiaires
+- [x] **3.5.3** Algorithme d'insertion **multi-blocs** : split au curseur, fusion aux bornes, blocs intermédiaires
 - [ ] **3.5.4** `nabu.handleCopy()` : sérialisation de la sélection vers `application/x-nabu+json`
 - [ ] **3.5.5** `NabuPasteExtension` : lecture du format interne → round-trip fidèle (marks + types de blocs)
 - [ ] **3.5.6** Cut atomique : `handleCopy()` + suppression sélection (spine) en une seule transaction

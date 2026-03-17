@@ -15,7 +15,8 @@ export const PlainTextPasteExtension = new Extension('plain-text-paste', {
             interpret(raw) {
                 if (!raw) return null;
 
-                const paragraphs = raw.split(/\n\n+/).filter(Boolean);
+                const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                const paragraphs = normalized.split(/\n\n+/).filter(Boolean);
                 if (paragraphs.length === 0) return null;
 
                 if (paragraphs.length === 1) {
