@@ -2,7 +2,7 @@ import { LoroDoc, UndoManager } from 'loro-crdt';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
-import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf } from './container.utils.js';
+import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf, findLCA } from './container.utils.js';
 import { tick } from 'svelte';
 import { Pulse } from '@aionbuilders/pulse';
 
@@ -385,8 +385,8 @@ export class Nabu {
         }
 
         // 3. Appeler la méthode sur le bloc cible s'il la possède
-        if (targetBlock && typeof targetBlock[handlerName] === 'function') {
-            const handled = targetBlock[handlerName](e);
+        if (targetBlock && typeof (/** @type {any} */ (targetBlock))[handlerName] === 'function') {
+            const handled = (/** @type {any} */ (targetBlock))[handlerName](e);
             if (handled) {
                 e.preventDefault();
             }
@@ -438,20 +438,30 @@ export class Nabu {
         const endBlock   = this.selection.endBlock;
         if (!startBlock || !endBlock || !e.clipboardData) return;
 
-        // Find the direct children of the Nabu root that span the selection.
-        // Same spine walk as container.utils — works because root blocks have parent = null.
-        const startRoot = findDirectChildOf(startBlock, this);
-        const endRoot   = findDirectChildOf(endBlock,   this);
-        if (!startRoot || !endRoot) return;
-
-        const si = this.children.indexOf(startRoot);
-        const ei = this.children.indexOf(endRoot);
-        if (si === -1 || ei === -1) return;
-
-        const rootBlocks = this.children.slice(si, ei + 1);
-        const lastI = rootBlocks.length - 1;
         const startFrom = this.selection.start?.from ?? 0;
         const endTo     = this.selection.end?.to ?? null;
+
+        // Find the Lowest Common Ancestor of startBlock and endBlock.
+        // If LCA is a block (nested selection inside a container), serialize from that
+        // block directly — avoids creating phantom ancestor wrappers for unselected content.
+        // If LCA is null (selection spans root-level blocks), fall back to nabu-level slice.
+        const lca = findLCA(startBlock, endBlock);
+
+        /** @type {Block[]} */
+        let rootBlocks;
+        if (lca) {
+            rootBlocks = [/** @type {Block} */ (/** @type {any} */ (lca))];
+        } else {
+            const startRoot = findDirectChildOf(startBlock, this);
+            const endRoot   = findDirectChildOf(endBlock,   this);
+            if (!startRoot || !endRoot) return;
+            const si = this.children.indexOf(startRoot);
+            const ei = this.children.indexOf(endRoot);
+            if (si === -1 || ei === -1) return;
+            rootBlocks = this.children.slice(si, ei + 1);
+        }
+
+        const lastI = rootBlocks.length - 1;
 
         const pasteBlocks = rootBlocks.map((block, i) => {
             const isFirst = i === 0;

@@ -26,6 +26,41 @@ export function findDirectChildOf(block, container) {
 }
 
 /**
+ * Finds the Lowest Common Ancestor (LCA) of two blocks in the block tree.
+ *
+ * Returns the LCA block, or null if the two blocks only share Nabu as ancestor
+ * (i.e. both ancestor chains terminate at a root block with parent = null).
+ *
+ * Examples:
+ *   LCA(subA, subB)  where both are children of subList  →  subList
+ *   LCA(para1, para2) where both are root-level blocks    →  null
+ *
+ * @param {Block} blockA
+ * @param {Block} blockB
+ * @returns {Block | null}
+ */
+export function findLCA(blockA, blockB) {
+    if (blockA === blockB) return blockA.parent ?? null;
+
+    // Build the ancestor set for blockA (blockA itself included)
+    const ancestorsA = new Set();
+    let curr = /** @type {Block | null} */ (blockA);
+    while (curr) {
+        ancestorsA.add(curr);
+        curr = curr.parent ?? null;
+    }
+
+    // Walk from blockB up until we hit a node in blockA's ancestor set
+    let currB = /** @type {Block | null} */ (blockB);
+    while (currB) {
+        if (ancestorsA.has(currB)) return currB;
+        currB = currB.parent ?? null;
+    }
+
+    return null; // only Nabu is a common ancestor
+}
+
+/**
  * Ensures a block respects its structural parent constraint after being relocated.
  * If the block's current Loro parent doesn't match its `requiredParent` type,
  * creates a wrapper block at the same position WITHOUT committing.
@@ -199,7 +234,7 @@ export function deleteSelectionContent(container, nabu) {
     // Single-block selection: delete the range only
     if (startBlock === endBlock) {
         const sel = startBlock.selection;
-        if (!sel || sel.isCollapsed) return { block: startBlock, offset: sel?.from ?? 0 };
+        if (!sel || sel.from === sel.to) return { block: startBlock, offset: sel?.from ?? 0 };
         const tb = startBlock.behaviors?.get('text');
         if (tb) tb.delete({ from: sel.from, to: sel.to });
         return { block: startBlock, offset: sel.from };
