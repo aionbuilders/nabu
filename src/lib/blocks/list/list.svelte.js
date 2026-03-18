@@ -130,6 +130,77 @@ export class List extends MegaBlock {
         return { block: newItem };
     }
 
+    static markdownRules = [
+        {
+            priority: 10,
+            detect: /^[ \t]*([-*+]|\d+[.)]) /,
+            consume(/** @type {string[]} */ lines, /** @type {number} */ i) {
+                const LIST_RE = /^[ \t]*([-*+]|\d+[.)]) /;
+                let j = i;
+                while (j < lines.length && lines[j].trim() && LIST_RE.test(lines[j])) j++;
+                return Math.max(1, j - i);
+            },
+        }
+    ];
+
+    /**
+     * Parse markdown list lines into a nested List/ListItem PasteBlock tree.
+     * Uses indent depth to reconstruct nesting recursively.
+     *
+     * @param {string[]} lines
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[] }} helpers
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromMarkdown(lines, { parseInline }) {
+        /** @typedef {{ depth: number, ordered: boolean, text: string }} ListToken */
+
+        /** @type {ListToken[]} */
+        const tokens = lines.flatMap(line => {
+            const m = line.match(/^([ \t]*)([-*+]|\d+[.)]) +(.*)/);
+            if (!m) return [];
+            return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), text: m[3] }];
+        });
+
+        if (!tokens.length) return null;
+
+        /**
+         * Recursively build a List PasteBlock from a flat token array.
+         * Items at `baseDepth` become direct children; deeper tokens become sublists.
+         * @param {ListToken[]} toks
+         * @returns {import('../../utils/extensions.js').PasteBlock}
+         */
+        function buildList(toks) {
+            const baseDepth = Math.min(...toks.map(t => t.depth));
+            const listType = toks.find(t => t.depth === baseDepth)?.ordered ? 'ordered' : 'bullet';
+            /** @type {import('../../utils/extensions.js').PasteBlock[]} */
+            const items = [];
+            let i = 0;
+
+            while (i < toks.length) {
+                if (toks[i].depth !== baseDepth) { i++; continue; }
+
+                // Collect all sub-tokens directly following this item (deeper indent)
+                const subToks = /** @type {ListToken[]} */ ([]);
+                let j = i + 1;
+                while (j < toks.length && toks[j].depth > baseDepth) {
+                    subToks.push(toks[j]);
+                    j++;
+                }
+
+                /** @type {import('../../utils/extensions.js').PasteBlock} */
+                const item = { type: 'list-item', delta: parseInline(toks[i].text), partial: false };
+                if (subToks.length) item.children = [buildList(subToks)];
+
+                items.push(item);
+                i = j;
+            }
+
+            return { type: 'list', props: { listType }, children: items, partial: false };
+        }
+
+        return buildList(tokens);
+    }
+
     static htmlRules = [
         { selector: 'ul', props: { listType: 'bullet' } },
         { selector: 'ol', props: { listType: 'ordered' } },

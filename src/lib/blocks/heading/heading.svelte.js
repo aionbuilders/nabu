@@ -81,6 +81,27 @@ export class Heading extends Block {
     /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
     split(options) { return this.behavior.split(options); }
 
+    static markdownRules = [
+        {
+            priority: 10,
+            detect: /^#{1,6} /,
+            consume: () => 1,
+        }
+    ];
+
+    /**
+     * @param {string[]} lines
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[] }} helpers
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromMarkdown(lines, { parseInline }) {
+        const m = lines[0].match(/^(#{1,6})\s+(.*)/);
+        if (!m) return null;
+        const delta = parseInline(m[2]);
+        if (!delta.length) return null;
+        return { type: 'heading', props: { level: m[1].length }, delta, partial: false };
+    }
+
     static htmlRules = [
         { selector: 'h1', props: { level: 1 } },
         { selector: 'h2', props: { level: 2 } },

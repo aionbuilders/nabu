@@ -74,6 +74,29 @@ export class Paragraph extends Block {
     /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
     split(options) { return this.behavior.split(options); }
 
+    static markdownRules = [
+        {
+            priority: 0, // catch-all — must be lowest
+            detect: () => true,
+            consume(/** @type {string[]} */ lines, /** @type {number} */ i) {
+                let j = i;
+                while (j < lines.length && lines[j].trim()) j++;
+                return Math.max(1, j - i);
+            },
+        }
+    ];
+
+    /**
+     * @param {string[]} lines
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[] }} helpers
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromMarkdown(lines, { parseInline }) {
+        const delta = parseInline(lines.join(' '));
+        if (!delta.length) return null;
+        return { type: 'paragraph', delta, partial: false };
+    }
+
     static htmlRules = [
         { selector: 'p' },
         { selector: 'blockquote' },

@@ -4,7 +4,7 @@ import { HeadingExtension } from './blocks/heading/index.js';
 import { ListExtension, ListItemExtension } from './blocks/list/index.js';
 import { DialogueExtension } from './blocks/dialogue/index.js';
 import { RichTextExtension } from './behaviors/text/index.js';
-import { PlainTextPasteExtension, NabuPasteExtension, HtmlPasteExtension } from './paste/index.js';
+import { PlainTextPasteExtension, NabuPasteExtension, HtmlPasteExtension, MarkdownPasteExtension } from './paste/index.js';
 
 // ---------------------------------------------------------------------------
 // Presets — composable extension arrays
@@ -17,10 +17,10 @@ export const MinimalPreset = [ParagraphExtension, PlainTextPasteExtension, HtmlP
 export const TextPreset = [ParagraphExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, NabuPasteExtension];
 
 /** Paragraph + headings + rich text. Document-like, no lists. */
-export const DocumentPreset = [ParagraphExtension, HeadingExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, NabuPasteExtension];
+export const DocumentPreset = [ParagraphExtension, HeadingExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension];
 
 /** All built-in block types + rich text. */
-export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, NabuPasteExtension];
+export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension];
 
 // ---------------------------------------------------------------------------
 // Factory — generic createEditor

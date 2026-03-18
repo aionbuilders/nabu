@@ -105,6 +105,10 @@ export class Nabu {
                     }
                 }
 
+                if (ext.loroTextStyles && Object.keys(ext.loroTextStyles).length) {
+                    this.doc.configTextStyle(ext.loroTextStyles);
+                }
+
             }
         }
 

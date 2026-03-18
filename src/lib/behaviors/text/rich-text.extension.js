@@ -116,6 +116,15 @@ function onKeyDown(nabu, event) {
 }
 
 export const RichTextExtension = new Extension('rich-text', {
+    // Declare all mark attributes so Loro's applyDelta can handle them correctly.
+    // 'expand: after' means the style extends when typing at the end of a marked span.
+    loroTextStyles: {
+        bold:          { expand: 'after' },
+        italic:        { expand: 'after' },
+        underline:     { expand: 'after' },
+        code:          { expand: 'none' },  // code spans don't expand on insert
+        strikethrough: { expand: 'after' },
+    },
     actions: {
         // Full API
         'mark:toggle': (nabu, data) => toggleMark(nabu, data?.mark),

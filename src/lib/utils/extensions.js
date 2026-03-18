@@ -46,6 +46,10 @@
  * @property {Record<string, (nabu: Nabu) => any>} [serializers]
  * @property {Record<string, (nabu: Nabu, data: any, topic: string) => any>} [actions]
  * @property {PasteInterpreter[]} [pasteInterpreters]
+ * @property {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>} [loroTextStyles]
+ *   Loro text style configuration required by this extension.
+ *   Passed to `LoroDoc.configTextStyle()` during Nabu initialization so that
+ *   `applyDelta` with these attributes works correctly.
  */
 
 export class Extension {
@@ -62,6 +66,8 @@ export class Extension {
         this.actions = init.actions || {};
         /** @type {PasteInterpreter[]} */
         this.pasteInterpreters = init.pasteInterpreters || [];
+        /** @type {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>} */
+        this.loroTextStyles = init.loroTextStyles || {};
     }
 }
 
