@@ -81,6 +81,27 @@ export class Heading extends Block {
     /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
     split(options) { return this.behavior.split(options); }
 
+    static htmlRules = [
+        { selector: 'h1', props: { level: 1 } },
+        { selector: 'h2', props: { level: 2 } },
+        { selector: 'h3', props: { level: 3 } },
+        { selector: 'h4', props: { level: 4 } },
+        { selector: 'h5', props: { level: 5 } },
+        { selector: 'h6', props: { level: 6 } },
+    ];
+
+    /**
+     * @param {Element} el
+     * @param {{ parseInline: (el: Element) => import('loro-crdt').Delta<string>[] }} helpers
+     * @param {{ props?: { level?: number } }} [rule]
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromHTML(el, { parseInline }, rule) {
+        const delta = parseInline(el);
+        if (!delta.length) return null;
+        return { type: 'heading', props: { level: rule?.props?.level ?? 1 }, delta, partial: false };
+    }
+
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = nabu.tree.createNode(parentId || undefined, index || undefined);

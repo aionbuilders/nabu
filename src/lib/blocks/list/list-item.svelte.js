@@ -206,6 +206,27 @@ export class ListItem extends MegaBlock {
         });
     }
 
+    static htmlRules = [{ selector: 'li' }];
+
+    /**
+     * @param {Element} el
+     * @param {{ parseInline: (el: Element) => import('loro-crdt').Delta<string>[], parseBlock: (el: Element) => import('../../utils/extensions.js').PasteBlock | null }} helpers
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromHTML(el, { parseInline, parseBlock }) {
+        const delta = parseInline(el);
+        const childLists = /** @type {import('../../utils/extensions.js').PasteBlock[]} */ (
+            [...el.children]
+                .filter(child => child.matches('ul, ol'))
+                .map(parseBlock)
+                .filter(Boolean)
+        );
+        /** @type {import('../../utils/extensions.js').PasteBlock} */
+        const result = { type: 'list-item', delta, partial: false };
+        if (childLists.length) result.children = childLists;
+        return result;
+    }
+
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = nabu.tree.createNode(parentId || undefined, index || undefined);

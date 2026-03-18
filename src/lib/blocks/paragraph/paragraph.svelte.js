@@ -74,6 +74,23 @@ export class Paragraph extends Block {
     /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
     split(options) { return this.behavior.split(options); }
 
+    static htmlRules = [
+        { selector: 'p' },
+        { selector: 'blockquote' },
+        { selector: 'pre' },
+    ];
+
+    /**
+     * @param {Element} el
+     * @param {{ parseInline: (el: Element) => import('loro-crdt').Delta<string>[] }} helpers
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromHTML(el, { parseInline }) {
+        const delta = parseInline(el);
+        if (!delta.length) return null;
+        return { type: 'paragraph', delta, partial: false };
+    }
+
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = nabu.tree.createNode(parentId || undefined, index || undefined);

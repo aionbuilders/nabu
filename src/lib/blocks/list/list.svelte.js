@@ -130,6 +130,23 @@ export class List extends MegaBlock {
         return { block: newItem };
     }
 
+    static htmlRules = [
+        { selector: 'ul', props: { listType: 'bullet' } },
+        { selector: 'ol', props: { listType: 'ordered' } },
+    ];
+
+    /**
+     * @param {Element} el
+     * @param {{ parseChildren: (el: Element) => import('../../utils/extensions.js').PasteBlock[] }} helpers
+     * @param {{ props?: { listType?: string } }} [rule]
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromHTML(el, { parseChildren }, rule) {
+        const children = parseChildren(el);
+        if (!children.length) return null;
+        return { type: 'list', props: { listType: rule?.props?.listType ?? 'bullet' }, children, partial: false };
+    }
+
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = nabu.tree.createNode(parentId || undefined, index != null ? index : undefined);
