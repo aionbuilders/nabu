@@ -500,14 +500,23 @@ export class Nabu {
 
         e.clipboardData.setData('text/plain', pasteBlocks.map(extractText).join('\n\n'));
 
-        console.log('[handleCopy] fragment:', { blocks: pasteBlocks });
     }
 
     /** @param {ClipboardEvent} e */
     handleCut(e) {
+        if (this.selection.isCollapsed) return;
         e.preventDefault();
-        // Stub — copy + delete atomique en tâche 3.5.6
-        this.warn('handleCut: not yet implemented');
+
+        // 1. Copy selection to clipboard
+        this.handleCopy(e);
+
+        // 2. Delete the selected content without committing
+        const result = deleteSelectionContent(this, this);
+        if (!result) return;
+
+        // 3. Single Loro transaction + restore cursor
+        this.commit();
+        this.selection.setCursor(result.block, result.offset);
     }
 
     /** @param {ClipboardEvent} e */
