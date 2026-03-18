@@ -495,14 +495,29 @@ export class Nabu {
         const fragment = { blocks: pasteBlocks };
         e.clipboardData.setData('application/x-nabu+json', JSON.stringify(fragment));
 
-        // text/plain: flatten all text content recursively
-        /** @param {import('../utils/extensions.js').PasteBlock} pb @returns {string} */
-        const extractText = (pb) =>
-            pb.children?.length
-                ? pb.children.map(extractText).join('\n')
-                : (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
+        // Recursive serializers — dispatch to each BlockClass's static toMarkdown/toHtml.
+        // helpers.recurse lets blocks serialize their children without knowing their types.
+        /** @param {import('../utils/extensions.js').PasteBlock} pb @param {Record<string,any>} [ctx] @returns {string} */
+        const pbToMarkdown = (pb, ctx = {}) => {
+            const BlockClass = /** @type {any} */ (this.registry.get(pb.type));
+            if (BlockClass?.toMarkdown) {
+                return BlockClass.toMarkdown(pb, { ...ctx, recurse: (/** @type {any} */ child, /** @type {any} */ childCtx) => pbToMarkdown(child, { ...ctx, ...childCtx }) });
+            }
+            return (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
+        };
 
-        e.clipboardData.setData('text/plain', pasteBlocks.map(extractText).join('\n\n'));
+        /** @param {import('../utils/extensions.js').PasteBlock} pb @param {Record<string,any>} [ctx] @returns {string} */
+        const pbToHtml = (pb, ctx = {}) => {
+            const BlockClass = /** @type {any} */ (this.registry.get(pb.type));
+            if (BlockClass?.toHtml) {
+                return BlockClass.toHtml(pb, { ...ctx, recurse: (/** @type {any} */ child, /** @type {any} */ childCtx) => pbToHtml(child, { ...ctx, ...childCtx }) });
+            }
+            const text = (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
+            return text ? `<p>${text}</p>` : '';
+        };
+
+        e.clipboardData.setData('text/plain', pasteBlocks.map(pb => pbToMarkdown(pb)).join('\n\n'));
+        e.clipboardData.setData('text/html',  pasteBlocks.map(pb => pbToHtml(pb)).join('\n'));
 
     }
 

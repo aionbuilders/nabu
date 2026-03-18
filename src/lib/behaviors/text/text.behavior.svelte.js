@@ -6,6 +6,38 @@ import { LoroText } from "loro-crdt";
 import { tick } from "svelte";
 
 /**
+ * Escape special HTML characters in plain text.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * Converts a Loro text delta to inline HTML.
+ * Marks are rendered as semantic HTML tags.
+ * @param {import('loro-crdt').Delta<string>[]} delta
+ * @returns {string}
+ */
+export function deltaToHtml(delta) {
+    return delta.map(op => {
+        if (typeof op.insert !== 'string') return '';
+        let text = escapeHtml(op.insert);
+        const attrs = op.attributes || {};
+        if (attrs.code)          text = `<code>${text}</code>`;
+        if (attrs.bold)          text = `<strong>${text}</strong>`;
+        if (attrs.italic)        text = `<em>${text}</em>`;
+        if (attrs.underline)     text = `<u>${text}</u>`;
+        if (attrs.strikethrough) text = `<s>${text}</s>`;
+        return text;
+    }).join('');
+}
+
+/**
  * Converts a Loro text delta to inline Markdown.
  * @param {import('loro-crdt').Delta<string>[]} delta
  * @returns {string}

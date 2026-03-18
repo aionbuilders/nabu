@@ -1,4 +1,4 @@
-import { TextBehavior } from "../../behaviors/text";
+import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 import HeadingComponent from "./Heading.svelte";
 import { Block } from "../block.svelte.js";
 import { LoroText } from "loro-crdt";
@@ -80,6 +80,18 @@ export class Heading extends Block {
 
     /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
     split(options) { return this.behavior.split(options); }
+
+    /** @param {import('../../utils/extensions.js').PasteBlock} pb */
+    static toMarkdown(pb) {
+        const level = pb.props?.level ?? 1;
+        return `${'#'.repeat(level)} ${deltaToMarkdown(pb.delta || [])}`;
+    }
+
+    /** @param {import('../../utils/extensions.js').PasteBlock} pb */
+    static toHtml(pb) {
+        const level = pb.props?.level ?? 1;
+        return `<h${level}>${deltaToHtml(pb.delta || [])}</h${level}>`;
+    }
 
     static markdownRules = [
         {

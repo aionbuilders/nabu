@@ -130,12 +130,15 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - [x] **3.5.1** Infrastructure : propriété `pasteInterpreters` sur `Extension`, types JSDoc `PasteFragment` + `PasteBlock` + `PasteInterpreter`, stubs `handleCopy` / `handleCut` / `handlePaste` avec dispatch vers interpréteurs
 - [x] **3.5.2** `PlainTextPasteExtension` + insertion **inline** (1 bloc, curseur collapsé)
 - [x] **3.5.3** Algorithme d'insertion **multi-blocs** : split au curseur, fusion aux bornes, blocs intermédiaires
-- [ ] **3.5.4** `nabu.handleCopy()` : sérialisation de la sélection vers `application/x-nabu+json`
-- [ ] **3.5.5** `NabuPasteExtension` : lecture du format interne → round-trip fidèle (marks + types de blocs)
-- [ ] **3.5.6** Cut atomique : `handleCopy()` + suppression sélection (spine) en une seule transaction
-- [ ] **3.5.7** `HtmlPasteExtension` : sanitisation + mapping HTML → blocs Nabu
-- [ ] **3.5.8** `MarkdownPasteExtension` (opt-in) : `text/plain` parsé comme Markdown
+- [x] **3.5.4** `nabu.handleCopy()` : sérialisation de la sélection vers `application/x-nabu+json` + `text/plain` (markdown) + `text/html` via dispatch registry (`BlockClass.toMarkdown` / `.toHtml`)
+- [x] **3.5.5** `NabuPasteExtension` : lecture du format interne → round-trip fidèle (marks + types de blocs)
+- [x] **3.5.6** Cut atomique : `handleCopy()` + suppression sélection (spine) en une seule transaction
+- [x] **3.5.7** `HtmlPasteExtension` : architecture décentralisée (`htmlRules` + `fromHTML` sur chaque BlockClass), `parseInline` avec styles inline (Google Docs), expansion des containers inconnus à bloc-enfants (wrapper `<b>` Google Docs)
+- [x] **3.5.8** `MarkdownPasteExtension` (opt-in, `DocumentPreset`+`FullPreset`) : pipeline consume-based (`markdownRules.detect/consume` sur chaque BlockClass), inline parser récursif leftmost-match
+  - `loroTextStyles` : nouvelle propriété `Extension` — déclare les styles Loro nécessaires ; `configTextStyle()` appelé à l'init pour corriger les erreurs `applyDelta` (strikethrough)
 - [ ] **3.5.9** Edge cases : sélection range avant paste, début/fin de doc, paste dans ListItem (wrapOrphan), paste dans document vide
+
+> **Known limitation** : paste depuis Microsoft Word — HTML Word (`MsoListParagraph`, `<o:p>`) nécessite un parseur dédié non encore implémenté. Texte brut fonctionne, formatage et listes perdus.
 
 ---
 
@@ -154,9 +157,9 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ---
 
-## 📊 ÉTAT ACTUEL — 17 Mars 2026
+## 📊 ÉTAT ACTUEL — 18 Mars 2026
 
-### Progression globale : **95% vers MVP Bêta**
+### Progression globale : **97% vers MVP Bêta**
 
 #### ✅ Points forts
 - Architecture Single CE + Loro-CRDT + Extension System : solide
@@ -170,11 +173,13 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - **Substitution typographique : `--` + espace → `—` (em-dash) dans tout bloc texte**
 - **Action Bus `nabu.exec()` : toutes les actions editor accessibles depuis UI externe**
 - 11 ADRs documentés
-- **Copy/Paste : architecture conçue, design doc complet (`docs/design/copy-paste.md`)**
+- **Copy/Paste : implémentation complète (3.5.0–3.5.8)**
+  - Round-trip interne fidèle (marks, types, listes imbriquées)
+  - Paste HTML décentralisé : Notion ✅, Google Docs ✅ (texte + marks), Word ⚠️ (texte seulement)
+  - Paste Markdown : pipeline consume-based, inline marks récursif
 
 #### 🔴 Bloquant MVP
-1. **Copy / Paste** — réflexion terminée, implémentation à démarrer (Phase 3.5)
-2. **Toolbar visuelle** — infrastructure exec prête, manque l'UI Svelte + `nabu.isMarkActive()` pour les états actifs des boutons
+1. **Toolbar visuelle** — infrastructure exec prête, manque l'UI Svelte + `nabu.isMarkActive()` pour les états actifs des boutons
 
 #### 🟡 Important mais non bloquant
 - Bug merge ListItem avec enfants

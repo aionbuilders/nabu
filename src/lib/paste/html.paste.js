@@ -72,12 +72,20 @@ export function parseInline(el, marks = {}) {
             if (tag === 'br') { ops.push({ insert: '\n' }); continue; }
             if (SKIP_IN_INLINE.has(tag)) continue;
             const markName = MARK_TAGS[tag];
-            if (markName) {
-                ops.push(...parseInline(el2, { ...marks, [markName]: true }));
-            } else {
-                // Unknown inline or generic container (span, a, p, div…): recurse with same marks
-                ops.push(...parseInline(el2, marks));
+            const styleMarks = { ...marks };
+            if (markName) styleMarks[markName] = true;
+            // Detect marks from inline styles (e.g. Google Docs uses font-weight:700 on <span>)
+            if (el2.nodeType === Node.ELEMENT_NODE) {
+                const style = /** @type {HTMLElement} */ (el2).style;
+                if (style) {
+                    const fw = style.fontWeight;
+                    if (fw === 'bold' || fw === '700' || fw === '800' || fw === '900') styleMarks['bold'] = true;
+                    if (style.fontStyle === 'italic') styleMarks['italic'] = true;
+                    if (style.textDecoration?.includes('underline')) styleMarks['underline'] = true;
+                    if (style.textDecoration?.includes('line-through')) styleMarks['strikethrough'] = true;
+                }
             }
+            ops.push(...parseInline(el2, styleMarks));
         }
     }
     return ops;
@@ -135,7 +143,13 @@ function parseTopLevel(el, ruleset, helpers) {
         return [...el.children].flatMap(child => parseTopLevel(child, ruleset, helpers));
     }
     const pb = parseBlock(el, ruleset, helpers);
-    return pb ? [pb] : [];
+    if (pb) return [pb];
+    // Unknown element with block children: treat as transparent.
+    // Handles Google Docs' <b style="font-weight:normal"> wrapper and similar quirks.
+    if (hasBlockChildren(el, ruleset)) {
+        return [...el.children].flatMap(child => parseTopLevel(child, ruleset, helpers));
+    }
+    return [];
 }
 
 export const HtmlPasteExtension = new Extension('html-paste', {

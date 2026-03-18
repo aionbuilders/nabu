@@ -1,7 +1,7 @@
 import { Block } from "../block.svelte.js";
 import { LoroText } from "loro-crdt";
 import ParagraphComponent from "./Paragraph.svelte";
-import { TextBehavior } from "../../behaviors/text";
+import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -73,6 +73,16 @@ export class Paragraph extends Block {
 
     /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
     split(options) { return this.behavior.split(options); }
+
+    /** @param {import('../../utils/extensions.js').PasteBlock} pb */
+    static toMarkdown(pb) {
+        return deltaToMarkdown(pb.delta || []);
+    }
+
+    /** @param {import('../../utils/extensions.js').PasteBlock} pb */
+    static toHtml(pb) {
+        return `<p>${deltaToHtml(pb.delta || [])}</p>`;
+    }
 
     static markdownRules = [
         {

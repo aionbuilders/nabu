@@ -1,7 +1,7 @@
 import { MegaBlock } from "../megablock.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
 import { LoroText } from "loro-crdt";
-import { TextBehavior } from "../../behaviors/text";
+import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 
 /**
  * @import { Nabu, NabuNode, Block } from "..";
@@ -204,6 +204,28 @@ export class ListItem extends MegaBlock {
             offset: options?.offset || 0,
             delta: this.behavior.container.sliceDelta(options?.offset || 0, this.text.length)
         });
+    }
+
+    /**
+     * @param {import('../../utils/extensions.js').PasteBlock} pb
+     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, listType?: string, index?: number, depth?: number }} helpers
+     */
+    static toMarkdown(pb, { recurse, listType = 'bullet', index = 0, depth = 0 }) {
+        const indent = '  '.repeat(depth);
+        const prefix = listType === 'ordered' ? `${index + 1}.` : '-';
+        const text = deltaToMarkdown(pb.delta || []);
+        const sublists = (pb.children || []).map(sub => recurse(sub, { depth: depth + 1 })).join('\n');
+        return `${indent}${prefix} ${text}${sublists ? '\n' + sublists : ''}`;
+    }
+
+    /**
+     * @param {import('../../utils/extensions.js').PasteBlock} pb
+     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock) => string }} helpers
+     */
+    static toHtml(pb, { recurse }) {
+        const text = deltaToHtml(pb.delta || []);
+        const sublists = (pb.children || []).map(recurse).join('');
+        return `<li>${text}${sublists}</li>`;
     }
 
     static htmlRules = [{ selector: 'li' }];

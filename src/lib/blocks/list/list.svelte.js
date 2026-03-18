@@ -130,6 +130,26 @@ export class List extends MegaBlock {
         return { block: newItem };
     }
 
+    /**
+     * @param {import('../../utils/extensions.js').PasteBlock} pb
+     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, depth?: number }} helpers
+     */
+    static toMarkdown(pb, { recurse, depth = 0 }) {
+        const listType = pb.props?.listType ?? 'bullet';
+        return (pb.children || [])
+            .map((child, i) => recurse(child, { listType, index: i, depth }))
+            .join('\n');
+    }
+
+    /**
+     * @param {import('../../utils/extensions.js').PasteBlock} pb
+     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock) => string }} helpers
+     */
+    static toHtml(pb, { recurse }) {
+        const tag = pb.props?.listType === 'ordered' ? 'ol' : 'ul';
+        return `<${tag}>${(pb.children || []).map(recurse).join('')}</${tag}>`;
+    }
+
     static markdownRules = [
         {
             priority: 10,
