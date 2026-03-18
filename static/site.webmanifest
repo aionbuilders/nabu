@@ -1,0 +1,17 @@
+{
+  "name": "Nabu — Block editor for Svelte 5",
+  "short_name": "Nabu",
+  "description": "Modular, local-first block editor engine for Svelte 5. Single contenteditable, Loro-CRDT.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f7f5",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
