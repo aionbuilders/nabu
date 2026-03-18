@@ -182,8 +182,6 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 1. **Toolbar visuelle** — infrastructure exec prête, manque l'UI Svelte + `nabu.isMarkActive()` pour les états actifs des boutons
 
 #### 🟡 Important mais non bloquant
-- Bug merge ListItem avec enfants
-- Nettoyage des `console.log` de debug (REFOCUS, "Committing transaction...", etc.)
 - Stress-test des edge cases multi-blocs imbriqués profonds
 
 #### ⬜ Nice-to-have

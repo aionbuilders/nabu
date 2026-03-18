@@ -36,11 +36,7 @@ const DialogueExtension = extension("dialogue", {
 
             const newBlock = nabu.insert("dialogue", { delta }, parentId, currentIndex + 1);
 
-            block.commit();
-
-            setTimeout(() => {
-                nabu.selection.setCursor(newBlock, 0);
-            }, 0);
+            block.commit().then(() => nabu.selection.setCursor(newBlock, 0));
 
             return { block: newBlock };
         },

@@ -335,7 +335,7 @@ export class Block {
     // -- UTILS --
 
     commit() {
-        this.nabu.commit();
+        return this.nabu.commit();
     }
 
 

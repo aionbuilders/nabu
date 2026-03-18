@@ -1,0 +1,257 @@
+{
+  "version": "0.1.0-alpha",
+  "updated": "2026-03-18",
+  "milestones": [
+    {
+      "id": "core-engine",
+      "label": "Core Engine",
+      "status": "done",
+      "description": "Single contenteditable architecture with Loro-CRDT as the source of truth, full selection bridge, and structural editing primitives.",
+      "tasks": [
+        {
+          "id": "loro-init",
+          "text": "LoroDoc + LoroTree initialization; recursive Svelte 5 rendering from tree roots",
+          "status": "done"
+        },
+        {
+          "id": "selection-bridge",
+          "text": "Selection bridge: getDOMPoint() (model→DOM) and calculateOffset() (DOM→model) with NabuSelection",
+          "status": "done"
+        },
+        {
+          "id": "beforeinput-handler",
+          "text": "beforeinput interception: LoroText mutations + DOM reconciliation without cursor loss",
+          "status": "done"
+        },
+        {
+          "id": "structural-input",
+          "text": "Structural input: Enter (split via LoroTree create) and Backspace (merge via Block.consume)",
+          "status": "done"
+        },
+        {
+          "id": "undo-redo",
+          "text": "UndoManager: 100 steps, 1s merge interval, cursor position saved in onPush and restored in onPop",
+          "status": "done"
+        },
+        {
+          "id": "container-spine",
+          "text": "Shared container spine (handleContainerBeforeInput) used by both Nabu and MegaBlock",
+          "status": "done"
+        },
+        {
+          "id": "event-dispatch",
+          "text": "Event dispatch: dispatchEventToSelection routes to LCA block; BREAK/CONTINUE hook flow signals",
+          "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "extension-system",
+      "label": "Extension System",
+      "status": "done",
+      "description": "Declarative extension API covering block registration, hooks, serializers, actions, paste interpreters, and Loro text style configuration.",
+      "tasks": [
+        {
+          "id": "extension-class",
+          "text": "Extension class: hooks, serializers, actions, pasteInterpreters, loroTextStyles declared as plain objects",
+          "status": "done"
+        },
+        {
+          "id": "block-registry",
+          "text": "Block class registry (type → Block subclass) and component registry (type → Svelte component)",
+          "status": "done"
+        },
+        {
+          "id": "type-swap",
+          "text": "Type swap: updateChildren() re-instantiates a block when its Loro node type changes",
+          "status": "done"
+        },
+        {
+          "id": "action-bus",
+          "text": "Action bus: nabu.exec(topic, data) wraps a private Pulse instance; extensions declare handlers via actions property",
+          "status": "done"
+        },
+        {
+          "id": "presets",
+          "text": "Preset arrays (MinimalPreset, TextPreset, DocumentPreset, FullPreset) and factory functions (createFullEditor, createPersistedEditor, etc.)",
+          "status": "done"
+        },
+        {
+          "id": "megablock",
+          "text": "MegaBlock base class: updateChildren(), adoptChildren() for tree moves, serializeForClipboard() for recursive copy",
+          "status": "done"
+        },
+        {
+          "id": "listitem-merge-children",
+          "text": "ListItem merge (Backspace): Block.consume() calls adoptChildren() to relocate sublists from victim to survivor",
+          "status": "done",
+          "note": "adoptChildren if(false) guard is gone from the codebase; PROGRESS.md 2.9 still lists this as open — documentation lag, code appears correct."
+        }
+      ]
+    },
+    {
+      "id": "persistence-serialization",
+      "label": "Persistence & Serialization",
+      "status": "done",
+      "description": "IndexedDB auto-save via Loro snapshots, serializer extension pattern, and Markdown/JSON export.",
+      "tasks": [
+        {
+          "id": "indexeddb-autosave",
+          "text": "IndexedDB auto-save: doc.subscribe() triggers a debounced (2s) snapshot write after every committed change",
+          "status": "done"
+        },
+        {
+          "id": "persisted-editor",
+          "text": "createPersistedEditor({ docId }): loads snapshot on init, sets nabu.isNew, exposes saveNow() and clearPersistence()",
+          "status": "done"
+        },
+        {
+          "id": "serialize-markdown",
+          "text": "nabu.serialize('markdown'): TextBehavior.toMarkdown() + deltaToMarkdown() for inline marks",
+          "status": "done"
+        },
+        {
+          "id": "serialize-json",
+          "text": "nabu.serialize('json'): Slate-like { version, blocks[] } format via Extension.serializers",
+          "status": "done"
+        },
+        {
+          "id": "serializer-pattern",
+          "text": "Serializer extension pattern: Extension.serializers map; $derived(nabu.serialize(...)) reactive bindings work natively",
+          "status": "done"
+        },
+        {
+          "id": "import",
+          "text": "Import from Markdown / JSON back into a Loro document",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "copy-paste",
+      "label": "Copy / Paste",
+      "status": "in-progress",
+      "description": "Full clipboard pipeline: 3-format copy output, priority-sorted paste interpreter chain, and multi-block insertion algorithm.",
+      "tasks": [
+        {
+          "id": "clipboard-events",
+          "text": "copy/cut/paste events wired on contenteditable root; paste always calls preventDefault()",
+          "status": "done"
+        },
+        {
+          "id": "paste-interpreter-chain",
+          "text": "pasteInterpreter chain on Extension: priority-sorted, format-keyed, returns PasteFragment | null",
+          "status": "done"
+        },
+        {
+          "id": "handle-copy",
+          "text": "handleCopy: serializes selection to application/x-nabu+json + text/plain (markdown) + text/html via BlockClass.toMarkdown/toHtml",
+          "status": "done"
+        },
+        {
+          "id": "handle-cut",
+          "text": "handleCut: atomic — handleCopy() + deleteSelectionContent() in a single Loro transaction",
+          "status": "done"
+        },
+        {
+          "id": "nabu-paste",
+          "text": "NabuPasteExtension (priority 100): application/x-nabu+json round-trip preserving marks, block types, and nested lists",
+          "status": "done"
+        },
+        {
+          "id": "html-paste",
+          "text": "HtmlPasteExtension (priority 50): decentralized htmlRules + fromHTML on each BlockClass; inline style marks (Google Docs); transparent container flattening",
+          "status": "done"
+        },
+        {
+          "id": "markdown-paste",
+          "text": "MarkdownPasteExtension (priority 25, opt-in): markdownRules detect/consume pipeline; leftmost-match recursive inline parser",
+          "status": "done"
+        },
+        {
+          "id": "paste-edge-cases",
+          "text": "Edge cases: non-collapsed selection replaced before paste, ListItem wrapOrphan, paste into empty document",
+          "status": "in-progress",
+          "note": "PROGRESS.md 3.5.9 — not yet implemented; Word HTML (MsoListParagraph) is a known unresolved limitation."
+        }
+      ]
+    },
+    {
+      "id": "beta-release",
+      "label": "Beta Release",
+      "status": "in-progress",
+      "description": "UX layer required for a usable public beta: toolbar, slash menu, drag handles, placeholders, and link support.",
+      "tasks": [
+        {
+          "id": "floating-toolbar",
+          "text": "Floating mark toolbar: appears on non-collapsed selection, buttons call nabu.exec('mark:toggle') and read nabu.isMarkActive()",
+          "status": "planned",
+          "note": "Action bus and mark infrastructure are ready; only the Svelte UI component is missing."
+        },
+        {
+          "id": "slash-menu",
+          "text": "Slash command menu (/): triggered on / keypress, lists registered block types, inserts via nabu.insert()",
+          "status": "planned"
+        },
+        {
+          "id": "drag-handles",
+          "text": "Drag handle overlay per block (independent of contenteditable); block reorder via LoroTree.move",
+          "status": "planned"
+        },
+        {
+          "id": "placeholders",
+          "text": "Empty block placeholders (CSS ::before or overlay) with per-block-type hint text",
+          "status": "planned"
+        },
+        {
+          "id": "link-support",
+          "text": "Link mark: href attribute on LoroText, rendered as <a> in RichText.svelte, toggled via toolbar or keyboard",
+          "status": "planned"
+        },
+        {
+          "id": "markdown-inline-shortcuts",
+          "text": "Inline markdown shortcuts while typing: **text** → bold, _text_ → italic, `text` → code",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "id": "rc",
+      "label": "Release Candidate",
+      "status": "planned",
+      "description": "Production-readiness: import pipeline, Word paste, remote sync foundation, and test coverage.",
+      "tasks": [
+        {
+          "id": "markdown-json-import",
+          "text": "Import from Markdown and JSON: parse into Loro document, inverse of current serialize() pipeline",
+          "status": "planned"
+        },
+        {
+          "id": "word-html-paste",
+          "text": "Word HTML paste parser: handle MsoListParagraph, <o:p> tags, and Word-specific list structures",
+          "status": "planned"
+        },
+        {
+          "id": "dialogue-speaker",
+          "text": "DialogueBlock optional speaker field: Loro metadata on the node, serialized as 'Speaker — line'",
+          "status": "planned"
+        },
+        {
+          "id": "adr-012",
+          "text": "Write ADR 012 formalizing the copy/paste architecture (interpréteurs, fragment, insertion algorithm)",
+          "status": "planned"
+        },
+        {
+          "id": "surrealdb-sync",
+          "text": "SurrealDB remote sync: Loro CRDT snapshots/updates over WebSocket as a second persistence backend",
+          "status": "planned"
+        },
+        {
+          "id": "e2e-tests",
+          "text": "E2E test suite covering structural editing, rich text marks, undo/redo, and clipboard round-trips",
+          "status": "planned"
+        }
+      ]
+    }
+  ]
+}

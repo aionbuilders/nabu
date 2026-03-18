@@ -85,11 +85,7 @@ export class List extends MegaBlock {
                 this.destroy();
             }
 
-            this.nabu.commit();
-            
-            setTimeout(() => {
-                this.nabu.selection.setCursor(newParagraph, 0);
-            }, 0);
+            this.nabu.commit().then(() => this.nabu.selection.setCursor(newParagraph, 0));
             
             return { block: newParagraph };
         }
@@ -120,12 +116,7 @@ export class List extends MegaBlock {
             }
         }
 
-        this.nabu.commit();
-        
-        // 4. On replace le curseur au début du nouvel item
-        setTimeout(() => {
-            this.nabu.selection.setCursor(newItem, 0);
-        }, 0);
+        this.nabu.commit().then(() => this.nabu.selection.setCursor(newItem, 0));
         
         return { block: newItem };
     }

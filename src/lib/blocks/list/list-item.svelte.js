@@ -40,8 +40,7 @@ export function indentListItem(item) {
         }
     }
 
-    item.commit();
-    setTimeout(() => item.behavior.block.focus(), 0);
+    item.commit().then(() => item.behavior.block.focus());
     return true;
 }
 
@@ -73,8 +72,7 @@ export function unindentListItem(item) {
     const targetIndex = grandParentItemNode.index() + 1;
     item.nabu.tree.move(item.node.id.toString(), targetParentListNode.id.toString(), targetIndex);
 
-    item.commit();
-    setTimeout(() => item.behavior.block.focus(), 0);
+    item.commit().then(() => item.behavior.block.focus());
     return true;
 }
 

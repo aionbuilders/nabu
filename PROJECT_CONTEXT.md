@@ -146,12 +146,6 @@ container.utils.js → handleContainerBeforeInput(container, nabu, event)
 - **Persistence** : zéro stockage, données perdues au refresh
 - **Toolbar marks** : aucune UI visuelle pour appliquer le formatage
 
-### Code à nettoyer (non bloquant)
-- `console.log("REFOCUS")` dans block.svelte.js
-- `console.warn("Committing transaction...")` dans nabu.svelte.js
-- `console.log(...)` dans rich-text.extension.js
-- Nombreux `console.warn("Not implemented")` dans la classe base Block (stubs)
-
 ---
 
 ## 7. STRUCTURE DES FICHIERS SOURCE

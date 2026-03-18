@@ -270,9 +270,10 @@ export class Nabu {
     }
 
 
-    commit() {
+    async commit() {
         this.trigger("onBeforeTransaction", this);
         this.doc.commit();
+        await tick();
     }
 
     /**

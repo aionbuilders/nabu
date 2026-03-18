@@ -34,11 +34,7 @@ const HeadingExtension = extension("heading", {
             // On split souvent un titre pour créer un paragraphe après
             const newBlock = nabu.insert("paragraph", { delta }, parentId, currentIndex + 1);
 
-            block.commit();
-            
-            setTimeout(() => {
-                nabu.selection.setCursor(newBlock, 0);
-            }, 0);
+            block.commit().then(() => nabu.selection.setCursor(newBlock, 0));
 
             return { block: newBlock };
         },
