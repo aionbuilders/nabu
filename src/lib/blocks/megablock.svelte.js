@@ -15,6 +15,24 @@ export class MegaBlock extends Block {
 
     /** @type {Block[]} */
     children = $state([]);
+    positions = $derived(this.children.reduce((sum, child) => sum + (child.positions ?? 0), 0));
+
+    /**
+     * Pure container: no own text, delegate entirely to children.
+     * @param {number} localOffset
+     * @returns {{ block: Block, offset: number } | null}
+     */
+    resolveOffset(localOffset) {
+        let remaining = localOffset;
+        for (const child of this.children) {
+            const childPositions = child.positions ?? 0;
+            if (remaining < childPositions) return child.resolveOffset(remaining);
+            remaining -= childPositions;
+        }
+        // Fallback: clamp to end of last child
+        const last = this.children[this.children.length - 1];
+        return last ? last.resolveOffset(Math.max(0, (last.positions ?? 1) - 1)) : null;
+    }
 
     updateChildren() {
         const childrenNodes = this.node.children();

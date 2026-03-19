@@ -89,7 +89,7 @@ export class ListItem extends MegaBlock {
         this.behaviors.set("text", this.behavior);
 
         this.serializers.set('markdown', () => {
-            const depth = this.parents.filter(p => p.type === 'listItem').length;
+            const depth = this.parents.filter(p => p.type === 'list-item').length;
             const indent = '  '.repeat(depth);
             const listType = /** @type {any} */ (this.parent)?.listType ?? 'bullet';
             const prefix = listType === 'ordered' ? `${this.index + 1}.` : '-';
@@ -125,6 +125,27 @@ export class ListItem extends MegaBlock {
     }
 
     selection = $derived(this.behavior.selection);
+
+    positions = $derived(this.behavior.positions + super.positions);
+
+    /**
+     * Mixed block: own text comes first, then children (sublists).
+     * @param {number} localOffset
+     * @returns {{ block: import('../block.svelte.js').Block, offset: number } | null}
+     */
+    resolveOffset(localOffset) {
+        const textPositions = this.behavior.positions; // text.length + 1
+        if (localOffset < textPositions || !this.children.length) {
+            return { block: this, offset: Math.min(localOffset, this.behavior.text.length) };
+        }
+        let remaining = localOffset - textPositions;
+        for (const child of this.children) {
+            const childPositions = child.positions ?? 0;
+            if (remaining < childPositions) return child.resolveOffset(remaining);
+            remaining -= childPositions;
+        }
+        return { block: this, offset: this.behavior.text.length };
+    }
 
     sublist = $derived(this.children.find(child => child.node.data.get("type") === "list"));
 

@@ -27,10 +27,15 @@
     if (active) {
       if (engine) engine.debugging = true;
       window.nabu = engine;
+      console.log('[nabu] Debug mode enabled. Access the editor instance via window.nabu');
+      return true;
     } else {
       if (engine) engine.debugging = false;
       delete window.nabu;
+      console.log('[nabu] Debug mode disabled. window.nabu removed');
     }
+
+    return false;
   }
 
   $effect(() => {

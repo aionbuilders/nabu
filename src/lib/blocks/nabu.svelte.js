@@ -124,6 +124,12 @@ export class Nabu {
             }
         }
         
+        // this.doc.subscribe((event) => {
+        //     // event.events contient un tableau listant TOUTES les opérations 
+        //     // (texte ajouté, nœuds déplacés, etc.) qui viennent d'être commitées.
+        //     console.log("Rapport de la transaction :", event.events);
+        // });
+
         this.tree.subscribe((event) => {
             event.events.forEach(e => {
                 if (e.diff.type === "tree") {
@@ -207,6 +213,8 @@ export class Nabu {
 
     /** @type {Block[]} */
     children = $state([]);
+
+    positions = $derived(this.children.reduce((sum, child) => sum + (child.positions ?? 0), 0));
     
     get isEmpty() {
         return this.children.length === 0;
@@ -296,18 +304,25 @@ export class Nabu {
 
 
 
-    /** @param {{from: {offset: number, block: Block}, to: {offset: number, block: Block}}} [options={}]  */
+    /** @param {{from: {offset: number, block: Block}, to: {offset: number, block: Block}, offset?: number}} [options={}]  */
     focus(options) {
         tick().then(() => {
             const sel = this.selection;
-            const fromBlock = options?.from?.block || sel.anchorBlock;
-            const toBlock = options?.to?.block || sel.focusBlock;
-            const fromOffset = options?.from?.offset ?? sel.startOffset ?? 0;
-            const toOffset = options?.to?.offset ?? sel.endOffset ?? 0;
+
+            const {offset: fromOffset, block: fromBlock} = options?.from?.block ? 
+            {offset: options?.from?.offset ?? sel.startOffset ?? 0, block: options?.from?.block} :
+            this.resolveDocumentOffset(options?.offset ?? options?.from?.offset ?? sel.startOffset ?? 0) || {offset: sel.startOffset ?? 0, block: sel.anchorBlock};
+
+            const {offset: toOffset, block: toBlock} = options?.to?.block ? 
+            {offset: options?.to?.offset ?? sel.endOffset ?? 0, block: options?.to?.block} :
+            this.resolveDocumentOffset(options?.offset ?? options?.to?.offset ?? sel.endOffset ?? 0) || {offset: sel.endOffset ?? 0, block: sel.focusBlock};
+            
+            console.log('Focusing from', fromBlock, 'offset', fromOffset, 'to', toBlock, 'offset', toOffset);
 
             if (fromBlock && toBlock) {
                 const fromPoint = fromBlock.getDOMPoint(fromOffset);
                 const toPoint = toBlock.getDOMPoint(toOffset);
+                console.log('Resolved DOM points:', fromPoint, toPoint);
                 if (fromPoint && toPoint) this.selection.setBaseAndExtent(fromPoint.node, fromPoint.offset, toPoint.node, toPoint.offset);
             }
         })
@@ -590,8 +605,20 @@ export class Nabu {
 
         // ── Inline: single flat block ─────────────────────────────────────────
         if (blocks.length === 1 && !blocks[0].children?.length) {
-            const delta = blocks[0].delta || [];
+            const pb = blocks[0];
+            const delta = pb.delta || [];
             const len = delta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
+
+            // If the pasted block has a different type (e.g. heading pasted into paragraph),
+            // transform the anchor block in the same transaction before applying the delta.
+            if (pb.type !== anchorBlock.type) {
+                const data = /** @type {any} */ (anchorBlock.node.data);
+                data.set('type', pb.type);
+                for (const [key, value] of Object.entries(pb.props || {})) {
+                    data.set(key, value);
+                }
+            }
+
             textBehavior.applyDelta([{ retain: offset }, ...delta]);
             this.commit();
             tick().then(() => this.selection.setCursor(anchorBlock, offset + len));
@@ -726,6 +753,19 @@ export class Nabu {
         for (const child of pb.children || []) {
             this.#createInContainer(child, block.node.id.toString());
         }
+    }
+
+    /** @param {number} globalOffset */
+    resolveDocumentOffset(globalOffset) {
+        let remaining = globalOffset;
+        for (const block of this.children) {
+            const blockPositions = block.positions ?? 0;
+            if (remaining < blockPositions) return block.resolveOffset(remaining);
+            remaining -= blockPositions;
+        }
+        // Fallback: clamp to end of last root block
+        const last = this.children[this.children.length - 1];
+        return last ? last.resolveOffset(Math.max(0, (last.positions ?? 1) - 1)) : null;
     }
 
     /** @param  {...any} args */

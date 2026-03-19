@@ -79,6 +79,8 @@ export class TextBehavior {
     
     selection = $derived(this.block.element && this.block.nabu.selection && this.getSelection(this.block.element, this.block.nabu.selection));
     
+    positions = $derived(this.text.length + 1);
+    
     /**
     * @param {HTMLElement} element 
     * @param {NabuSelection} globalSelection 

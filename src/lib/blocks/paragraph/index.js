@@ -18,7 +18,23 @@ const ParagraphExtension = extension("paragraph", {
                 nabu.insert("paragraph", {
                     text: ""
                 });
-                
+
+            }
+        },
+        /** @param {Nabu} nabu */
+        onBeforeTransaction: (nabu) => {
+            const roots = nabu.tree.roots();
+            roots.forEach(root => {
+                const type = root.data.get("type");
+                console.log('Root block type:', type);
+                root.children()?.forEach(child => {
+                    const childType = child.data.get("type");
+                    console.log('Child block type:', childType);
+                });
+            })
+            if (roots.length === 0) {
+                console.log('Document is empty, inserting initial paragraph block.');
+                nabu.insert("paragraph", { text: "" });
             }
         },
         /** @param {Nabu} nabu @param {Paragraph} block @param {Event} event @param {{offset: number, delta: import('loro-crdt').Delta<string>}} data */

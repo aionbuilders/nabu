@@ -45,6 +45,19 @@ export class Block {
     /** @type {{from: number, to: number, direction: "forward" | "backward" | "none"} | null} */
     selection = $derived(null);
 
+    positions = $derived(0);
+
+    /**
+     * Resolve a document-local offset to { block, offset } within this block.
+     * Leaf blocks with text return themselves directly.
+     * Override in MegaBlock (pure containers) and mixed blocks (e.g. ListItem).
+     * @param {number} localOffset
+     * @returns {{ block: Block, offset: number } | null}
+     */
+    resolveOffset(localOffset) {
+        return { block: this, offset: localOffset };
+    }
+
     /** @type {MegaBlock | null} */
     parent = $state(null);
     index = $state(0);

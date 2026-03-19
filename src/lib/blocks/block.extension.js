@@ -12,6 +12,7 @@ import { Extension } from '../utils/extensions.js';
  * @param {Object} [props={}]
  */
 function transformBlock(nabu, type, props = {}) {
+    console.log(`Transforming block to type "${type}" with props`, props);
     const block = nabu.selection.anchorBlock;
     if (!block) return;
     const blockId = block.id;

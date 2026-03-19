@@ -54,7 +54,8 @@ export class Heading extends Block {
     }
 
     selection = $derived(this.behavior.selection);
-
+    positions = $derived(this.behavior.positions);
+    
     /** @param {InputEvent} event */
     beforeinput(event) {
         return this.behavior.handleBeforeInput(event);

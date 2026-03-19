@@ -3,6 +3,9 @@
  * @import { Nabu } from './nabu.svelte.js';
  */
 
+import { start } from 'happy-dom/lib/PropertySymbol.js';
+import { MegaBlock } from './megablock.svelte.js';
+
 /**
  * Walks up from `block` toward `container` and returns the direct child of
  * `container` that is (or contains) `block`.
@@ -125,6 +128,8 @@ export function handleContainerBeforeInput(container, nabu, event) {
     const focusData = startBlock.focus(undefined, true);
     const inputType = event.inputType;
 
+    const toDestroy = new Set();
+
     // Build start spine: walk from startBlock up to (but not past) container,
     // pruning next-siblings of each intermediate node along the way.
     const startSpine = [startBlock];
@@ -135,7 +140,7 @@ export function handleContainerBeforeInput(container, nabu, event) {
         startSpine.push(parent);
         if (parent !== container) {
             const nextSiblings = parent.children.slice(current.index + 1);
-            if (nextSiblings.length) nextSiblings.forEach(block => block.destroy());
+            if (nextSiblings.length) nextSiblings.forEach(block => toDestroy.add(block));
         }
     }
 
@@ -149,7 +154,7 @@ export function handleContainerBeforeInput(container, nabu, event) {
         endSpine.push(parent);
         if (parent !== container) {
             const previousSiblings = parent.children.slice(0, current.index);
-            if (previousSiblings.length) previousSiblings.forEach(block => block.destroy());
+            if (previousSiblings.length) previousSiblings.forEach(block => toDestroy.add(block));
         }
     }
 
@@ -161,7 +166,7 @@ export function handleContainerBeforeInput(container, nabu, event) {
 
     // Delete intermediate direct children of container between the two spines.
     const intermediates = container.children.slice(startOfStartSpine.index + 1, startOfEndSpine.index);
-    intermediates.forEach(block => block.destroy());
+    intermediates.forEach(block => toDestroy.add(block));
 
     // Single-block selection: delegate directly to that block.
     if (startBlock === endBlock) {
@@ -208,7 +213,20 @@ export function handleContainerBeforeInput(container, nabu, event) {
         }
     });
 
-    startOfEndSpine?.destroy();
+    if (startOfEndSpine === startOfStartSpine) {
+        if (startOfStartSpine instanceof MegaBlock) {
+            startOfStartSpine.children.filter(c => c.selected).forEach(c => toDestroy.add(c));
+        }
+    }
+    
+    if (startOfEndSpine !== startOfStartSpine) {
+        startOfEndSpine?.destroy();
+        if (startOfStartSpine !== startBlock && startBlock instanceof MegaBlock) {
+            startBlock.children.forEach(child => child.destroy());
+        }
+    }
+
+    toDestroy.forEach(block => block.destroy());
 
     container.commit();
     startBlock.focus({

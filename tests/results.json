@@ -1,0 +1,150 @@
+{
+  "config": {
+    "configFile": "/home/killiandvcz/workspace/@aionbuilders/nabu/playwright.config.js",
+    "rootDir": "/home/killiandvcz/workspace/@aionbuilders/nabu",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/home/killiandvcz/workspace/@aionbuilders/nabu/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "core",
+        "name": "core",
+        "testDir": "/home/killiandvcz/workspace/@aionbuilders/nabu/tests/e2e",
+        "testIgnore": [
+          "**/flaky/**"
+        ],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 8000
+      },
+      {
+        "outputDir": "/home/killiandvcz/workspace/@aionbuilders/nabu/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "flaky",
+        "name": "flaky",
+        "testDir": "/home/killiandvcz/workspace/@aionbuilders/nabu/tests/e2e/flaky",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 15000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        {
+          "printSteps": true
+        }
+      ],
+      [
+        "json",
+        {
+          "outputFile": "tests/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "3way",
+    "version": "1.58.2",
+    "workers": 12,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "tests/e2e/paste.spec.ts",
+      "file": "tests/e2e/paste.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Paste",
+          "file": "tests/e2e/paste.spec.ts",
+          "line": 14,
+          "column": 6,
+          "specs": [
+            {
+              "title": "P1 · paste markdown heading creates heading block",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 8000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "core",
+                  "projectName": "core",
+                  "results": [
+                    {
+                      "workerIndex": 95,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1543,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "Navigating to editor page...\n"
+                        },
+                        {
+                          "text": "Waiting for editor to initialize...\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-20T18:48:49.172Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "6dfa65a39406df7dc79e-64aa8bc4f6fe162a2235",
+              "file": "tests/e2e/paste.spec.ts",
+              "line": 59,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-20T18:48:45.704Z",
+    "duration": 5306.88599999994,
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

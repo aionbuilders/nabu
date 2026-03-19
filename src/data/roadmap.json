@@ -1,6 +1,6 @@
 {
   "version": "0.1.0-alpha",
-  "updated": "2026-03-18",
+  "updated": "2026-03-21",
   "milestones": [
     {
       "id": "core-engine",
@@ -249,7 +249,8 @@
         {
           "id": "e2e-tests",
           "text": "E2E test suite covering structural editing, rich text marks, undo/redo, and clipboard round-trips",
-          "status": "planned"
+          "status": "in-progress",
+          "note": "Playwright e2e suite (typing, marks, paste, structure, transforms, lists, undo, copy, dialogue, persistence, serialize, edge-cases) and Vitest unit tests added. Pass rate under active validation."
         }
       ]
     }

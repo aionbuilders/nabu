@@ -5,22 +5,23 @@ import { ListExtension, ListItemExtension } from './blocks/list/index.js';
 import { DialogueExtension } from './blocks/dialogue/index.js';
 import { RichTextExtension } from './behaviors/text/index.js';
 import { PlainTextPasteExtension, NabuPasteExtension, HtmlPasteExtension, MarkdownPasteExtension } from './paste/index.js';
+import { BlockExtension } from './blocks/block.extension.js';
 
 // ---------------------------------------------------------------------------
 // Presets — composable extension arrays
 // ---------------------------------------------------------------------------
 
 /** Paragraph only. The simplest possible editor. */
-export const MinimalPreset = [ParagraphExtension, PlainTextPasteExtension, HtmlPasteExtension, NabuPasteExtension];
+export const MinimalPreset = [ParagraphExtension, PlainTextPasteExtension, HtmlPasteExtension, NabuPasteExtension, BlockExtension];
 
 /** Paragraph + rich text marks (bold, italic, underline, code, strikethrough). */
-export const TextPreset = [ParagraphExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, NabuPasteExtension];
+export const TextPreset = [ParagraphExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, NabuPasteExtension, MarkdownPasteExtension, BlockExtension];
 
 /** Paragraph + headings + rich text. Document-like, no lists. */
-export const DocumentPreset = [ParagraphExtension, HeadingExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension];
+export const DocumentPreset = [ParagraphExtension, HeadingExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension];
 
 /** All built-in block types + rich text. */
-export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension];
+export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension];
 
 // ---------------------------------------------------------------------------
 // Factory — generic createEditor

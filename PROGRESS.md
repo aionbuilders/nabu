@@ -45,12 +45,12 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - [x] **2.4.2** Raccourcis Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z
 - [x] **2.4.3** Restauration automatique du curseur via callbacks `onPush`/`onPop`
 
-### 2.5 Rich Text & Marks (Inline Formatting) ✅ infra / ⬜ UX
+### 2.5 Rich Text & Marks (Inline Formatting) ✅
 - [x] **2.5.1** `applyMark`, `removeMark`, `toggleMark`, `isMarkActive` sur `TextBehavior`
 - [x] **2.5.2** Rendu des spans via `RichText.svelte` : bold, italic, underline, code, strikethrough
 - [x] **2.5.3** `RichTextExtension` : Ctrl+B/I/U/E + Ctrl+Shift+X
 - [x] **2.5.4** **Comportement global de toggle** : si la mark est entièrement active sur toute la sélection → retrait global ; sinon → application globale. Fonctionne sur sélection multi-blocs. (ADR 009)
-- [ ] **2.5.5** Toolbar visuelle flottante (appliquer marks via click)
+- [x] **2.5.5** Toolbar statique dans le playground : undo/redo, types de blocs (P, H1–H4), marks (B/I/U/S/code), indent/unindent conditionnel — états actifs dérivés directement via `behavior.delta` ($state) sans `isMarkActive()`
 - [ ] **2.5.6** Support des liens (`<a>` avec `href`) — marks Loro déjà compatibles
 - [ ] **2.5.7** Raccourcis Markdown inline (`**texte**` → gras, `_texte_` → italique)
 
@@ -85,10 +85,19 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 - [x] **2.8.7** `ListItemExtension` : actions `list:indent` / `list:unindent` (logique extraite de `keydown()`)
 - [x] **2.8.8** Core actions `undo` / `redo` toujours disponibles (enregistrées directement sur `#pulse`)
 
-### 2.9 Bugs & Améliorations — EN COURS ⚠️
+### 2.9 Système `positions` & `resolveDocumentOffset` ✅
+- [x] **2.9.1** `positions: number` dérivé sur chaque type de bloc : `Block` (0), `MegaBlock` (somme enfants), `ListItem` (text + enfants), `TextBehavior` (`text.length + 1`)
+- [x] **2.9.2** `resolveOffset(localOffset)` polymorphique : `Block` retourne `{block, offset}`, `MegaBlock` itère les enfants, `ListItem` vérifie d'abord la plage texte puis les enfants
+- [x] **2.9.3** `Nabu.resolveDocumentOffset(globalOffset)` : itère les root blocks via `block.positions`, délègue à `block.resolveOffset()` — Nabu reste aveugle aux internals des blocs
+- [x] **2.9.4** `Nabu.focus()` sans bloc explicite utilise `resolveDocumentOffset` pour un focus par offset absolu dans le document
+
+### 2.10 Bugs & Améliorations — EN COURS ⚠️
 - [ ] **Bug Merging ListItem** : fusion de deux items de liste peut perdre les enfants (sous-listes) du second item — `adoptChildren` dans MegaBlock a un `if (false)` TODO non implémenté
 - [ ] **Multi-block `insertParagraph`** dans structures très imbriquées — à stress-tester
 - [ ] **`setTimeout` vs `tick()`** : quelques points utilisent `setTimeout(..., 0)` au lieu de `tick().then()` — timing-dépendant
+- [x] **Fix paste heading** : `insertFragment` fast path pour un seul bloc plat transforme désormais le type du bloc ancre avant d'appliquer le delta — heading collé dans un paragraph crée bien un heading
+- [x] **Empty-editor guard** : `ParagraphExtension.onBeforeTransaction` inspecte `nabu.tree.roots()` (état Loro live, pré-commit) — si vide, insère un paragraph dans la même transaction atomique. Prévient l'éditeur vide après Ctrl+A + Backspace
+- [ ] **`handleContainerBeforeInput` — refactoring en cours** : introduction du Set `toDestroy` (destruction différée), garde contre `startOfEndSpine === startOfStartSpine`. Racine du bug : `anchorBlock` peut résoudre sur la `<ul>` (List) au lieu du premier ListItem quand le browser place le curseur au niveau élément — cause LCA incorrecte → mauvais container → endSpine détruit des blocs du startSpine
 
 ---
 
@@ -157,9 +166,9 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
 
 ---
 
-## 📊 ÉTAT ACTUEL — 18 Mars 2026
+## 📊 ÉTAT ACTUEL — 21 Mars 2026
 
-### Progression globale : **97% vers MVP Bêta**
+### Progression globale : **~99% vers MVP Bêta**
 
 #### ✅ Points forts
 - Architecture Single CE + Loro-CRDT + Extension System : solide
@@ -177,18 +186,21 @@ Détail des cas limites : voir `PROGRESS_LISTS.md`
   - Round-trip interne fidèle (marks, types, listes imbriquées)
   - Paste HTML décentralisé : Notion ✅, Google Docs ✅ (texte + marks), Word ⚠️ (texte seulement)
   - Paste Markdown : pipeline consume-based, inline marks récursif
-
-#### 🔴 Bloquant MVP
-1. **Toolbar visuelle** — infrastructure exec prête, manque l'UI Svelte + `nabu.isMarkActive()` pour les états actifs des boutons
+  - Fix : paste d'un heading dans un paragraph transforme bien le type
+- **Toolbar playground : undo/redo, types P/H1–H4, marks B/I/U/S/code, indent/unindent conditionnel**
+- **`positions` system + `resolveDocumentOffset` : focus par offset absolu dans le document**
+- **Empty-editor guard : `onBeforeTransaction` dans ParagraphExtension via Loro tree live**
+- **Suite de tests E2E Playwright + tests unitaires Vitest** : typing, marks, paste, structure, transforms, lists, undo, copy, dialogue, persistence, serialize, edge-cases
 
 #### 🟡 Important mais non bloquant
+- `handleContainerBeforeInput` : edge cases Ctrl+A sur liste — refactoring `toDestroy` en cours, racine du bug identifiée (résolution `anchorBlock` vers container au lieu de feuille)
 - Stress-test des edge cases multi-blocs imbriqués profonds
 
 #### ⬜ Nice-to-have
 - Menu slash
 - Drag handles
+- Toolbar flottante sur sélection
 - Markdown inline shortcuts
-- Tests E2E
 
 ---
 
