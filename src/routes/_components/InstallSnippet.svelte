@@ -2,7 +2,7 @@
   let copied = $state(false);
   let timeout;
 
-  const command = 'npm install @aionbuilders/nabu';
+  const command = 'npm install @aionbuilders/nabu@alpha';
 
   function handleCopy() {
     if (typeof navigator === 'undefined') return;
