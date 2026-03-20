@@ -216,6 +216,62 @@
       ]
     },
     {
+      "id": "native-blocks",
+      "label": "Native Block Library",
+      "status": "planned",
+      "description": "Official built-in block types beyond the writing core. The extension system already allows anyone to ship custom blocks — this milestone adds the curated set that ships with Nabu out of the box. Writing-focused blocks come first; Notion-like structural blocks follow once the architecture has been validated against non-textual content.",
+      "tasks": [
+        {
+          "id": "blockquote",
+          "text": "Blockquote: simple TextBehavior leaf with distinct styling; Markdown shortcut '> ' and serialization",
+          "status": "planned",
+          "priority": "high"
+        },
+        {
+          "id": "divider",
+          "text": "Divider (<hr>): first non-textual block — no TextBehavior, no beforeinput handling. Validates that the engine makes no assumption that all blocks have text. Inserted via slash menu or '---' shortcut.",
+          "status": "planned",
+          "priority": "high"
+        },
+        {
+          "id": "code-block",
+          "text": "Code block: multi-line, monospace, Tab inserts spaces (not indent), no markdown shortcuts inside, optional language tag stored as Loro metadata. Serialized as fenced code block in Markdown.",
+          "status": "planned",
+          "priority": "high"
+        },
+        {
+          "id": "callout",
+          "text": "Callout: styled block with an icon/type indicator (info, warning, tip) stored as Loro metadata + TextBehavior content. Close to DialogueBlock in architecture.",
+          "status": "planned",
+          "priority": "medium"
+        },
+        {
+          "id": "image",
+          "text": "Image: non-textual block with src/alt/caption stored as Loro metadata. First block requiring a file upload or URL input flow rather than keyboard input.",
+          "status": "planned",
+          "priority": "medium"
+        },
+        {
+          "id": "toggle",
+          "text": "Toggle / Collapsible: MegaBlock with a focusable header (TextBehavior) and a collapsible body (children). Collapsed state stored as Loro metadata, not in the CRDT tree.",
+          "status": "planned",
+          "priority": "medium"
+        },
+        {
+          "id": "table",
+          "text": "Table: 2D structure requiring a new abstraction beyond MegaBlock (rows × cells). Likely needs its own selection model and a dedicated ADR before implementation.",
+          "status": "planned",
+          "priority": "low"
+        },
+        {
+          "id": "embed",
+          "text": "Embed: iframe wrapper for external URLs (YouTube, Figma, etc.); URL stored as Loro metadata, rendered as sandboxed iframe with aspect-ratio container.",
+          "status": "planned",
+          "priority": "low"
+        }
+      ]
+    },
+    {
       "id": "rc",
       "label": "Release Candidate",
       "status": "planned",
