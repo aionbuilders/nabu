@@ -22,7 +22,16 @@
   function taskProgress(milestone) {
     const done  = milestone.tasks.filter(t => t.status === 'done').length;
     const total = milestone.tasks.length;
-    return { done, total, complete: done === total };
+    return { done, total, pct: total ? Math.round((done / total) * 100) : 0, complete: done === total };
+  }
+
+  const statusOrder = { 'in-progress': 0, 'buggy': 1, 'planned': 2, 'done': 3 };
+
+  /** @param {{ tasks: { status: string }[] }} milestone */
+  function sortedTasks(milestone) {
+    return [...milestone.tasks].sort((a, b) =>
+      (statusOrder[a.status] ?? 2) - (statusOrder[b.status] ?? 2)
+    );
   }
 </script>
 
@@ -51,15 +60,34 @@
         <span class="expand-arrow" class:expanded={isExpanded}>›</span>
       </button>
 
+      <div class="progress-bar-track">
+        <div
+          class="progress-bar-fill {meta.cls}"
+          style="width: {progress.pct}%"
+        ></div>
+      </div>
+
       <div class="task-list" class:expanded={isExpanded} aria-hidden={!isExpanded}>
         <div class="task-list-inner">
           <div class="task-list-content">
             <p class="milestone-desc">{milestone.description}</p>
             <ul class="tasks">
-              {#each milestone.tasks as task (task.id)}
+              {#each sortedTasks(milestone) as task (task.id)}
                 <li class="task" data-status={task.status}>
-                  <span class="task-dot" data-status={task.status}></span>
-                  <span class="task-text">{task.text}</span>
+                  <span class="task-indicator" data-status={task.status}>
+                    {#if task.status === 'done'}✓{/if}
+                  </span>
+                  <span class="task-body">
+                    <span class="task-header">
+                      <span class="task-text">{task.text}</span>
+                      {#if task.priority}
+                        <span class="task-priority" data-priority={task.priority}>{task.priority}</span>
+                      {/if}
+                    </span>
+                    {#if task.note}
+                      <span class="task-note">{task.note}</span>
+                    {/if}
+                  </span>
                 </li>
               {/each}
             </ul>
@@ -189,6 +217,39 @@
     transform: rotate(90deg);
   }
 
+  /* ── Progress bar ─────────────────────────────────────── */
+
+  .progress-bar-track {
+    height: 2px;
+    background: var(--color-border);
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    transition: width 400ms ease;
+  }
+
+  .progress-bar-fill.done {
+    background: var(--color-success);
+    opacity: 0.6;
+  }
+
+  .progress-bar-fill.in-progress {
+    background: var(--color-warning);
+    opacity: 0.7;
+  }
+
+  .progress-bar-fill.buggy {
+    background: var(--color-warning);
+    opacity: 0.4;
+  }
+
+  .progress-bar-fill.planned {
+    background: var(--color-text-faint);
+    opacity: 0.3;
+  }
+
   /* ── Task list (animated height) ─────────────────────── */
 
   .task-list {
@@ -239,33 +300,98 @@
     padding: 4px 0;
   }
 
-  .task-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
+  /* ── Task indicator (dot or checkmark) ──────────────── */
+
+  .task-indicator {
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
-    margin-top: 5px;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 50%;
   }
 
-  .task-dot[data-status='done'] {
-    background: var(--color-success);
-    opacity: 0.75;
+  .task-indicator[data-status='done'] {
+    background: color-mix(in srgb, var(--color-success) 15%, transparent);
+    color: var(--color-success);
   }
 
-  .task-dot[data-status='in-progress'] {
+  .task-indicator[data-status='in-progress'] {
+    width: 6px;
+    height: 6px;
+    margin: 4px 4px 0;
     background: var(--color-warning);
+    border-radius: 50%;
     animation: pulse-dot 2s ease-in-out infinite;
   }
 
-  .task-dot[data-status='planned'],
-  .task-dot {
+  .task-indicator[data-status='planned'],
+  .task-indicator {
+    width: 5px;
+    height: 5px;
+    margin: 5px 4.5px 0;
     background: transparent;
     border: 1px solid var(--color-text-faint);
+    border-radius: 50%;
+  }
+
+  /* ── Task body (text + note) ─────────────────────────── */
+
+  .task-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .task-header {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 
   .task-text {
     font-size: 11px;
     line-height: 1.55;
+  }
+
+  .task-priority {
+    font-size: 9px;
+    font-family: ui-monospace, 'Cascadia Code', Menlo, monospace;
+    letter-spacing: 0.03em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    line-height: 1.6;
+  }
+
+  .task-priority[data-priority='high'] {
+    background: color-mix(in srgb, var(--color-accent, #6366f1) 12%, transparent);
+    color: var(--color-accent, #6366f1);
+  }
+
+  .task-priority[data-priority='medium'] {
+    background: color-mix(in srgb, var(--color-text-faint) 12%, transparent);
+    color: var(--color-text-muted);
+  }
+
+  .task-priority[data-priority='low'] {
+    background: transparent;
+    color: var(--color-text-faint);
+    border: 1px solid var(--color-border);
+  }
+
+  .task-note {
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--color-text-faint);
+    font-style: italic;
   }
 
   .task[data-status='done'] .task-text {
