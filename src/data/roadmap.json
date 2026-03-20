@@ -218,9 +218,33 @@
     {
       "id": "native-blocks",
       "label": "Native Block Library",
-      "status": "planned",
+      "status": "in-progress",
       "description": "Official built-in block types beyond the writing core. The extension system already allows anyone to ship custom blocks — this milestone adds the curated set that ships with Nabu out of the box. Writing-focused blocks come first; Notion-like structural blocks follow once the architecture has been validated against non-textual content.",
       "tasks": [
+        {
+          "id": "paragraph",
+          "text": "Paragraph: TextBehavior leaf, the default block type. LoroText container, full inline marks, split on Enter, merge on Backspace, getDOMPoint for cursor placement.",
+          "status": "done",
+          "priority": "high"
+        },
+        {
+          "id": "heading",
+          "text": "Heading (H1–H6): TextBehavior leaf with a level stored as Loro metadata. Shares split/merge/mark logic with Paragraph via TextBehavior. Level changeable via block:transform action.",
+          "status": "done",
+          "priority": "high"
+        },
+        {
+          "id": "list",
+          "text": "List + ListItem: MegaBlock container holding ListItem children. Bullet and ordered variants. Arbitrary nesting via LoroTree parent-child. Tab/Shift-Tab indentation. Backspace merge with adoptChildren() to relocate sublists.",
+          "status": "done",
+          "priority": "high"
+        },
+        {
+          "id": "dialogue",
+          "text": "DialogueBlock: TextBehavior leaf styled for screenplay/chat dialogue. Architecturally identical to Paragraph with distinct rendering. Served as the proof-of-concept for custom block types.",
+          "status": "done",
+          "priority": "medium"
+        },
         {
           "id": "blockquote",
           "text": "Blockquote: simple TextBehavior leaf with distinct styling; Markdown shortcut '> ' and serialization",
