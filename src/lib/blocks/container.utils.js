@@ -3,7 +3,6 @@
  * @import { Nabu } from './nabu.svelte.js';
  */
 
-import { start } from 'happy-dom/lib/PropertySymbol.js';
 import { MegaBlock } from './megablock.svelte.js';
 
 /**
