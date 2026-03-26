@@ -1,4 +1,6 @@
 <script>
+  import { dev } from '$app/environment';
+
   // Update once the domain is confirmed
   const SITE_URL = 'https://nabu.aion.builders';
   const TITLE = 'Nabu — Modular block editor engine for Svelte 5';
@@ -58,6 +60,12 @@
 
   <!-- JSON-LD -->
   {@html `<script type="application/ld+json">${jsonLd}<` + `/script>`}
+
+  <!-- Plausible Analytics (production only) -->
+  {#if !dev}
+    <script async src="https://plausible.io/js/pa-FXhGAcvagGM3pf-uN0Xmj.js"></script>
+    {@html `<script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()<` + `/script>`}
+  {/if}
 </svelte:head>
 
 {@render children()}
