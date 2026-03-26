@@ -1,5 +1,5 @@
 // Update SITE_URL once the domain is confirmed
-const SITE_URL = 'https://nabu.aionbuilders.dev';
+const SITE_URL = 'https://nabu.aion.builders';
 
 export function GET() {
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>

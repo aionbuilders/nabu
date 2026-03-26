@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 
 # Replace with your final domain
-Sitemap: https://nabu.aionbuilders.dev/sitemap.xml
+Sitemap: https://nabu.aion.builders/sitemap.xml
