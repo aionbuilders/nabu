@@ -63,7 +63,8 @@
 
   <!-- Plausible Analytics (production only) -->
   {#if !dev}
-    <script defer data-domain="nabu.aion.builders" src="https://plausible.io/js/script.js"></script>
+    <script async src="https://plausible.io/js/pa-FXhGAcvagGM3pf-uN0Xmj.js"></script>
+    {@html `<script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()<` + `/script>`}
   {/if}
 </svelte:head>
 
