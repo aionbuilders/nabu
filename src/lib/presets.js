@@ -6,6 +6,7 @@ import { DialogueExtension } from './blocks/dialogue/index.js';
 import { RichTextExtension } from './behaviors/text/index.js';
 import { PlainTextPasteExtension, NabuPasteExtension, HtmlPasteExtension, MarkdownPasteExtension } from './paste/index.js';
 import { BlockExtension } from './blocks/block.extension.js';
+import { ZoneExtension } from './blocks/zone/zone.extension.js';
 
 // ---------------------------------------------------------------------------
 // Presets — composable extension arrays
@@ -21,7 +22,7 @@ export const TextPreset = [ParagraphExtension, RichTextExtension, PlainTextPaste
 export const DocumentPreset = [ParagraphExtension, HeadingExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension];
 
 /** All built-in block types + rich text. */
-export const FullPreset = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension];
+export const FullPreset =     [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, DialogueExtension, ZoneExtension, RichTextExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension];
 
 // ---------------------------------------------------------------------------
 // Factory — generic createEditor

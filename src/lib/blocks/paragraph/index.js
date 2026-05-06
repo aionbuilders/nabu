@@ -11,6 +11,14 @@ const ParagraphExtension = extension("paragraph", {
     component: ParagraphComponent,
     actions: {
         'paragraph': (nabu) => nabu.exec('block:transform', { type: 'paragraph' }),
+        'gap:click': (nabu, data) => {
+            const { parentId = null, insertIndex = undefined } = data ?? {};
+            const newBlock = nabu.insert('paragraph', {}, parentId, insertIndex);
+            nabu.commit().then(() => {
+                const fresh = nabu.blocks.get(newBlock.id);
+                if (fresh) nabu.selection.setCursor(fresh, 0);
+            });
+        },
     },
     hooks: {
         onInit: (nabu) => {

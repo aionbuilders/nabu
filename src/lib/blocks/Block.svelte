@@ -1,4 +1,6 @@
 <script>
+    import BlockGap from './BlockGap.svelte';
+
     /** @type {{ block: import('./block.svelte.js').Block }} */
     let { block } = $props();
 
@@ -8,11 +10,9 @@
 </script>
 
 {#if Component}
-    <!-- On passe l'instance du bloc au composant spécifique -->
     <Component {block} />
 {:else}
-    <!-- Fallback pour les types inconnus (utile en dev) -->
     <div style="color: red; border: 1px dashed red; padding: 0.5rem; margin: 0.5rem 0;" contenteditable="false">
         ⚠️ Unknown block type: <strong>{block.type}</strong>
     </div>
-{/if}
+{/if}<BlockGap {block} />
