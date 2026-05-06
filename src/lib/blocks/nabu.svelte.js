@@ -461,24 +461,29 @@ export class Nabu {
         const startFrom = this.selection.start?.from ?? 0;
         const endTo     = this.selection.end?.to ?? null;
 
-        // Find the Lowest Common Ancestor of startBlock and endBlock.
-        // If LCA is a block (nested selection inside a container), serialize from that
-        // block directly — avoids creating phantom ancestor wrappers for unselected content.
-        // If LCA is null (selection spans root-level blocks), fall back to nabu-level slice.
-        const lca = findLCA(startBlock, endBlock);
-
+        // Find the root block(s) to serialize.
+        // - Same block: serialize it directly (partial 'both'). Going up to its parent
+        //   would wrap it in its container (e.g. List), producing a fragment with children
+        //   that bypasses the inline paste path on the receiving end.
+        // - Cross-block: use LCA so nested containers are serialized as a unit.
+        // - LCA is null: selection spans root-level blocks, fall back to nabu-level slice.
         /** @type {Block[]} */
         let rootBlocks;
-        if (lca) {
-            rootBlocks = [/** @type {Block} */ (/** @type {any} */ (lca))];
+        if (startBlock === endBlock) {
+            rootBlocks = [startBlock];
         } else {
-            const startRoot = findDirectChildOf(startBlock, this);
-            const endRoot   = findDirectChildOf(endBlock,   this);
-            if (!startRoot || !endRoot) return;
-            const si = this.children.indexOf(startRoot);
-            const ei = this.children.indexOf(endRoot);
-            if (si === -1 || ei === -1) return;
-            rootBlocks = this.children.slice(si, ei + 1);
+            const lca = findLCA(startBlock, endBlock);
+            if (lca) {
+                rootBlocks = [/** @type {Block} */ (/** @type {any} */ (lca))];
+            } else {
+                const startRoot = findDirectChildOf(startBlock, this);
+                const endRoot   = findDirectChildOf(endBlock,   this);
+                if (!startRoot || !endRoot) return;
+                const si = this.children.indexOf(startRoot);
+                const ei = this.children.indexOf(endRoot);
+                if (si === -1 || ei === -1) return;
+                rootBlocks = this.children.slice(si, ei + 1);
+            }
         }
 
         const lastI = rootBlocks.length - 1;
