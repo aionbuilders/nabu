@@ -609,16 +609,6 @@ export class Nabu {
             const delta = pb.delta || [];
             const len = delta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
 
-            // If the pasted block has a different type (e.g. heading pasted into paragraph),
-            // transform the anchor block in the same transaction before applying the delta.
-            if (pb.type !== anchorBlock.type) {
-                const data = /** @type {any} */ (anchorBlock.node.data);
-                data.set('type', pb.type);
-                for (const [key, value] of Object.entries(pb.props || {})) {
-                    data.set(key, value);
-                }
-            }
-
             textBehavior.applyDelta([{ retain: offset }, ...delta]);
             this.commit();
             tick().then(() => this.selection.setCursor(anchorBlock, offset + len));
