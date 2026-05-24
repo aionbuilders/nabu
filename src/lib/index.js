@@ -5,3 +5,4 @@ export * from "./utils";
 export * from './behaviors';
 export * from './presets';
 export * from './paste';
+export * from './overlays/context';

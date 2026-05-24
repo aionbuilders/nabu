@@ -8,6 +8,7 @@ node_modules
 /.svelte-kit
 /build
 /dist
+/trash
 test-results
 
 # OS
@@ -23,3 +24,4 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+

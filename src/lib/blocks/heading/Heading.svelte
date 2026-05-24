@@ -18,7 +18,7 @@
 
 <style>
     .nabu-heading {
-        margin-top: 1.5rem;
+        margin-top: 0rem;
         margin-bottom: 0.5rem;
         white-space: pre-wrap;
         outline: none;

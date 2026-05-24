@@ -187,7 +187,12 @@ export class Nabu {
     /** @type {SvelteMap<string, SvelteSet<Block>>} */
     blocksByType = new SvelteMap();
 
-    /** @type {SvelteMap<string, any>} */
+    /**
+     * Registered subsystems. Each system should implement:
+     *   - `start(): void` — called when the editor mounts
+     *   - `stop(): void`  — called when the editor unmounts
+     * @type {SvelteMap<string, { start?: () => void, stop?: () => void, [key: string]: any }>}
+     */
     systems = new SvelteMap();
     
     hooks = new Map();

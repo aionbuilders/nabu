@@ -2,6 +2,7 @@ import { Extension } from '../../utils/extensions.js';
 import { ZoneBlock } from './zone.svelte.js';
 import ZoneComponent from './Zone.svelte';
 import { findLCA, findDirectChildOf } from '../container.utils.js';
+import { onBeforeInput as zoneInsertTrigger } from './hooks/onBeforeInput.hook.js';
 
 /**
  * @import { Nabu } from '../nabu.svelte.js';
@@ -45,9 +46,9 @@ export const ZoneExtension = new Extension('zone', {
     component: ZoneComponent,
 
     hooks: {
-        onBeforeInput: zoneBackspaceGuard,
-        onZoneFocus: null,
-        onZoneBlur: null,
+        onBeforeInput: (nabu, event, block) => {
+            return zoneBackspaceGuard(nabu, event, block) ?? zoneInsertTrigger(nabu, event, block);
+        },
     },
 
     actions: {
@@ -212,9 +213,14 @@ export const ZoneExtension = new Extension('zone', {
             const zone = ZoneBlock.create(nabu, 'zone', data?.props ?? {}, parentId, insertIndex);
             toWrap.forEach((block, i) => nabu.tree.move(block.node.id, zone.node.id, i));
 
+            const zoneId = zone.id;
             nabu.commit().then(() => {
                 const fresh = nabu.blocks.get(startBlock.id);
                 if (fresh) nabu.selection.setCursor(fresh, savedOffset);
+                if (/** @type {any} */ (data)?.focusTitle) {
+                    const freshZone = /** @type {import('./zone.svelte.js').ZoneBlock | undefined} */ (nabu.blocks.get(zoneId));
+                    freshZone?.focusTitle();
+                }
             });
         },
     },

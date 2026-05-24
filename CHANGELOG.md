@@ -1,5 +1,23 @@
 # Changelog
 
+## alpha.10
+
+### Zone Word Count Logic Refactor
+- Fixed a bug where word count indexes (`Counter getIndex`) would miscalculate when zones were deleted or reordered.
+- Redesigned `Counter` scoping: `Template.getCounter` now correctly scopes counters by `parentZoneId` directly, isolating word counts natively without manual backtracking.
+- Fixed a memory leak where `Template` subscriptions to the counter would duplicate because they were not properly unsubscribing on destroy.
+- Ghost zones (zones being removed from the DOM but lingering in the block map) are now properly filtered out of index computations.
+
+### Dynamic Word Count Cap (`maxTarget`)
+- `ZoneEditor` now automatically caps a zone's word count target to its parent's capacity.
+- Implemented visual indicators for `Max: {target}` in the `ZoneEditor` UI.
+
+### Theme & UI Modularity
+- Completely migrated Nabu's design system to semantic CSS variables via a new `nabu-theme.css` file.
+- The user interface now uses `var(--nb-*)` tokens for all colors, borders, shadows, and blurs.
+- Introduced a bulletproof OS-native theme fallback: auto-switches on `@media (prefers-color-scheme: dark)`, and allows explicit developer overrides via `data-nabu-theme="dark|light"`.
+- Refactored all major UI components (`Zone.svelte`, `ZoneEditor.svelte`, `TemplateEditor.svelte`, `Context.svelte`, `ZoneTemplatesList.svelte`) to support this dynamic theming out-of-the-box.
+
 ## alpha.9
 
 ### Selection normalizer (breaking fix)

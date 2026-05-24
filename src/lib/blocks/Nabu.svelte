@@ -4,6 +4,11 @@
 
     /** @type {{ engine: Nabu }} */
     let { engine = new Nabu() } = $props();
+
+    $effect(() => {
+        engine.systems.forEach(system => system.start?.());
+        return () => engine.systems.forEach(system => system.stop?.());
+    });
 </script>
 
 <div

@@ -34,10 +34,8 @@ const ParagraphExtension = extension("paragraph", {
             const roots = nabu.tree.roots();
             roots.forEach(root => {
                 const type = root.data.get("type");
-                console.log('Root block type:', type);
                 root.children()?.forEach(child => {
                     const childType = child.data.get("type");
-                    console.log('Child block type:', childType);
                 });
             })
             if (roots.length === 0) {

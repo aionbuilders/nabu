@@ -1,4 +1,5 @@
 <script>
+  import '../lib/nabu-theme.css';
   import { dev } from '$app/environment';
 
   // Update once the domain is confirmed

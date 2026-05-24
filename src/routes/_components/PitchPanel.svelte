@@ -11,6 +11,19 @@
   const npmUrl    = 'https://www.npmjs.com/package/@aionbuilders/nabu';
 
   let setupExpanded = $state(false);
+  let theme = $state('auto'); // auto, light, dark
+
+  function toggleTheme() {
+    if (theme === 'auto') theme = 'light';
+    else if (theme === 'light') theme = 'dark';
+    else theme = 'auto';
+
+    if (theme === 'auto') {
+      document.body.removeAttribute('data-nabu-theme');
+    } else {
+      document.body.setAttribute('data-nabu-theme', theme);
+    }
+  }
 
   const viteConfigCode = `import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
@@ -78,6 +91,15 @@ export default defineConfig({
       <span class="wordmark">Nabu</span>
       <span class="version-badge">v{version}</span>
       <span class="alpha-pill">alpha</span>
+      <button onclick={toggleTheme} class="theme-toggle" aria-label="Toggle theme" title="Toggle theme">
+        {#if theme === 'auto'}
+          🌓
+        {:else if theme === 'light'}
+          ☀️
+        {:else}
+          🌙
+        {/if}
+      </button>
     </div>
     <p class="tagline">
       A modular, local-first block editor engine.<br />
@@ -239,6 +261,29 @@ export default defineConfig({
     padding: 2px 7px;
     border-radius: 999px;
     line-height: 1.5;
+  }
+
+  .theme-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: auto;
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .theme-toggle:hover {
+    background: var(--color-border);
+  }
+  
+  .theme-toggle:active {
+    transform: scale(0.92);
   }
 
   .svelte-banner {
