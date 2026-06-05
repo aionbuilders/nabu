@@ -1,5 +1,8 @@
 <script>
-    /** @import { ContextMenuSection, Context } from './context.svelte.js' */
+    /** 
+     * @typedef {import('./context.svelte.js').ContextMenuSection} ContextMenuSection 
+     * @typedef {import('./context.svelte.js').Context} Context
+     */
     import { untrack } from 'svelte';
     import { fly } from 'svelte/transition';
     import { setMenuContext } from './context.svelte.js';
