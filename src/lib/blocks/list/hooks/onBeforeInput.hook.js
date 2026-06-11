@@ -29,15 +29,25 @@ export const onBeforeInput = (nabu, event, block) => {
 
     const textBeforeCursor = behavior.text.slice(0, sel.from);
 
-    /** @type {"bullet" | "ordered" | null} */
+    /** @type {"bullet" | "ordered" | "todo" | null} */
     let listType = null;
     let prefixLength = 0;
+    /** @type {boolean | undefined} */
+    let checked = undefined;
 
     if (textBeforeCursor.match(/^-$/)) {
         listType = "bullet";
         prefixLength = 1;
     } else if (textBeforeCursor.match(/^\d+\.$/)) {
         listType = "ordered";
+        prefixLength = textBeforeCursor.length;
+    } else if (textBeforeCursor.match(/^\[\s?\]$/)) {
+        listType = "todo";
+        checked = false;
+        prefixLength = textBeforeCursor.length;
+    } else if (textBeforeCursor.match(/^\[[xX]\]$/)) {
+        listType = "todo";
+        checked = true;
         prefixLength = textBeforeCursor.length;
     }
 
@@ -58,7 +68,10 @@ export const onBeforeInput = (nabu, event, block) => {
     const list = List.create(nabu, "list", { listType }, parentId, index);
 
     // Create the ListItem inside the list with the captured content
-    const listItem = ListItem.create(nabu, "list-item", { delta }, list.node.id.toString());
+    /** @type {Record<string, any>} */
+    const itemProps = { delta };
+    if (checked !== undefined) itemProps.checked = checked;
+    const listItem = ListItem.create(nabu, "list-item", itemProps, list.node.id.toString());
 
     // Destroy the original paragraph (no commit)
     block.destroy();

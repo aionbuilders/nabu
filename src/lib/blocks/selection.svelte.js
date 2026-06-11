@@ -37,14 +37,24 @@ export class NabuSelection extends SvelteSelection {
                 const onKeydown = (e) => {
                     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                         this.#pendingDirection = 'forward';
+                        this.nabu.storedMarks = null;
                     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                         this.#pendingDirection = 'backward';
+                        this.nabu.storedMarks = null;
                     } else {
                         this.#pendingDirection = null;
+                        if (e.key === 'Home' || e.key === 'End' || e.key === 'PageUp' || e.key === 'PageDown') {
+                            this.nabu.storedMarks = null;
+                        }
                     }
                 };
+                const onMousedown = () => { this.nabu.storedMarks = null; };
                 document.addEventListener('keydown', onKeydown, true);
-                return () => document.removeEventListener('keydown', onKeydown, true);
+                document.addEventListener('mousedown', onMousedown, true);
+                return () => {
+                    document.removeEventListener('keydown', onKeydown, true);
+                    document.removeEventListener('mousedown', onMousedown, true);
+                };
             });
 
             // Normalize invalid caret/focus positions: inert elements and element-node

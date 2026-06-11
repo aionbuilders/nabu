@@ -22,6 +22,9 @@
     oncopy={(e) => engine.handleCopy(e)}
     oncut={(e) => engine.handleCut(e)}
     onpaste={(e) => engine.handlePaste(e)}
+    oncompositionstart={(e) => engine.handleCompositionStart(e)}
+    oncompositionupdate={(e) => engine.handleCompositionUpdate(e)}
+    oncompositionend={(e) => engine.handleCompositionEnd(e)}
 >
     {#each engine.children as block (block.id)}
         <Block {block} />
@@ -36,4 +39,18 @@
         white-space: pre-wrap; /* Important pour le comportement éditeur */
         word-break: break-word;
     }
+
+    /* Placeholders — blocks expose data-placeholder when empty.
+       Uses ::after (not ::before) so blocks that decorate themselves with
+       ::before (e.g. dialogue's dash) keep working. */
+    /* .nabu-editor :global([data-block-id][data-placeholder]) {
+        position: relative; /* nécessaire pour le ::after absolu */
+    /* } */
+    /* .nabu-editor :global([data-block-id][data-placeholder]:not([data-placeholder=''])::after) {
+        content: attr(data-placeholder);
+        color: var(--nb-text-placeholder, rgba(255, 255, 255, 0.25));
+        pointer-events: none;
+        position: absolute;
+        user-select: none;
+    } */
 </style>

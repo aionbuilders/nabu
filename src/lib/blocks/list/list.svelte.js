@@ -7,7 +7,7 @@ import ListComponent from "./List.svelte";
  */
 
 /**
- * @typedef {NabuNode<{type: "list", listType: "bullet" | "ordered"}>} ListNode
+ * @typedef {NabuNode<{type: "list", listType: "bullet" | "ordered" | "todo"}>} ListNode
  */
 
 
@@ -138,7 +138,8 @@ export class List extends MegaBlock {
      */
     static toHtml(pb, { recurse }) {
         const tag = pb.props?.listType === 'ordered' ? 'ol' : 'ul';
-        return `<${tag}>${(pb.children || []).map(recurse).join('')}</${tag}>`;
+        const cls = pb.props?.listType === 'todo' ? ' class="contains-task-list"' : '';
+        return `<${tag}${cls}>${(pb.children || []).map(recurse).join('')}</${tag}>`;
     }
 
     static markdownRules = [
@@ -163,13 +164,20 @@ export class List extends MegaBlock {
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromMarkdown(lines, { parseInline }) {
-        /** @typedef {{ depth: number, ordered: boolean, text: string }} ListToken */
+        /** @typedef {{ depth: number, ordered: boolean, task: boolean, checked: boolean, text: string }} ListToken */
 
         /** @type {ListToken[]} */
         const tokens = lines.flatMap(line => {
             const m = line.match(/^([ \t]*)([-*+]|\d+[.)]) +(.*)/);
             if (!m) return [];
-            return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), text: m[3] }];
+            const rawText = m[3];
+            const taskMatch = rawText.match(/^\[( |x|X)?\]\s*(.*)/);
+            if (taskMatch) {
+                const inner = taskMatch[1] ?? '';
+                const rest = taskMatch[2];
+                return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), task: true, checked: /[xX]/.test(inner), text: rest }];
+            }
+            return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), task: false, checked: false, text: rawText }];
         });
 
         if (!tokens.length) return null;
@@ -182,7 +190,10 @@ export class List extends MegaBlock {
          */
         function buildList(toks) {
             const baseDepth = Math.min(...toks.map(t => t.depth));
-            const listType = toks.find(t => t.depth === baseDepth)?.ordered ? 'ordered' : 'bullet';
+            const baseItems = toks.filter(t => t.depth === baseDepth);
+            // Task takes precedence: if ANY base-depth item is a task, list is todo
+            const hasTask = baseItems.some(t => t.task);
+            const listType = hasTask ? 'todo' : (baseItems.find(t => t.depth === baseDepth)?.ordered ? 'ordered' : 'bullet');
             /** @type {import('../../utils/extensions.js').PasteBlock[]} */
             const items = [];
             let i = 0;
@@ -200,6 +211,7 @@ export class List extends MegaBlock {
 
                 /** @type {import('../../utils/extensions.js').PasteBlock} */
                 const item = { type: 'list-item', delta: parseInline(toks[i].text), partial: false };
+                if (toks[i].task) item.props = { checked: toks[i].checked };
                 if (subToks.length) item.children = [buildList(subToks)];
 
                 items.push(item);
@@ -213,6 +225,7 @@ export class List extends MegaBlock {
     }
 
     static htmlRules = [
+        { selector: 'ul.contains-task-list', props: { listType: 'todo' }, priority: 10 },
         { selector: 'ul', props: { listType: 'bullet' } },
         { selector: 'ol', props: { listType: 'ordered' } },
     ];
@@ -226,7 +239,12 @@ export class List extends MegaBlock {
     static fromHTML(el, { parseChildren }, rule) {
         const children = parseChildren(el);
         if (!children.length) return null;
-        return { type: 'list', props: { listType: rule?.props?.listType ?? 'bullet' }, children, partial: false };
+        // Determine listType: prefer rule, but promote to 'todo' if any child has checked prop
+        let listType = rule?.props?.listType ?? 'bullet';
+        if (listType !== 'todo' && children.some(c => c.props?.checked !== undefined)) {
+            listType = 'todo';
+        }
+        return { type: 'list', props: { listType }, children, partial: false };
     }
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */

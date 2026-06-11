@@ -3,6 +3,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf, findLCA } from './container.utils.js';
+import { jsonToPasteBlocks } from '../utils/extensions.js';
 import { tick } from 'svelte';
 import { Pulse } from '@aionbuilders/pulse';
 
@@ -22,13 +23,44 @@ import { Pulse } from '@aionbuilders/pulse';
 * @typedef {Object} NabuInit
 * @property {Extension[]} [extensions]
 * @property {Uint8Array<ArrayBufferLike>} [snapshot]
+* @property {import('../files/files.svelte.js').FilesConfig} [files]
 */
+
+/**
+ * Whether the character immediately before `pos` in a text behavior carries `name`.
+ * Used to decide the toggle direction for stored marks.
+ * @param {any} behavior @param {number} pos @param {string} name
+ * @returns {boolean}
+ */
+function inheritedMarkAt(behavior, pos, name) {
+    if (pos <= 0) return false;
+    const delta = behavior.delta;
+    let offset = 0;
+    for (const op of delta) {
+        if (typeof op.insert !== 'string') continue;
+        const end = offset + op.insert.length;
+        if (pos <= end) return !!(op.attributes && op.attributes[name]);
+        offset = end;
+    }
+    return false;
+}
 
 export class Nabu {
     /** @type {Pulse} */
     #pulse = new Pulse();
     /** @type {import('../utils/extensions.js').PasteInterpreter[]} */
     #pasteInterpreters = [];
+
+    // ── IME composition state ────────────────────────────────────────────────
+    // During an active IME composition the browser mutates the DOM freely
+    // (insertCompositionText cannot be canceled). We switch to "DOM-first"
+    // for the duration of the composition and sync the result into Loro at
+    // compositionend. See issue #6.
+    #composing = false;
+    /** @type {number | null} offset modèle au début de la composition */
+    #compositionStartOffset = null;
+    /** @type {Block | null} bloc cible au début de la composition */
+    #compositionStartBlock = null;
 
     /** @param {NabuInit} init */
     constructor(init = {}) {
@@ -73,6 +105,7 @@ export class Nabu {
         });
 
         this.extensions = init.extensions || [];
+        this.fileConfig = init.files || {};
         
         if (this.extensions?.length) {
             for (const ext of this.extensions) {
@@ -102,6 +135,12 @@ export class Nabu {
                 if (ext.pasteInterpreters?.length) {
                     for (const interpreter of ext.pasteInterpreters) {
                         this.#pasteInterpreters.push(interpreter);
+                    }
+                }
+
+                if (ext.inputRules?.length) {
+                    for (const rule of ext.inputRules) {
+                        this.inputRules.push(rule);
                     }
                 }
 
@@ -197,6 +236,23 @@ export class Nabu {
     
     hooks = new Map();
 
+    /**
+     * Declarative input rules collected from extensions, tested by TextBehavior
+     * against the text before the cursor on matching beforeinput events.
+     * @type {import('../utils/extensions.js').InputRule[]}
+     */
+    inputRules = [];
+
+    /** @type {import('../files/files.svelte.js').FilesConfig} */
+    fileConfig = {};
+
+    /**
+     * Pending inline formatting for the next typed character (active marks at a
+     * collapsed cursor). null = inherit from the span at the cursor.
+     * @type {Record<string, boolean> | null}
+     */
+    storedMarks = $state(null);
+
     debugging = $state(false);
 
     /**
@@ -290,6 +346,42 @@ export class Nabu {
     }
 
     /**
+     * Run Loro mutations as a single transaction, then optionally restore the cursor.
+     * Centralizes the "mutate → commit → setCursor" dance used by most actions.
+     * @param {() => void} mutateFn  - Mutations Loro ici. Ne PAS appeler commit() dedans.
+     * @param {{ block: Block, offset: number } | null} [cursorIntent]
+     * @returns {Promise<void>}
+     */
+    async transact(mutateFn, cursorIntent = null) {
+        mutateFn();
+        await this.commit();
+        if (cursorIntent) {
+            this.selection.setCursor(cursorIntent.block, cursorIntent.offset);
+        }
+    }
+
+    /**
+     * True when every selected text run carries the given mark.
+     * Reactive: reads block.selected and the behaviors' selections/deltas,
+     * so it can be used directly in component templates (e.g. FloatingToolbar).
+     * @param {string} markName
+     * @returns {boolean}
+     */
+    isMarkActive(markName) {
+        let found = false;
+        for (const [, block] of this.blocks) {
+            if (!block.selected) continue;
+            const behavior = block.behaviors?.get('text');
+            if (!behavior || typeof behavior.isMarkActive !== 'function') continue;
+            const sel = behavior.selection;
+            if (!sel || sel.isCollapsed) continue;
+            found = true;
+            if (!behavior.isMarkActive(markName, sel)) return false;
+        }
+        return found;
+    }
+
+    /**
      * Undo the last operation
      */
     undo() {
@@ -307,6 +399,24 @@ export class Nabu {
         }
     }
 
+    /** Clear the pending stored marks. */
+    clearStoredMarks() { this.storedMarks = null; }
+
+    /**
+     * Toggle a stored mark for the next typed char (Ctrl+B etc. at a collapsed cursor).
+     * @param {string} name
+     */
+    toggleStoredMark(name) {
+        const anchor = this.selection.anchorBlock;
+        const beh = anchor?.behaviors?.get('text');
+        const sel = beh?.selection;
+        if (!beh || !sel) return;
+        let active;
+        if (this.storedMarks && name in this.storedMarks) active = this.storedMarks[name];
+        else active = inheritedMarkAt(beh, sel.from, name);
+        this.storedMarks = { ...(this.storedMarks || {}), [name]: !active };
+    }
+
 
 
     /** @param {{from: {offset: number, block: Block}, to: {offset: number, block: Block}, offset?: number}} [options={}]  */
@@ -322,12 +432,12 @@ export class Nabu {
             {offset: options?.to?.offset ?? sel.endOffset ?? 0, block: options?.to?.block} :
             this.resolveDocumentOffset(options?.offset ?? options?.to?.offset ?? sel.endOffset ?? 0) || {offset: sel.endOffset ?? 0, block: sel.focusBlock};
             
-            console.log('Focusing from', fromBlock, 'offset', fromOffset, 'to', toBlock, 'offset', toOffset);
+            this.warn('Focusing from', fromBlock, 'offset', fromOffset, 'to', toBlock, 'offset', toOffset);
 
             if (fromBlock && toBlock) {
                 const fromPoint = fromBlock.getDOMPoint(fromOffset);
                 const toPoint = toBlock.getDOMPoint(toOffset);
-                console.log('Resolved DOM points:', fromPoint, toPoint);
+                this.warn('Resolved DOM points:', fromPoint, toPoint);
                 if (fromPoint && toPoint) this.selection.setBaseAndExtent(fromPoint.node, fromPoint.offset, toPoint.node, toPoint.offset);
             }
         })
@@ -420,8 +530,76 @@ export class Nabu {
     
     /** @param {InputEvent} e */
     handleBeforeinput(e) {
+        // Ne pas interférer avec la composition IME en cours : le navigateur
+        // doit pouvoir muter librement le text node (insertCompositionText
+        // n'est de toute façon pas annulable). Sync dans Loro à compositionend.
+        if (this.#composing && (e.inputType === 'insertCompositionText' || e.inputType === 'deleteCompositionText')) {
+            return;
+        }
         e.preventDefault(); // Toujours bloquer les mutations natives
         this.dispatchEventToSelection('beforeinput', e, 'onBeforeInput');
+    }
+
+    // ── IME composition (issue #6) ───────────────────────────────────────────
+
+    /**
+     * Capture the model position at the start of an IME composition and
+     * switch to DOM-first mode for its duration.
+     * @param {CompositionEvent} e
+     */
+    handleCompositionStart(e) {
+        this.#composing = true;
+        const anchor = this.selection.anchorBlock;
+        if (!anchor) {
+            this.#compositionStartBlock = null;
+            this.#compositionStartOffset = null;
+            return;
+        }
+        const behavior = anchor.behaviors?.get('text');
+        const sel = behavior?.selection;
+        this.#compositionStartBlock = anchor;
+        this.#compositionStartOffset = sel?.from ?? 0;
+    }
+
+    /**
+     * No-op: the browser manages the DOM freely during composition.
+     * @param {CompositionEvent} e
+     */
+    handleCompositionUpdate(e) {}
+
+    /**
+     * Sync the composed text into Loro. The browser already inserted `e.data`
+     * into the DOM; committing the same text to the model lets the next render
+     * converge without duplication.
+     * @param {CompositionEvent} e
+     */
+    handleCompositionEnd(e) {
+        this.#composing = false;
+        const block = this.#compositionStartBlock;
+        const startOffset = this.#compositionStartOffset;
+        this.#compositionStartBlock = null;
+        this.#compositionStartOffset = null;
+        if (!block || startOffset === null) return;
+
+        // The block may have been destroyed/replaced during the composition
+        // (e.g. the user clicked elsewhere and a transform happened).
+        const fresh = this.blocks.get(block.id);
+        if (!fresh || fresh !== block) return;
+        // nabu.blocks can still hold a deleted block — check the Loro tree too.
+        if (block.node.isDeleted?.() || !this.tree.has(block.node.id)) return;
+
+        const behavior = block.behaviors?.get('text');
+        if (!behavior) return;
+
+        // Canceled composition (Escape) fires compositionend with e.data === ''.
+        const composedText = e.data || '';
+        if (!composedText) return;
+
+        behavior.insert(startOffset, composedText);
+        block.commit();
+        tick().then(() => {
+            this.selection.setCursor(block, startOffset + composedText.length);
+        });
     }
 
     /** @param {KeyboardEvent} e */
@@ -753,6 +931,74 @@ export class Nabu {
         for (const child of pb.children || []) {
             this.#createInContainer(child, block.node.id.toString());
         }
+    }
+
+    // DOCUMENT IMPORT
+
+    /**
+     * Replace the entire document with the given PasteFragment.
+     * Unlike insertFragment(), this does not depend on a live DOM selection:
+     * blocks are created at the root through the same registry pipeline as paste.
+     * @param {import('../utils/extensions.js').PasteFragment} fragment
+     * @returns {Promise<void>}
+     */
+    async importFragment(fragment) {
+        const { blocks } = fragment;
+        if (!blocks?.length) return;
+
+        [...this.tree.roots()].forEach(root => this.tree.delete(root.id));
+
+        for (const pb of blocks) {
+            const BlockClass = this.registry.get(pb.type) || this.registry.get('paragraph');
+            if (!BlockClass) continue;
+            const block = BlockClass.create(this, pb.type, pb.props || {});
+            const tb = block.behaviors?.get('text');
+            if (tb && pb.delta?.length) tb.applyDelta(pb.delta);
+            for (const child of pb.children || []) {
+                this.#createInContainer(child, block.node.id.toString());
+            }
+        }
+
+        await this.commit();
+    }
+
+    /**
+     * Replace the entire document with content parsed from a Markdown string.
+     * Requires MarkdownPasteExtension (or any text/plain interpreter) to be loaded.
+     * @param {string} markdown
+     * @returns {Promise<void>}
+     */
+    async importMarkdown(markdown) {
+        const interpreter = [...this.#pasteInterpreters]
+            .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+            .find(i => i.format === 'text/plain');
+        if (!interpreter) {
+            this.warn('importMarkdown: MarkdownPasteExtension not loaded');
+            return;
+        }
+
+        const fragment = interpreter.interpret(markdown, this);
+        if (!fragment) {
+            this.warn('importMarkdown: nothing to import');
+            return;
+        }
+
+        await this.importFragment(fragment);
+    }
+
+    /**
+     * Replace the entire document with a `serialize('json')` export.
+     * @param {{version?: string, blocks: any[]} | string} json
+     * @returns {Promise<void>}
+     */
+    async importJSON(json) {
+        const doc = typeof json === 'string' ? JSON.parse(json) : json;
+        const blocks = jsonToPasteBlocks(doc?.blocks || []);
+        if (!blocks.length) {
+            this.warn('importJSON: nothing to import');
+            return;
+        }
+        await this.importFragment({ blocks });
     }
 
     /** @param {number} globalOffset */

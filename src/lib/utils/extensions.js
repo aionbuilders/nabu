@@ -24,6 +24,15 @@
  */
 
 /**
+ * @typedef {Object} InputRule
+ * @property {RegExp} pattern      - Testé sur le texte AVANT le curseur (avec l'inputType "insertText")
+ * @property {string} [inputType]  - Défaut: "insertText"
+ * @property {(nabu: Nabu, block: Block, match: RegExpMatchArray, sel: {from: number, to: number, isCollapsed: boolean, data: string}) => boolean | void} handler
+ *           - `sel.data` est le texte en cours d'insertion (event.data).
+ *           - Retourne true pour BREAK. NE PAS appeler commit() dans le handler.
+ */
+
+/**
  * @typedef {{
  * onInit: function(Nabu): void,
  * onBlockCreate: function(Nabu, Block): void,
@@ -46,6 +55,9 @@
  * @property {Record<string, (nabu: Nabu) => any>} [serializers]
  * @property {Record<string, (nabu: Nabu, data: any, topic: string) => any>} [actions]
  * @property {PasteInterpreter[]} [pasteInterpreters]
+ * @property {InputRule[]} [inputRules]
+ *   Declarative text-replacement rules applied while typing (e.g. markdown
+ *   shortcuts, smart typography). Tested against the text before the cursor.
  * @property {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>} [loroTextStyles]
  *   Loro text style configuration required by this extension.
  *   Passed to `LoroDoc.configTextStyle()` during Nabu initialization so that
@@ -66,6 +78,8 @@ export class Extension {
         this.actions = init.actions || {};
         /** @type {PasteInterpreter[]} */
         this.pasteInterpreters = init.pasteInterpreters || [];
+        /** @type {InputRule[]} */
+        this.inputRules = init.inputRules || [];
         /** @type {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>} */
         this.loroTextStyles = init.loroTextStyles || {};
     }
@@ -74,3 +88,28 @@ export class Extension {
 
 /** @param {string} name @param {ExtensionInit} init */
 export const extension = (name, init) => new Extension(name, init);
+
+/**
+ * Convert a `serialize('json')` document export back into PasteBlocks.
+ * The json format stores text as Slate-like runs (`{text, ...marks}`);
+ * PasteBlocks store Loro deltas (`{insert, attributes}`).
+ * @param {Array<{type: string, props?: Record<string, any>, content?: Array<{text: string, [mark: string]: any}>, children?: any[]}>} blocks
+ * @returns {PasteBlock[]}
+ */
+export function jsonToPasteBlocks(blocks) {
+    return (blocks || []).map(b => {
+        /** @type {PasteBlock} */
+        const pb = { type: b.type, partial: false };
+        if (b.props) pb.props = b.props;
+        if (Array.isArray(b.content)) {
+            pb.delta = b.content.map(run => {
+                const { text, ...marks } = run;
+                return Object.keys(marks).length
+                    ? { insert: text, attributes: marks }
+                    : { insert: text };
+            });
+        }
+        if (Array.isArray(b.children)) pb.children = jsonToPasteBlocks(b.children);
+        return pb;
+    });
+}

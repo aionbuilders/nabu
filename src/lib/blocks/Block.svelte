@@ -1,5 +1,8 @@
 <script>
-    import BlockGap from './BlockGap.svelte';
+    // BlockGap (the hover "+" between blocks) is intentionally disabled — it
+    // injected an inert div between every block, causing cursor/selection edge
+    // cases. The component + its `gap:click` handler remain, dormant, for a
+    // possible future revisit. Re-enable by rendering <BlockGap {block} /> below.
 
     /** @type {{ block: import('./block.svelte.js').Block }} */
     let { block } = $props();
@@ -15,4 +18,4 @@
     <div style="color: red; border: 1px dashed red; padding: 0.5rem; margin: 0.5rem 0;" contenteditable="false">
         ⚠️ Unknown block type: <strong>{block.type}</strong>
     </div>
-{/if}<BlockGap {block} />
+{/if}

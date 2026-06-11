@@ -17,7 +17,9 @@
 </script>
 
 {#each segments as op}
-    {#if op.attributes && Object.values(op.attributes).some(Boolean)}
+    {#if op.attributes?.link}
+        <a href={String(op.attributes.link)} class="nabu-link {getClasses(op.attributes)}" target="_blank" rel="noopener">{op.insert}</a>
+    {:else if op.attributes && Object.values(op.attributes).some(Boolean)}
         <span class={getClasses(op.attributes)}>{op.insert}</span>
     {:else}
         {op.insert}
@@ -30,4 +32,5 @@
     :global(.nabu-underline)     { text-decoration: underline; }
     :global(.nabu-strikethrough) { text-decoration: line-through; }
     :global(.nabu-code)          { font-family: monospace; background: rgba(135, 131, 120, 0.15); border-radius: 3px; padding: 0.1em 0.3em; }
+    :global(.nabu-link)          { color: var(--nb-link, #4d9fff); text-decoration: underline; cursor: pointer; }
 </style>

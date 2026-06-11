@@ -65,6 +65,24 @@ export class Block {
     positions = $derived(0);
 
     /**
+     * Number of words contained in this block. Overridden by text blocks
+     * (own text) and containers (sum of children) so that parents can
+     * aggregate without re-traversing the whole subtree.
+     * @type {number}
+     */
+    wordCount = $derived(0);
+
+    // ── Capability flags ─────────────────────────────────────────────────────
+    // Declarative opt-outs respected centrally by the engine. Default true;
+    // override to false in a subclass (e.g. CodeBlock) to disable a behavior.
+    /** When false, Enter inserts a literal "\n" in place instead of splitting the block. @type {boolean} */
+    splitsOnEnter = true;
+    /** When false, onBeforeInput markdown-shortcut hooks and inputRules are skipped in this block. @type {boolean} */
+    transformsEnabled = true;
+    /** When false, inline marks (bold/italic/...) are never applied to this block. @type {boolean} */
+    marksEnabled = true;
+
+    /**
      * Resolve a document-local offset to { block, offset } within this block.
      * Leaf blocks with text return themselves directly.
      * Override in MegaBlock (pure containers) and mixed blocks (e.g. ListItem).

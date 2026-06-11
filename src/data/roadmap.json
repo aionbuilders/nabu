@@ -1,6 +1,6 @@
 {
   "version": "0.1.0-alpha",
-  "updated": "2026-03-21",
+  "updated": "2026-06-13",
   "milestones": [
     {
       "id": "core-engine",
@@ -123,7 +123,7 @@
         {
           "id": "import",
           "text": "Import from Markdown / JSON back into a Loro document",
-          "status": "planned"
+          "status": "done"
         }
       ]
     },
@@ -185,7 +185,7 @@
         {
           "id": "floating-toolbar",
           "text": "Floating mark toolbar: appears on non-collapsed selection, buttons call nabu.exec('mark:toggle') and read nabu.isMarkActive()",
-          "status": "planned",
+          "status": "done",
           "note": "Action bus and mark infrastructure are ready; only the Svelte UI component is missing."
         },
         {
@@ -201,12 +201,12 @@
         {
           "id": "placeholders",
           "text": "Empty block placeholders (CSS ::before or overlay) with per-block-type hint text",
-          "status": "planned"
+          "status": "done"
         },
         {
           "id": "link-support",
           "text": "Link mark: href attribute on LoroText, rendered as <a> in RichText.svelte, toggled via toolbar or keyboard",
-          "status": "planned"
+          "status": "done"
         },
         {
           "id": "markdown-inline-shortcuts",
@@ -248,26 +248,32 @@
         {
           "id": "blockquote",
           "text": "Blockquote: simple TextBehavior leaf with distinct styling; Markdown shortcut '> ' and serialization",
-          "status": "planned",
+          "status": "done",
           "priority": "high"
         },
         {
           "id": "divider",
           "text": "Divider (<hr>): first non-textual block — no TextBehavior, no beforeinput handling. Validates that the engine makes no assumption that all blocks have text. Inserted via slash menu or '---' shortcut.",
-          "status": "planned",
+          "status": "done",
           "priority": "high"
         },
         {
           "id": "code-block",
-          "text": "Code block: multi-line, monospace, Tab inserts spaces (not indent), no markdown shortcuts inside, optional language tag stored as Loro metadata. Serialized as fenced code block in Markdown.",
-          "status": "planned",
+          "text": "Code block: multi-line, monospace, Tab inserts spaces (not indent), no markdown shortcuts inside, optional language tag stored as Loro metadata. Serialized as fenced code block in Markdown. Built on the declarative capability flags (splitsOnEnter/transformsEnabled/marksEnabled). Syntax highlighting deferred — see ADR 013.",
+          "status": "done",
           "priority": "high"
         },
         {
           "id": "callout",
-          "text": "Callout: styled block with an icon/type indicator (info, warning, tip) stored as Loro metadata + TextBehavior content. Close to DialogueBlock in architecture.",
-          "status": "planned",
+          "text": "Callout: protected text box (capability flags, marks on) with a GitHub-style variant (note/tip/important/warning/caution) stored as Loro metadata. Created via '! ' shortcut or paste of '> [!NOTE]' admonitions. Click the icon to cycle variants.",
+          "status": "done",
           "priority": "medium"
+        },
+        {
+          "id": "callout-ux-polish",
+          "text": "Callout UI/UX overhaul (post-beta polish): bring it up to Notion/Linear quality. Proper icon picker (searchable grid/popover instead of click-to-cycle), refined box design (spacing, typography, variant theming, optional collapsible/title). Current v1 styling is functional but rough.",
+          "status": "planned",
+          "priority": "low"
         },
         {
           "id": "image",
@@ -337,7 +343,7 @@
         {
           "id": "markdown-json-import",
           "text": "Import from Markdown and JSON: parse into Loro document, inverse of current serialize() pipeline",
-          "status": "planned"
+          "status": "done"
         },
         {
           "id": "word-html-paste",

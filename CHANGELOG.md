@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.1.0-beta.0
+
+First beta. The library is feature-complete for the beta milestone: everything beyond the stability baseline is **opt-in** — a dedicated extension or a mounted UI component — so `MinimalPreset` stays paragraph-only. 287/287 unit tests, `prepack` + `publint` clean.
+
+### Stability & packaging
+- **Beta cut**: version `0.1.0-beta.0`; corrected `repository.url` to the `git+https://….git` form (publint suggestion).
+- `createEditor` and the named factories now forward `Nabu` init options (`files`, `snapshot`, …) to the constructor, not just `extensions`.
+- Replaced `$app/environment` (SvelteKit-only virtual module) with `esm-env` in `context.svelte.js`. The library now builds correctly for plain Svelte, Vitest, and any non-SvelteKit bundler.
+- Removed leftover debug `console.log` statements in the `focus()` method (`nabu.svelte.js`) and the `onBeforeTransaction` hook (`paragraph/index.js`). Focus debug output is now routed through the gated `this.warn(...)` helper (only active when `nabu.debugging` is true).
+- Removed stale files: `GEMINI.md`, `src/lib/blocks/zone/ZoneEditor copy.svelte`, and the `trash/` directory.
+
+### Core refactoring
+- New `TextBlock` base class (`blocks/text-block.svelte.js`): `Paragraph`, `Heading`, `Dialogue` (and the new `Blockquote`) now inherit the ~10 TextBehavior proxies instead of duplicating them.
+- New declarative **input rules** system: extensions can register `inputRules` (`pattern` tested against the text before the cursor + `handler`). The `--` → `—` substitution moved from `TextBehavior` into the new `TypographyExtension`.
+- `nabu.transact(mutateFn, cursorIntent?)` centralizes the mutate → commit → setCursor dance. Migrated `mark:*`, `block:transform` and `zone:set*` actions.
+- Incremental `wordCount`: every block exposes `wordCount` ($derived); containers sum their children. `ZoneBlock` no longer re-traverses its whole subtree on each keystroke.
+- **Capability flags** on `Block` — `splitsOnEnter`, `transformsEnabled`, `marksEnabled` (all default `true`): declarative engine opt-outs so a block can shape core behavior without overriding handlers (Code disables inline transforms, void blocks disable Enter-splitting).
+
+### Native behavior audit
+- Implemented `deleteWordBackward` / `deleteWordForward` / `deleteSoftLineBackward` / `historyUndo` / `historyRedo` inputTypes. Word deletion now removes the whitespace surrounding the word — closes issue #4 (Alt+Delete orphan space).
+- **IME composition support** (closes issue #6): `compositionstart/update/end` are now handled. During composition the browser mutates the DOM freely (`insertCompositionText` is no longer blocked); the composed text is synced into Loro at `compositionend`, with guards for canceled compositions and destroyed blocks.
+
+### New blocks & features
+- **Blockquote** block (`> ` shortcut, Backspace/Enter de-transformations, markdown/HTML paste rules).
+- **Divider** block — first non-textual block (`--- ` shortcut, `<hr>` rendering, markdown `---`).
+- **Code** block — multi-line monospace, ```` ``` ```` shortcut, stores plain text only (pluggable syntax highlighting deferred — see `docs/adr/013`).
+- **Callout** block — `note` / `tip` / `important` / `warning` / `caution` variants, `! ` shortcut.
+- **Toggle** block — collapsible (hybrid MegaBlock: own text + child blocks, collapsed state in metadata; Enter spawns a body child, Backspace de-transforms).
+- **Checklist / to-do lists** (`listType: 'todo'`) with interactive checkboxes, plus a reactive **`Todos`** registry (`Todos.get(nabu)`) that mirrors the Zones system for document-wide task tracking.
+- **Image / Video / File** void media blocks on a shared `MediaBlock` base, with an optimistic local preview while the asset persists.
+- **Link mark**: `link:set` / `link:remove` / `link:toggle` actions, `<a>` rendering, `[text](href)` markdown and `<a href>` HTML serialization, link parsing on HTML paste.
+- **Document import**: `nabu.importMarkdown(md)`, `nabu.importJSON(json)` and `nabu.importFragment(fragment)` replace the whole document through the paste pipeline.
+- **FloatingToolbar** component (`ui/FloatingToolbar.svelte`) + `nabu.isMarkActive(mark)` reactive helper.
+- **Placeholders** on empty blocks via `data-placeholder` + global CSS (paragraph, headings, dialogue, blockquote).
+- **Vite plugin preset**: `import { nabu } from '@aionbuilders/nabu/vite'` registers `vite-plugin-wasm` + `vite-plugin-top-level-await` (both moved to `dependencies`).
+- HTML paste rules now support a `priority` field (specific blocks win over generic fallbacks).
+- **File handling**: by default an uploaded file is stored as a blob in a separate Loro `assets` map (the document stays the single source of truth); a `files.onBeforePersist` hook lets the host redirect uploads to its own backend; `Files.get(nabu).resolve(ref)` turns a stored ref into a display URL. Warns above a 2 MB inline threshold.
+
+### Editor UX
+- **Slash menu** (`ui/SlashMenu.svelte`) — opt-in command palette: type `/` to open, filter by typing, `↑`/`↓`+`Enter` to run, `Esc` to close. Built-ins cover Text, Headings 1–3, bulleted / numbered / to-do lists, Code, Callout, Quote, Toggle, Divider, Image, Video, File; extend or override via the `commands` prop.
+- **Inline markdown shortcuts** (`MarkdownShortcutsExtension`) — `**bold**`, `__bold__`, `*italic*`, `_italic_`, `` `code` ``, `~~strike~~` transform as you type.
+- **Stored marks** (ProseMirror-style active formatting) — toggling a mark at a collapsed cursor (e.g. Ctrl+B) starts formatting for the next typed text; marks now use `expand: 'none'` so they no longer leak past their range; cleared on cursor navigation.
+- **Drag handles** (`ui/DragHandle.svelte`) — opt-in overlay: hover a block to reveal a `⠿` grip and drag to reorder. Pointer-events based, custom drop indicator, reorder by proximity via `moveBefore` / `moveAfter` on the Loro tree (single transaction → collaborative & undo-safe), `wrapOrphan` structural repair, and an anti-cycle guard.
+
 ## alpha.10
 
 ### Zone Word Count Logic Refactor

@@ -1,5 +1,5 @@
 import { createContext, mount, unmount } from "svelte";
-import { browser } from "$app/environment";
+import { BROWSER } from "esm-env";
 import ContextComponent from "./Context.svelte";
 
 /** @type {[() => Context, (ctx: Context) => Context]} */
@@ -100,14 +100,14 @@ export class ContextMenu {
     }
 
     start() {
-        if (browser && typeof window !== 'undefined') {
+        if (BROWSER && typeof window !== 'undefined') {
             window.addEventListener('click', this.handleClick);
             window.addEventListener('contextmenu', this.handleContextMenu);
         }
     }
 
     stop() {
-        if (browser && typeof window !== 'undefined') {
+        if (BROWSER && typeof window !== 'undefined') {
             window.removeEventListener('click', this.handleClick);
             window.removeEventListener('contextmenu', this.handleContextMenu);
         }

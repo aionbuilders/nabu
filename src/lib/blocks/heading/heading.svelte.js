@@ -1,27 +1,21 @@
-import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
+import { TextBlock } from "../text-block.svelte.js";
+import { deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 import HeadingComponent from "./Heading.svelte";
-import { Block } from "../block.svelte.js";
 import { LoroText } from "loro-crdt";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
- * @import { TextNode } from "../../behaviors/text";
  */
 
 /**
  * @typedef {NabuNode<{type: "heading", text: LoroText, level: number}>} HeadingNode
  */
 
-export class Heading extends Block {
+export class Heading extends TextBlock {
     /** @param {Nabu} nabu @param {HeadingNode} node */
     constructor(nabu, node) {
         super(nabu, node);
         const data = node.data;
-        this.container = data.get("text") ?? data.setContainer("text", new LoroText());
-
-        /** @type {TextBehavior} */
-        this.behavior = new TextBehavior(this, this.container);
-        this.behaviors.set("text", this.behavior);
 
         this.level = data.get("level") || 1;
 
@@ -33,7 +27,7 @@ export class Heading extends Block {
             content: this.behavior.toJSON()
         }));
         this.serializers.set('application/x-nabu+json', (ctx) => this.behavior.toClipboardBlock({ ...ctx, props: { level: this.level } }));
-        
+
         // Synchronisation du niveau
         this.node.data.subscribe(() => {
             this.level = this.node.data.get("level") || 1;
@@ -44,43 +38,6 @@ export class Heading extends Block {
     level = $state(1);
 
     component = $derived(this.nabu.components.get("heading") || HeadingComponent);
-    
-    get text() {
-        return this.behavior.text;
-    }
-
-    get delta() {
-        return this.behavior.delta;
-    }
-
-    selection = $derived(this.behavior.selection);
-    positions = $derived(this.behavior.positions);
-    
-    /** @param {InputEvent} event */
-    beforeinput(event) {
-        return this.behavior.handleBeforeInput(event);
-    }
-
-    /**
-     * @param {number} targetOffset 
-     * @returns {{node: Node, offset: number} | null}
-     */
-    getDOMPoint(targetOffset) { return this.behavior.getDOMPoint(targetOffset); }
-
-    /** @param {Block} block */
-    absorbs(block) { return this.behavior.absorbs(block); }
-
-    /** @param {number} index @param {string} text */
-    insert(index, text) { return this.behavior.insert(index, text); }
-    
-    /** @param {Parameters<Block["delete"]>[0]} [deletion] */
-    delete(deletion) { return this.behavior.delete(deletion); }
-
-    /** @param {import('loro-crdt').Delta<string>[]} data */
-    applyDelta(data = []) { return this.behavior.applyDelta(data); }
-
-    /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
-    split(options) { return this.behavior.split(options); }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {

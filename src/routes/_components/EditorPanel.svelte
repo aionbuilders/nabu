@@ -1,5 +1,6 @@
 <script>
   import { NabuEditor } from '$lib/blocks';
+  import { FloatingToolbar, SlashMenu, DragHandle } from '$lib/ui';
   import EditorToolbar from './EditorToolbar.svelte';
 
   let { engine } = $props();
@@ -10,6 +11,9 @@
   <div class="editor-area">
     {#if engine}
       <div class="editor-body">
+        <FloatingToolbar {engine} />
+        <SlashMenu {engine} />
+        <DragHandle {engine} />
         <NabuEditor {engine} />
       </div>
     {:else}

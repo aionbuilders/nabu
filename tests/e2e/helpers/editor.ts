@@ -38,10 +38,24 @@ export async function gotoEditor(page: Page) {
 
 /**
  * Wait until window.nabu is defined and the editor has at least one block.
+ *
+ * Robust against a cold dev server: __nabu_debug (which exposes window.nabu)
+ * is retried inside the polling loop until the DebugPanel has mounted, instead
+ * of being called once at a fixed delay. Timeout is generous because the first
+ * navigation may trigger on-demand route compilation + WASM load.
  */
-export async function waitForEditor(page: Page, timeout = 8000) {
-  await page.waitForTimeout(500);
-  await page.evaluate(() => (window as any).__nabu_debug?.());
+export async function waitForEditor(page: Page, timeout = 20000) {
+  // 1. Wait for the DebugPanel to register the toggle (handles slow first-mount).
+  await page.waitForFunction(
+    () => typeof (window as any).__nabu_debug === 'function',
+    { timeout },
+  );
+  // 2. Enable debug EXACTLY ONCE. __nabu_debug is a toggle — calling it twice
+  //    would turn debug (and window.nabu) back off, so guard on !window.nabu.
+  await page.evaluate(() => {
+    if (!(window as any).nabu) (window as any).__nabu_debug();
+  });
+  // 3. Wait for window.nabu to be exposed and the editor to have its blocks.
   await page.waitForFunction(
     () => !!(window as any).nabu && (window as any).nabu.children?.length >= 0,
     { timeout },

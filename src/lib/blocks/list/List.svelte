@@ -5,11 +5,12 @@
     let {block} = $props();
 </script>
 
-<svelte:element 
-    this={block.listType === 'ordered' ? 'ol' : 'ul'} 
+<svelte:element
+    this={block.listType === 'ordered' ? 'ol' : 'ul'}
     data-block-id={block.id}
     data-block-type="list"
     class="nabu-list"
+    class:todo={block.listType === 'todo'}
 >
     {#each block.children as child (child.id)}
         <Block block={child} />
@@ -21,5 +22,10 @@
         margin-top: 0.5rem;
         margin-bottom: 0.5rem;
         padding-left: 1.5rem;
+    }
+
+    .nabu-list.todo {
+        list-style: none;
+        padding-left: 0;
     }
 </style>

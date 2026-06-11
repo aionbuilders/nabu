@@ -33,6 +33,7 @@ export function deltaToHtml(delta) {
         if (attrs.italic)        text = `<em>${text}</em>`;
         if (attrs.underline)     text = `<u>${text}</u>`;
         if (attrs.strikethrough) text = `<s>${text}</s>`;
+        if (attrs.link)          text = `<a href="${escapeHtml(String(attrs.link))}">${text}</a>`;
         return text;
     }).join('');
 }
@@ -45,14 +46,15 @@ export function deltaToHtml(delta) {
 export function deltaToMarkdown(delta) {
     return delta.map(op => {
         if (typeof op.insert !== 'string') return '';
-        const text = op.insert;
+        let text = op.insert;
         const attrs = op.attributes || {};
-        if (attrs.code) return `\`${text}\``;
-        if (attrs.bold && attrs.italic) return `***${text}***`;
-        if (attrs.bold) return `**${text}**`;
-        if (attrs.italic) return `*${text}*`;
-        if (attrs.strikethrough) return `~~${text}~~`;
-        if (attrs.underline) return `<u>${text}</u>`;
+        if (attrs.code) text = `\`${text}\``;
+        else if (attrs.bold && attrs.italic) text = `***${text}***`;
+        else if (attrs.bold) text = `**${text}**`;
+        else if (attrs.italic) text = `*${text}*`;
+        else if (attrs.strikethrough) text = `~~${text}~~`;
+        else if (attrs.underline) text = `<u>${text}</u>`;
+        if (attrs.link) text = `[${text}](${attrs.link})`;
         return text;
     }).join('');
 }
@@ -78,8 +80,16 @@ export class TextBehavior {
     }
     
     selection = $derived(this.block.element && this.block.nabu.selection && this.getSelection(this.block.element, this.block.nabu.selection));
-    
+
     positions = $derived(this.text.length + 1);
+
+    /**
+     * Number of whitespace-separated words in this text.
+     * @returns {number}
+     */
+    get wordCount() {
+        return this.text.trim().split(/\s+/).filter(Boolean).length;
+    }
     
     /**
     * @param {HTMLElement} element 
@@ -129,8 +139,16 @@ export class TextBehavior {
 
     /** @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [selection] */
     handleBeforeInput(event, selection = this.selection) {
-        // Hook system (Markdown shortcuts, de-transformation, etc.)
-        const hooks = this.nabu.hooks.get("onBeforeInput");
+        // Hook system (Markdown shortcuts, de-transformation, structural guards…).
+        // `transformsEnabled: false` (e.g. code blocks) only suppresses transforms,
+        // which fire on insertions — deletion hooks (block exit, zone guards) still run.
+        const isInsertion = event.inputType === "insertText"
+            || event.inputType === "insertParagraph"
+            || event.inputType === "insertLineBreak"
+            || event.inputType === "insertSoftLineBreak";
+        const hooks = (this.block.transformsEnabled === false && isInsertion)
+            ? null
+            : this.nabu.hooks.get("onBeforeInput");
         if (hooks) {
             for (const hook of hooks) {
                 const result = hook(this.nabu, event, this.block);
@@ -151,8 +169,19 @@ export class TextBehavior {
                 return this.handleDeleteContentBackward(event, selection);
             case "deleteContentForward":
                 return this.handleDeleteContentForward(event, selection);
+            case "deleteWordBackward":
+                return this.handleDeleteWordBackward(event, selection);
+            case "deleteWordForward":
+                return this.handleDeleteWordForward(event, selection);
+            case "deleteSoftLineBackward":
+                return this.handleDeleteSoftLineBackward(event, selection);
             case "insertParagraph":
                 return this.handleInsertParagraph(event, selection);
+            case "historyUndo":
+            case "historyRedo":
+                // Handled by the keydown handler (Ctrl+Z / Ctrl+Y) via UndoManager.
+                event.preventDefault();
+                return true;
             default:
                 this.nabu.warn("Unhandled input type:", event.inputType);
                 return;
@@ -165,20 +194,37 @@ export class TextBehavior {
 
         let textToInsert = event.data || "";
 
-        // Substitution typographique : `-- ` → `— ` (em-dash)
-        if (textToInsert === " " && selection.isCollapsed) {
+        // Declarative input rules (typography, markdown shortcuts…)
+        if (selection.isCollapsed && this.block.transformsEnabled !== false) {
             const textBeforeCursor = this.text.slice(0, selection.from);
-            if (textBeforeCursor.endsWith("--")) {
-                this.delete({ index: selection.from - 2, length: 2 }, selection);
-                this.insert(selection.from - 2, "— ");
-                this.block.commit();
-                tick().then(() => this.nabu.selection.setCursor(this.block, selection.from - 2 + 2));
-                return;
+            for (const rule of this.nabu.inputRules) {
+                if ((rule.inputType ?? "insertText") !== event.inputType) continue;
+                const match = textBeforeCursor.match(rule.pattern);
+                if (!match) continue;
+                if (rule.handler(this.nabu, this.block, match, { ...selection, data: textToInsert }) === true) {
+                    this.nabu.storedMarks = null;
+                    this.block.commit();
+                    // Clamp to the post-mutation text length: rules that shrink the text
+                    // (e.g. markdown **bold** → bold) would otherwise restore the cursor
+                    // past the end, hitting getDOMPoint's element fallback → the selection
+                    // normalizer ejects the caret out of the block, losing all further input.
+                    tick().then(() => this.nabu.selection.setCursor(this.block, Math.min(selection.from, this.text.length)));
+                    return true;
+                }
             }
         }
 
         if (!selection.isCollapsed) this.delete({index: selection.from, length: selection.to - selection.from}, selection);
         this.insert(selection.from, textToInsert);
+        // Apply the cursor's pending stored marks to the inserted text.
+        const stored = this.nabu.storedMarks;
+        if (stored && textToInsert) {
+            const range = { from: selection.from, to: selection.from + textToInsert.length, isCollapsed: false };
+            for (const [name, on] of Object.entries(stored)) {
+                if (on) this.applyMark(name, true, range);
+                else this.removeMark(name, range);
+            }
+        }
         this.block.commit();
         tick().then(() => this.nabu.selection.setCursor(this.block, selection.from + textToInsert.length));
     }
@@ -251,9 +297,99 @@ export class TextBehavior {
         }
     }
 
+    /**
+     * Deletes the word before the cursor (Ctrl+Backspace on Win/Linux,
+     * Option+Delete on Mac), including the whitespace that precedes it
+     * so no orphan space is left behind (issue #4).
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleDeleteWordBackward(event, sel = this.selection) {
+        if (!sel) return;
+        if (!sel.isCollapsed) {
+            this.delete({ index: sel.from, length: sel.to - sel.from });
+            this.block.commit();
+            tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
+            return true;
+        }
+        // Prefer getTargetRanges() when available (more reliable cross-platform)
+        const ranges = event.getTargetRanges?.();
+        let deleteFrom;
+        if (ranges?.length) {
+            const r = ranges[0];
+            deleteFrom = this.calculateOffset(r.startContainer, r.startOffset);
+        } else {
+            // FIX issue #4 : inclure le whitespace AVANT le mot dans la suppression
+            const textBefore = this.text.slice(0, sel.from);
+            // \s* leading : l'espace qui précède le mot est supprimé aussi (comportement Mac)
+            const wordMatch = textBefore.match(/(\s*\S+\s*)$/);
+            deleteFrom = wordMatch ? sel.from - wordMatch[0].length : 0;
+        }
+        const len = sel.from - deleteFrom;
+        if (len > 0) this.delete({ index: deleteFrom, length: len });
+        this.block.commit();
+        tick().then(() => this.nabu.selection.setCursor(this.block, deleteFrom));
+        return true;
+    }
+
+    /**
+     * Deletes the word after the cursor (Ctrl+Delete / Option+Fn+Delete),
+     * including its trailing whitespace/punctuation.
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleDeleteWordForward(event, sel = this.selection) {
+        if (!sel) return;
+        if (!sel.isCollapsed) {
+            this.delete({ index: sel.from, length: sel.to - sel.from });
+            this.block.commit();
+            tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
+            return true;
+        }
+        const ranges = event.getTargetRanges?.();
+        let deleteTo;
+        if (ranges?.length) {
+            const r = ranges[0];
+            deleteTo = this.calculateOffset(r.endContainer, r.endOffset);
+        } else {
+            const textAfter = this.text.slice(sel.from);
+            // Inclure le whitespace leading + le mot + son trailing whitespace
+            const wordMatch = textAfter.match(/^(\s*\S+\s*)/);
+            deleteTo = sel.from + (wordMatch ? wordMatch[0].length : textAfter.length);
+        }
+        const len = deleteTo - sel.from;
+        if (len > 0) this.delete({ index: sel.from, length: len });
+        this.block.commit();
+        tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
+        return true;
+    }
+
+    /**
+     * Deletes from the start of the current soft line to the cursor
+     * (Cmd+Backspace on Mac).
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleDeleteSoftLineBackward(event, sel = this.selection) {
+        if (!sel) return;
+        const lastNL = this.text.lastIndexOf('\n', sel.from - 1);
+        const deleteFrom = lastNL === -1 ? 0 : lastNL + 1;
+        if (deleteFrom < sel.from) {
+            this.delete({ index: deleteFrom, length: sel.from - deleteFrom });
+            this.block.commit();
+            tick().then(() => this.nabu.selection.setCursor(this.block, deleteFrom));
+        }
+        return true;
+    }
+
     /** @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel] */
     handleInsertParagraph(event, sel = this.selection) {
         if (!sel) return;
+        // Blocks that don't split on Enter (e.g. code) insert a literal newline instead.
+        if (this.block.splitsOnEnter === false) {
+            if (!sel.isCollapsed) this.delete({ index: sel.from, length: sel.to - sel.from });
+            this.insert(sel.from, "\n");
+            this.block.commit();
+            tick().then(() => this.nabu.selection.setCursor(this.block, sel.from + 1));
+            return true;
+        }
         const from = sel.from;
         const to = sel.isCollapsed ? this.text.length : sel.to ;
         const newBlock = this.block.ascend("onSplit", event, { offset: from, delta: this.container.sliceDelta(from, to)});    

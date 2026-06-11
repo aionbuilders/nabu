@@ -1,4 +1,4 @@
-import { MegaBlock } from "..";
+import { MegaBlock } from "../megablock.svelte.js";
 
 /**
  * @import {Block, NabuNode} from "..";
@@ -6,7 +6,7 @@ import { MegaBlock } from "..";
  */
 
 /**
- * @typedef {NabuNode<{type: "list", listType: "bullet" | "ordered"}>} ListNode
+ * @typedef {NabuNode<{type: "list", listType: "bullet" | "ordered" | "todo"}>} ListNode
  */
 
 export class ListBehavior {
@@ -15,13 +15,13 @@ export class ListBehavior {
         this.block = block;
         this.nabu = block.nabu;
         this.node = /** @type {ListNode} */ (block.node);
-        this.listType = /** @type {"bullet" | "ordered"} */ (this.node.data.get("listType") || "bullet");
+        this.listType = /** @type {"bullet" | "ordered" | "todo"} */ (this.node.data.get("listType") || "bullet");
         this.node.data.subscribe(() => {
-            this.listType = /** @type {"bullet" | "ordered"} */ (this.node.data.get("listType") || "bullet");
+            this.listType = /** @type {"bullet" | "ordered" | "todo"} */ (this.node.data.get("listType") || "bullet");
         });
     }
 
-    /** @type {"bullet" | "ordered"} */
+    /** @type {"bullet" | "ordered" | "todo"} */
     listType = $state("bullet");
 
     /** @param {Block} block */

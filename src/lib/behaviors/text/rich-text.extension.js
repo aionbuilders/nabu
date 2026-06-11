@@ -22,6 +22,7 @@ function collectMarkTargets(nabu) {
     const targets = [];
     for (const [, block] of nabu.blocks) {
         if (!block.selected) continue;
+        if (block.marksEnabled === false) continue;
         const behavior = block.behaviors?.get('text');
         if (!(behavior instanceof TextBehavior)) continue;
         const sel = behavior.selection;
@@ -36,25 +37,30 @@ function collectMarkTargets(nabu) {
  * @param {Nabu} nabu
  * @param {string} markName
  */
-function toggleMark(nabu, markName) {
+async function toggleMark(nabu, markName) {
     const startBlock = nabu.selection.startBlock;
     const endBlock = nabu.selection.endBlock;
     const startFocusData = startBlock?.focus(null, true);
     const endFocusData = endBlock?.focus(null, true);
 
     const targets = collectMarkTargets(nabu);
-    if (!targets.length) return false;
-
-    const isFullyActive = targets.every(({ behavior, sel }) => behavior.isMarkActive(markName, sel));
-    for (const { behavior, sel } of targets) {
-        if (isFullyActive) {
-            behavior.removeMark(markName, sel);
-        } else {
-            behavior.applyMark(markName, true, sel);
-        }
+    if (!targets.length) {
+        // Collapsed cursor: toggle the pending stored mark for the next typed char.
+        if (nabu.selection.anchorBlock?.behaviors?.has('text')) nabu.toggleStoredMark(markName);
+        return false;
     }
 
-    nabu.commit();
+    const isFullyActive = targets.every(({ behavior, sel }) => behavior.isMarkActive(markName, sel));
+    await nabu.transact(() => {
+        for (const { behavior, sel } of targets) {
+            if (isFullyActive) {
+                behavior.removeMark(markName, sel);
+            } else {
+                behavior.applyMark(markName, true, sel);
+            }
+        }
+    });
+
     if (startBlock && endBlock) {
         nabu.focus({
             from: { block: startBlock, offset: startFocusData?.start?.offset ?? 0 },
@@ -73,10 +79,11 @@ function toggleMark(nabu, markName) {
 function applyMark(nabu, markName, value = true) {
     const targets = collectMarkTargets(nabu);
     if (!targets.length) return;
-    for (const { behavior, sel } of targets) {
-        behavior.applyMark(markName, value, sel);
-    }
-    nabu.commit();
+    return nabu.transact(() => {
+        for (const { behavior, sel } of targets) {
+            behavior.applyMark(markName, value, sel);
+        }
+    });
 }
 
 /**
@@ -87,10 +94,11 @@ function applyMark(nabu, markName, value = true) {
 function removeMark(nabu, markName) {
     const targets = collectMarkTargets(nabu);
     if (!targets.length) return;
-    for (const { behavior, sel } of targets) {
-        behavior.removeMark(markName, sel);
-    }
-    nabu.commit();
+    return nabu.transact(() => {
+        for (const { behavior, sel } of targets) {
+            behavior.removeMark(markName, sel);
+        }
+    });
 }
 
 /**
@@ -117,19 +125,36 @@ function onKeyDown(nabu, event) {
 
 export const RichTextExtension = new Extension('rich-text', {
     // Declare all mark attributes so Loro's applyDelta can handle them correctly.
-    // 'expand: after' means the style extends when typing at the end of a marked span.
+    // Marks are exact (expand: 'none') — they don't auto-extend at boundaries.
+    // Continuation of formatting when typing inside a marked span is handled by
+    // stored marks (nabu.storedMarks) toggled via Ctrl+B/I/etc. at a collapsed cursor.
     loroTextStyles: {
-        bold:          { expand: 'after' },
-        italic:        { expand: 'after' },
-        underline:     { expand: 'after' },
+        bold:          { expand: 'none' },
+        italic:        { expand: 'none' },
+        underline:     { expand: 'none' },
         code:          { expand: 'none' },  // code spans don't expand on insert
-        strikethrough: { expand: 'after' },
+        strikethrough: { expand: 'none' },
+        link:          { expand: 'none' },  // les liens ne s'étendent pas en tapant
     },
     actions: {
         // Full API
         'mark:toggle': (nabu, data) => toggleMark(nabu, data?.mark),
         'mark:apply':  (nabu, data) => applyMark(nabu, data?.mark, data?.value),
         'mark:remove': (nabu, data) => removeMark(nabu, data?.mark),
+        // Links — the 'link' mark stores the href as its value
+        'link:set': (nabu, data) => {
+            if (!data?.href) return;
+            return applyMark(nabu, 'link', data.href);
+        },
+        'link:remove': (nabu) => removeMark(nabu, 'link'),
+        'link:toggle': (nabu, data) => {
+            const targets = collectMarkTargets(nabu);
+            if (!targets.length) return;
+            const allHaveLink = targets.every(({ behavior, sel }) => behavior.isMarkActive('link', sel));
+            if (allHaveLink) return removeMark(nabu, 'link');
+            if (!data?.href) return;
+            return applyMark(nabu, 'link', data.href);
+        },
         // Aliases
         'bold':          (nabu) => toggleMark(nabu, 'bold'),
         'italic':        (nabu) => toggleMark(nabu, 'italic'),

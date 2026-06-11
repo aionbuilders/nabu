@@ -84,7 +84,10 @@ export const ZoneExtension = new Extension('zone', {
         'zone:setStatus': (nabu, { zoneId, status }) => {
             const zone = /** @type {import('./zone.svelte.js').ZoneBlock | undefined} */ (nabu.blocks.get(zoneId));
             if (!zone || zone.type !== 'zone') return;
-            zone.status = status;
+            return nabu.transact(() => {
+                zone._status = status;
+                /** @type {any} */ (zone.node.data).set('status', status);
+            });
         },
 
         /**
@@ -94,7 +97,11 @@ export const ZoneExtension = new Extension('zone', {
         'zone:setSynopsis': (nabu, { zoneId, text }) => {
             const zone = /** @type {import('./zone.svelte.js').ZoneBlock | undefined} */ (nabu.blocks.get(zoneId));
             if (!zone || zone.type !== 'zone') return;
-            zone.setSynopsis(text);
+            return nabu.transact(() => {
+                const len = zone.synopsisContainer.length;
+                if (len > 0) zone.synopsisContainer.delete(0, len);
+                if (text) zone.synopsisContainer.insert(0, text);
+            });
         },
 
         /**
@@ -104,7 +111,10 @@ export const ZoneExtension = new Extension('zone', {
         'zone:setWordCountTarget': (nabu, { zoneId, target }) => {
             const zone = /** @type {import('./zone.svelte.js').ZoneBlock | undefined} */ (nabu.blocks.get(zoneId));
             if (!zone || zone.type !== 'zone') return;
-            zone.wordCountTarget = target;
+            return nabu.transact(() => {
+                zone._wordCountTarget = target ?? null;
+                /** @type {any} */ (zone.node.data).set('wordCountTarget', target ?? null);
+            });
         },
 
         /**

@@ -80,7 +80,7 @@ export class ListItem extends MegaBlock {
     /** @param {Nabu} nabu @param {ListItemNode} node */
     constructor(nabu, node) {
         super(nabu, node);
-        
+
         const data = node.data;
         this.container = data.get("text") ?? data.setContainer("text", new LoroText());
 
@@ -88,11 +88,23 @@ export class ListItem extends MegaBlock {
         this.behavior = new TextBehavior(this, this.container);
         this.behaviors.set("text", this.behavior);
 
+        // Initialize checked from Loro metadata
+        this.checked = !!node.data.get('checked');
+        // Subscribe to data changes to keep checked in sync
+        this.node.data.subscribe(() => {
+            this.checked = !!this.node.data.get('checked');
+        });
+
         this.serializers.set('markdown', () => {
             const depth = this.parents.filter(p => p.type === 'list-item').length;
             const indent = '  '.repeat(depth);
             const listType = /** @type {any} */ (this.parent)?.listType ?? 'bullet';
-            const prefix = listType === 'ordered' ? `${this.index + 1}.` : '-';
+            let prefix;
+            if (listType === 'todo') {
+                prefix = `- [${this.checked ? 'x' : ' '}]`;
+            } else {
+                prefix = listType === 'ordered' ? `${this.index + 1}.` : '-';
+            }
             const lines = [`${indent}${prefix} ${this.behavior.toMarkdown()}`];
             if (this.sublist) {
                 const sublistMd = this.sublist.serialize('markdown');
@@ -105,7 +117,8 @@ export class ListItem extends MegaBlock {
             const result = {
                 id: this.id,
                 type: 'list-item',
-                content: this.behavior.toJSON()
+                content: this.behavior.toJSON(),
+                ...(this.isTodo ? { checked: this.checked } : {})
             };
             const childrenJson = this.children.map(c => c.serialize('json')).filter(Boolean);
             if (childrenJson.length) result.children = childrenJson;
@@ -115,7 +128,29 @@ export class ListItem extends MegaBlock {
     }
 
     component = $derived(this.nabu.components.get("list-item") || ListItemComponent);
-    
+
+    /** @type {boolean} */
+    checked = $state(false);
+
+    isTodo = $derived(/** @type {any} */ (this.parent)?.listType === 'todo');
+
+    /**
+     * Set the checked state and persist to Loro.
+     * @param {boolean} v
+     */
+    setChecked(v) {
+        this.checked = !!v;
+        /** @type {any} */ (this.node.data).set('checked', !!v);
+        this.commit();
+    }
+
+    /**
+     * Toggle the checked state.
+     */
+    toggleChecked() {
+        this.setChecked(!this.checked);
+    }
+
     get text() {
         return this.behavior.text;
     }
@@ -127,6 +162,8 @@ export class ListItem extends MegaBlock {
     selection = $derived(this.behavior.selection);
 
     positions = $derived(this.behavior.positions + super.positions);
+
+    wordCount = $derived((this.behavior?.wordCount ?? 0) + this.children.reduce((sum, c) => sum + (c.wordCount ?? 0), 0));
 
     /**
      * Mixed block: own text comes first, then children (sublists).
@@ -168,9 +205,9 @@ export class ListItem extends MegaBlock {
 
     /**
      * Retourne la sous-liste existante, ou en crée une nouvelle à la fin des enfants.
-     * @param {"bullet" | "ordered"} [listType="bullet"] 
+     * @param {"bullet" | "ordered" | "todo"} [listType]
      */
-    getOrCreateSublist(listType = "bullet") {
+    getOrCreateSublist(listType = /** @type {any} */ (this.parent)?.listType || "bullet") {
         if (this.sublist) return this.sublist;
         
         // S'il n'y en a pas, on demande à Nabu d'en créer une en tant qu'enfant de ce ListItem
@@ -231,7 +268,12 @@ export class ListItem extends MegaBlock {
      */
     static toMarkdown(pb, { recurse, listType = 'bullet', index = 0, depth = 0 }) {
         const indent = '  '.repeat(depth);
-        const prefix = listType === 'ordered' ? `${index + 1}.` : '-';
+        let prefix;
+        if (listType === 'todo') {
+            prefix = `- [${pb.props?.checked ? 'x' : ' '}]`;
+        } else {
+            prefix = listType === 'ordered' ? `${index + 1}.` : '-';
+        }
         const text = deltaToMarkdown(pb.delta || []);
         const sublists = (pb.children || []).map(sub => recurse(sub, { depth: depth + 1 })).join('\n');
         return `${indent}${prefix} ${text}${sublists ? '\n' + sublists : ''}`;
@@ -244,6 +286,10 @@ export class ListItem extends MegaBlock {
     static toHtml(pb, { recurse }) {
         const text = deltaToHtml(pb.delta || []);
         const sublists = (pb.children || []).map(recurse).join('');
+        if (pb.props?.checked !== undefined) {
+            const checkedAttr = pb.props.checked ? ' checked' : '';
+            return `<li><input type="checkbox" disabled${checkedAttr}> ${text}${sublists}</li>`;
+        }
         return `<li>${text}${sublists}</li>`;
     }
 
@@ -262,8 +308,12 @@ export class ListItem extends MegaBlock {
                 .map(parseBlock)
                 .filter(Boolean)
         );
+        // Detect checkbox: <li><input type="checkbox"> or <li><p><input type="checkbox">
+        const cb = el.querySelector(':scope > input[type=checkbox], :scope > p > input[type=checkbox]') ||
+            el.querySelector('input[type=checkbox]');
         /** @type {import('../../utils/extensions.js').PasteBlock} */
         const result = { type: 'list-item', delta, partial: false };
+        if (cb) result.props = { checked: cb.hasAttribute('checked') };
         if (childLists.length) result.children = childLists;
         return result;
     }
@@ -275,6 +325,7 @@ export class ListItem extends MegaBlock {
         const container = node.data.setContainer("text", new LoroText());
         if (props.text) container.insert(0, props.text);
         if (props.delta) container.applyDelta([...props.delta]);
+        if (props.checked !== undefined) /** @type {any} */ (node.data).set('checked', !!props.checked);
         const block = new ListItem(nabu, node);
         return block;
     }

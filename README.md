@@ -16,6 +16,25 @@ bun add @aionbuilders/nabu
 
 Nabu depends on `loro-crdt`, which ships as a WebAssembly module. You must configure your Vite bundler to handle it.
 
+The easiest way is the bundled plugin preset:
+
+```js
+// vite.config.js
+import { defineConfig } from 'vite';
+import { sveltekit } from '@sveltejs/kit/vite'; // or svelte()
+import { nabu } from '@aionbuilders/nabu/vite';
+
+export default defineConfig({
+  plugins: [
+    sveltekit(),
+    nabu() // registers vite-plugin-wasm + vite-plugin-top-level-await
+  ]
+});
+```
+
+<details>
+<summary>Manual setup (equivalent)</summary>
+
 **1. Install the required Vite plugins:**
 
 ```bash
@@ -38,6 +57,8 @@ export default defineConfig({
   ]
 });
 ```
+
+</details>
 
 Without this setup, Nabu will fail to load.
 
@@ -136,18 +157,44 @@ All block types and behaviors are provided as extensions. Pass them to the `Nabu
 |---|---|---|
 | `ParagraphExtension` | `paragraph` block | — |
 | `HeadingExtension` | `heading` block (h1–h6) | `# ` → h1, `## ` → h2, ... |
-| `ListExtension` | `list` container (bullet/ordered) | — |
-| `ListItemExtension` | `list-item` block | `Tab` indent, `Shift+Tab` unindent |
+| `ListExtension` | `list` container (bullet/ordered/todo) | — |
+| `ListItemExtension` | `list-item` block | `Tab` indent, `Shift+Tab` unindent; `[] ` or `[x] ` → to-do list |
 | `DialogueExtension` | `dialogue` block | `-- ` → dialogue, `Backspace` at start → paragraph |
+| `BlockquoteExtension` | `blockquote` block | `> ` → blockquote; `Backspace` at start (empty) → paragraph |
+| `DividerExtension` | `divider` block (`<hr>`) | `--- ` → divider |
+| `CodeExtension` | `code` block (monospace, multi-line) | ` ``` ` + Enter → code block; `Tab` inserts 2 spaces |
+| `CalloutExtension` | `callout` block (note/tip/important/warning/caution) | `! ` → callout; click the icon to cycle variant |
+| `ToggleExtension` | `toggle` block (collapsible) | created via slash menu |
+| `ImageExtension` | `image` void media block | created via slash menu or `image:insert` / `image:pick` |
+| `VideoExtension` | `video` void media block | created via slash menu or `video:insert` / `video:pick` |
+| `FileExtension` | `file` void media block | created via slash menu or `file:insert` / `file:pick` |
 | `RichTextExtension` | Inline marks (bold, italic...) | `Ctrl+B/I/U/E`, `Ctrl+Shift+X` |
+| `TypographyExtension` | Smart typography substitutions | `--` + space → `—` |
+| `MarkdownShortcutsExtension` | Inline markdown formatting while typing | see below |
 
 ### Typographic substitutions
 
-When `RichTextExtension` or any text-bearing block is active, Nabu automatically applies typographic substitutions as you type:
+Provided by `TypographyExtension` (included in TextPreset, DocumentPreset, and FullPreset). Nabu automatically applies substitutions as you type:
 
 | Input | Output | Description |
 |---|---|---|
 | `--` + space | `— ` | Em-dash (French dialogue convention) |
+
+### Inline markdown shortcuts
+
+Provided by `MarkdownShortcutsExtension` (included in TextPreset, DocumentPreset, and FullPreset). Typing the closing delimiter applies the mark and strips the syntax characters:
+
+| Type | Result |
+|---|---|
+| `**bold**` or `__bold__` | bold |
+| `*italic*` or `_italic_` | italic |
+| `` `code` `` | inline code |
+| `~~strike~~` | strikethrough |
+| `***bolditalic***` | bold + italic |
+
+### Active formatting (stored marks)
+
+Marks in Nabu are exact ranges — they never bleed into adjacent text. Pressing a mark shortcut (`Ctrl+B` / `Ctrl+I` / `Ctrl+U` / `Ctrl+E` / `Ctrl+Shift+X`) with a **collapsed cursor** starts that formatting for the next typed text. The mark persists as you type and clears automatically when you navigate away (arrow keys or click). With a **text selection**, the shortcut toggles the mark on the selection as usual.
 
 ## Programmatic API
 
@@ -167,6 +214,147 @@ const markdown = engine.serialize('markdown');
 // dialogue blocks serialize as: — Tu viens ce soir ?
 
 const json = engine.serialize('json');
+
+// Import — replaces the entire document
+await engine.importMarkdown('# Title\n\nSome **bold** text.'); // requires MarkdownPasteExtension
+await engine.importJSON(json); // loads a serialize('json') export
+
+// Links
+engine.exec('link:set', { href: 'https://example.com' }); // on the current selection
+engine.exec('link:remove');
+engine.exec('link:toggle', { href: 'https://example.com' });
+
+// Other block actions
+engine.exec('blockquote');
+engine.exec('code');
+engine.exec('callout');
+engine.exec('toggle');
+engine.exec('image:insert', { ref: 'https://example.com/image.jpg', alt: 'Description' });
+engine.exec('image:pick'); // opens a file picker
+```
+
+### Usage with FloatingToolbar
+
+A ready-made formatting toolbar that floats above the current selection:
+
+```svelte
+<script>
+  import { NabuEditor, FloatingToolbar, createDocumentEditor } from '@aionbuilders/nabu';
+  const engine = createDocumentEditor();
+</script>
+
+<FloatingToolbar {engine} />
+<NabuEditor {engine} />
+```
+
+The toolbar is `position: fixed` and tracks the selection in viewport coordinates, so it can be dropped anywhere — no positioning wrapper needed. It toggles bold/italic/underline/code/strikethrough/link marks.
+
+## Slash menu
+
+An opt-in command palette, similar to `FloatingToolbar`. Type `/` in any block to open it, filter by typing, use `↑`/`↓` + `Enter` to select a command, and `Esc` to close.
+
+```svelte
+<script>
+  import { NabuEditor, SlashMenu, createFullEditor } from '@aionbuilders/nabu';
+  const engine = createFullEditor();
+</script>
+
+<SlashMenu {engine} />
+<NabuEditor {engine} />
+```
+
+Built-in commands cover: Text (paragraph), Headings 1–3, bulleted / numbered / to-do lists, Code, Callout, Quote, Toggle, Divider, Image, Video, and File.
+
+Pass a `commands` prop to add or override entries:
+
+```svelte
+<SlashMenu {engine} commands={[...myCommands]} />
+```
+
+Each command object has the shape `{ title, subtitle?, icon?, aliases?, run(engine) }`.
+
+## Drag handles
+
+An opt-in overlay for reordering blocks by dragging. On hover, a `⠿` grip appears to the left of the block under the pointer; drag it to move the block before or after any other block. Like `FloatingToolbar` / `SlashMenu`, it's a `position: fixed` island outside the editable area — drop it anywhere, no positioning wrapper needed.
+
+```svelte
+<script>
+  import { NabuEditor, DragHandle, createFullEditor } from '@aionbuilders/nabu';
+  const engine = createFullEditor();
+</script>
+
+<DragHandle {engine} />
+<NabuEditor {engine} />
+```
+
+Reordering goes through the Loro tree (`moveBefore` / `moveAfter`) and commits as a single transaction, so it's collaborative and undo-safe. Structural integrity is preserved automatically — e.g. dragging a list item out to the document root re-wraps it in its own list. A block can never be dropped into its own subtree.
+
+## Files, images & media
+
+Image, Video, and File are void (non-editable) media blocks. Insert them via the slash menu (`/image`, `/video`, `/file` — triggers a file picker) or programmatically:
+
+```js
+engine.exec('image:insert', { ref: 'https://cdn.example.com/photo.jpg', alt: 'Alt text' });
+engine.exec('image:pick');  // opens a file picker
+engine.exec('video:insert', { ref: 'https://cdn.example.com/clip.mp4' });
+engine.exec('video:pick');
+engine.exec('file:insert',  { ref: 'https://cdn.example.com/doc.pdf' });
+engine.exec('file:pick');
+```
+
+### Default (zero-config) mode
+
+When a local file is added without any configuration, its bytes are stored **inside the Loro document** itself (in a separate `assets` map). The block stores a `nabu-asset:<id>` reference internally. This works offline and requires no backend — the document is completely self-contained.
+
+Above a configurable size threshold (~2 MB by default), Nabu emits a warning: the CRDT is not designed to carry large binary assets.
+
+### Production mode (your storage)
+
+To keep binary data out of Loro and host assets on your own infrastructure, pass a `files` config to the `Nabu` constructor:
+
+```js
+import { createFullEditor } from '@aionbuilders/nabu';
+
+const engine = createFullEditor({
+  files: {
+    // Called when a local file is added. Upload it and return a clean ref.
+    // Return nothing to fall back to the default (store bytes in Loro).
+    onBeforePersist: async (file, { signal, onProgress }) => {
+      const url = await uploadToYourCDN(file, { signal, onProgress });
+      return { ref: url };
+    },
+
+    // Turn a stored ref into a display URL.
+    // Default: identity for https:// URLs, native decoder for nabu-asset: refs.
+    // Override for private buckets or signed-URL storage.
+    resolve: (ref) => ref,
+
+    // Byte threshold before the default (Loro) mode warns. Default ~2 MB.
+    maxInlineSize: 2 * 1024 * 1024,
+  }
+});
+```
+
+The `files` option is also accepted by the generic `createEditor({ preset, files })` and the bare `new Nabu({ extensions, files })` constructor.
+
+## Task tracking (Todos)
+
+To-do list blocks (`listType: 'todo'`) feed a reactive document-level registry. Use `Todos` to read and control them from outside the editor:
+
+```js
+import { Todos } from '@aionbuilders/nabu';
+
+const todos = Todos.get(engine);
+
+todos.count;        // total number of to-do items
+todos.doneCount;    // number checked
+todos.remaining;    // number unchecked
+todos.progress;     // completion ratio, 0–1
+todos.all;          // all to-do items in document order
+
+todos.checkAll();
+todos.uncheckAll();
+todos.goTo(item);   // move the editor cursor to a specific to-do
 ```
 
 ## Architecture
@@ -190,11 +378,30 @@ Nabu uses `$state` and `$derived` throughout for fine-grained reactivity — onl
 
 ## Status
 
-This is an **alpha release**. The core editing experience is functional, but some features are still in development:
+This is a **beta release**. The core editing experience is functional, documented, and shipped:
 
-- [ ] Persistence (IndexedDB)
-- [ ] Floating toolbar UI
-- [ ] Slash command menu
-- [ ] Link support
+- [x] Single ContentEditable architecture with Loro-CRDT
+- [x] Structural editing (Enter/Backspace, split/merge, undo/redo)
+- [x] Rich text marks (bold, italic, underline, code, strikethrough, link)
+- [x] Active formatting — stored marks at a collapsed cursor
+- [x] Inline markdown shortcuts (`**bold**`, `_italic_`, `` `code` ``, `~~strike~~`)
+- [x] Persistence (IndexedDB auto-save via `createPersistedEditor`)
+- [x] Floating toolbar UI (`FloatingToolbar` component)
+- [x] Link support (`link:set` / `link:remove` / `link:toggle`)
+- [x] Blockquote and Divider blocks
+- [x] Code block (multi-line, monospace)
+- [x] Callout block (note / tip / important / warning / caution variants)
+- [x] Toggle block (collapsible)
+- [x] To-do lists (`listType: 'todo'`) + `Todos` reactive registry
+- [x] Image, Video, and File blocks with configurable upload system
+- [x] Slash command menu (`SlashMenu` component)
+- [x] Document import (`importMarkdown` / `importJSON`)
+- [x] Placeholders and typography input rules
+- [x] Drag-to-reorder handles (`DragHandle` component)
+
+Post-beta roadmap:
+
+- [ ] Embed blocks
+- [ ] Block-selection primitive (click a drag handle to select the block as an object — insert-after / delete)
 
 Contributions and feedback welcome.

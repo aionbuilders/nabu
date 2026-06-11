@@ -53,3 +53,4 @@ const ListItemExtension = extension("list-item", {
 });
 
 export { ListExtension, ListItemExtension, List, ListItem, ListComponent, ListItemComponent };
+export { Todos } from "./todos.svelte.js";

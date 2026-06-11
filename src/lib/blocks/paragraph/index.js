@@ -39,7 +39,6 @@ const ParagraphExtension = extension("paragraph", {
                 });
             })
             if (roots.length === 0) {
-                console.log('Document is empty, inserting initial paragraph block.');
                 nabu.insert("paragraph", { text: "" });
             }
         },

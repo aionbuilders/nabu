@@ -16,6 +16,7 @@ export class MegaBlock extends Block {
     /** @type {Block[]} */
     children = $state([]);
     positions = $derived(this.children.reduce((sum, child) => sum + (child.positions ?? 0), 0));
+    wordCount = $derived(this.children.reduce((sum, c) => sum + (c.wordCount ?? 0), 0));
 
     /**
      * Pure container: no own text, delegate entirely to children.

@@ -74,6 +74,11 @@ export function parseInline(el, marks = {}) {
             const markName = MARK_TAGS[tag];
             const styleMarks = { ...marks };
             if (markName) styleMarks[markName] = true;
+            // <a href> → link mark (value = href)
+            if (tag === 'a') {
+                const href = el2.getAttribute('href');
+                if (href) styleMarks['link'] = /** @type {any} */ (href);
+            }
             // Detect marks from inline styles (e.g. Google Docs uses font-weight:700 on <span>)
             if (el2.nodeType === Node.ELEMENT_NODE) {
                 const style = /** @type {HTMLElement} */ (el2).style;
@@ -93,8 +98,10 @@ export function parseInline(el, marks = {}) {
 
 /**
  * Build the ordered ruleset from all BlockClasses registered in nabu.
+ * Sorted by rule priority descending so specific blocks (e.g. blockquote)
+ * win over generic fallbacks (e.g. paragraph's blockquote selector).
  * @param {import('../blocks/nabu.svelte.js').Nabu} nabu
- * @returns {Array<{ BlockClass: any, rule: { selector: string, props?: Record<string,any> } }>}
+ * @returns {Array<{ BlockClass: any, rule: { selector: string, priority?: number, props?: Record<string,any> } }>}
  */
 function buildRuleset(nabu) {
     /** @type {Array<{ BlockClass: any, rule: any }>} */
@@ -104,6 +111,7 @@ function buildRuleset(nabu) {
         if (!Array.isArray(rules)) continue;
         for (const rule of rules) ruleset.push({ BlockClass, rule });
     }
+    ruleset.sort((a, b) => (b.rule.priority ?? 0) - (a.rule.priority ?? 0));
     return ruleset;
 }
 

@@ -120,22 +120,10 @@ export class ZoneBlock extends MegaBlock {
 
     // ── Derived ─────────────────────────────────────────────────────────────
 
-    wordCount = $derived.by(() => {
-        let count = 0;
-        /** @param {import('../block.svelte.js').Block[]} blocks */
-        const traverse = (blocks) => {
-            for (const block of blocks) {
-                const tb = block.behaviors?.get('text');
-                if (tb && typeof tb.text === 'string') {
-                    count += tb.text.trim().split(/\s+/).filter(Boolean).length;
-                }
-                // @ts-ignore — children exists on MegaBlock
-                if (block.children?.length) traverse(block.children);
-            }
-        };
-        traverse(this.children);
-        return count;
-    });
+    // Incremental: each child maintains its own wordCount, we just sum.
+    // (Inherited MegaBlock.wordCount does the same, but Zone redeclares it
+    // explicitly because the word count is part of its public contract.)
+    wordCount = $derived(this.children.reduce((sum, c) => sum + (c.wordCount ?? 0), 0));
 
     // ── Getters / setters ───────────────────────────────────────────────────
 

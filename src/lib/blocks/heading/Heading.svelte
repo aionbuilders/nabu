@@ -1,5 +1,6 @@
 <script>
     import RichText from '../../behaviors/text/RichText.svelte';
+    import { getPlaceholder } from '../../utils/placeholders.js';
     /** @type {{block: import('./heading.svelte.js').Heading}}*/
     let {block} = $props();
 </script>
@@ -9,6 +10,7 @@
     bind:this={block.element}
     data-block-id={block.id}
     data-block-type="heading"
+    data-placeholder={block.text ? '' : getPlaceholder('heading', block.level)}
     class="nabu-heading"
     class:debug={block.nabu.debugging}
     class:selected={block.selected}
