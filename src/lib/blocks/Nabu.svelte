@@ -40,17 +40,29 @@
         word-break: break-word;
     }
 
-    /* Placeholders — blocks expose data-placeholder when empty.
+    /* Placeholders — blocks expose data-placeholder when it must be shown
+       (empty, and holding the cursor by default; see the `placeholders` option).
        Uses ::after (not ::before) so blocks that decorate themselves with
-       ::before (e.g. dialogue's dash) keep working. */
-    /* .nabu-editor :global([data-block-id][data-placeholder]) {
-        position: relative; /* nécessaire pour le ::after absolu */
-    /* } */
-    /* .nabu-editor :global([data-block-id][data-placeholder]:not([data-placeholder=''])::after) {
+       ::before (e.g. dialogue's dash) keep working. Absolutely positioned so it
+       never takes part in the layout, the caret placement or the text. It is
+       pinned to the top-left and inherits the block's padding (the empty block
+       holds a "\n", which would push an auto-positioned box onto a 2nd line). */
+    .nabu-editor :global([data-block-id][data-placeholder]) {
+        position: relative; /* containing block of the absolute ::after */
+    }
+    .nabu-editor :global([data-block-id][data-placeholder]:not([data-placeholder=''])::after) {
         content: attr(data-placeholder);
-        color: var(--nb-text-placeholder, rgba(255, 255, 255, 0.25));
+        color: var(--nb-text-placeholder, color-mix(in srgb, currentColor 35%, transparent));
         pointer-events: none;
         position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        box-sizing: border-box;
+        padding: inherit;
+        overflow: hidden;
+        text-overflow: ellipsis;
         user-select: none;
-    } */
+        white-space: nowrap;
+    }
 </style>

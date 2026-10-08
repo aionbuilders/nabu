@@ -42,7 +42,7 @@ test.describe('Clipboard (flaky)', () => {
     await page.waitForTimeout(300);
 
     const count = await getRootBlockCount(page);
-    expect(count).toBeGreaterThanOrEqual(4);
+    expect(count).toBe(4);
   });
 
   test('paste HTML table falls back to plain text', async ({ page }) => {
@@ -110,8 +110,9 @@ test.describe('Undo CRDT edge cases (flaky)', () => {
     await page.waitForTimeout(200);
 
     const md = await getMarkdown(page);
-    // Either back to "original" or partially reverted
-    expect(md).toBeTruthy();
+    // A paste is its own undo step: only the pasted text is removed.
+    expect(md).toContain('original');
+    expect(md).not.toContain('pasted');
   });
 
   test('redo after multiple undos is stable', async ({ page }) => {
@@ -137,7 +138,8 @@ test.describe('Undo CRDT edge cases (flaky)', () => {
 
 test.describe('Persistence timing (flaky)', () => {
   test('content persists with short debounce wait', async ({ page }) => {
-    await gotoEditor(page);
+    const docId = `e2e-${test.info().testId}-${Date.now()}`;
+    await gotoEditor(page, { persist: docId });
 
     await page.evaluate(async () => {
       const n = (window as any).nabu;

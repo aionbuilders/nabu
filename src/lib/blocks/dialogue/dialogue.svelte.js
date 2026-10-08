@@ -24,6 +24,8 @@ export class Dialogue extends TextBlock {
         this.serializers.set('application/x-nabu+json', (ctx) => this.behavior.toClipboardBlock(ctx));
     }
 
+    static placeholder = 'Dialogue...';
+
     component = $derived(this.nabu.components.get("dialogue") || DialogueComponent);
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */

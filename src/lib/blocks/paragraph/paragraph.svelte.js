@@ -25,6 +25,8 @@ export class Paragraph extends TextBlock {
         this.serializers.set('application/x-nabu+json', (ctx = {}) => this.behavior.toClipboardBlock(ctx));
     }
 
+    static placeholder = 'Start writing...';
+
     component = $derived(this.nabu.components.get("paragraph") || ParagraphComponent);
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
@@ -41,7 +43,9 @@ export class Paragraph extends TextBlock {
         {
             priority: 0, // catch-all — must be lowest
             detect: () => true,
-            consume(/** @type {string[]} */ lines, /** @type {number} */ i) {
+            consume(/** @type {string[]} */ lines, /** @type {number} */ i, /** @type {{ joinLines?: boolean }} */ { joinLines } = {}) {
+                // Paste: one line = one block. Import (CommonMark): lines up to a blank one are one paragraph.
+                if (!joinLines) return 1;
                 let j = i;
                 while (j < lines.length && lines[j].trim()) j++;
                 return Math.max(1, j - i);
@@ -51,13 +55,15 @@ export class Paragraph extends TextBlock {
 
     /**
      * @param {string[]} lines
-     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[] }} helpers
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], joinLines?: boolean }} helpers
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
-    static fromMarkdown(lines, { parseInline }) {
+    static fromMarkdown(lines, { parseInline, joinLines }) {
         const delta = parseInline(lines.join(' '));
         if (!delta.length) return null;
-        return { type: 'paragraph', delta, partial: false };
+        // Pasted, a bare paragraph is plain text ('both'): it must not retype an empty block
+        // (heading, quote…). Imported, it is a whole block.
+        return { type: 'paragraph', delta, partial: joinLines ? false : 'both' };
     }
 
     static htmlRules = [

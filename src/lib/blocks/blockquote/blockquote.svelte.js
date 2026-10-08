@@ -26,6 +26,8 @@ export class BlockquoteBlock extends TextBlock {
         this.serializers.set('application/x-nabu+json', (ctx = {}) => this.behavior.toClipboardBlock(ctx));
     }
 
+    static placeholder = 'Quote...';
+
     component = $derived(this.nabu.components.get("blockquote") || BlockquoteComponent);
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */

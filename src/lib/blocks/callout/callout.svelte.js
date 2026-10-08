@@ -54,6 +54,8 @@ export class CalloutBlock extends TextBlock {
     /** @type {string} */
     variant = $state('note');
 
+    static placeholder = 'Callout…';
+
     component = $derived(this.nabu.components.get("callout") || CalloutComponent);
 
     /**

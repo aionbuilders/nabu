@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Paste
+- Pasting a whole block (e.g. `# Title`) into an **empty root-level block** now adopts its type. Pasting into existing text, or into a nested block (list item…), never changes the block type.
+- Plain-text paste: **one non-blank line = one block** (runs of blank lines are separators). `importMarkdown()` keeps CommonMark semantics (consecutive lines = one paragraph) via the new optional `interpret(raw, nabu, { joinLines })` argument of paste interpreters.
+- A paste is always its own undo step; the typing right after it doesn't merge into it.
+
+### Undo
+- Structural operations (split/Enter, block merge, multi-block deletion, block type transforms incl. markdown shortcuts, list indent/unindent, cut) are their own undo step. Detected centrally at commit time from the pending Loro transaction; plain typing still merges per second.
+
+### Editing
+- Word deletion (Ctrl/Alt+Backspace, Ctrl/Alt+Delete) now uses the model-based rule in every browser: the deleted word takes its surrounding whitespace with it, no orphan or doubled space. Previously Chromium's `getTargetRanges()` bypassed the fix for issue #4.
+
+### Placeholders
+- Placeholders are displayed again (their CSS was disabled). New `placeholders` editor option: `false` to disable, or `{ show: 'focus' | 'empty', text: { [type]: string | false | (block) => string | false } }`. Default `show: 'focus'` (only the empty block holding the caret). Blocks declare their default text with `static placeholder`; color via `--nb-text-placeholder`. `getPlaceholder()` is deprecated.
+- `createPersistedEditor()` now forwards all editor init options.
+
+### Tests
+- E2E harness: dedicated dev-only `/e2e` route (fresh editor per test, `?persist=<docId>`, `?options=<json>`), fixing a startup race that made ~35 tests time out. New `text-marks.spec.ts`. 162/162 e2e, 344/344 unit.
+
 ## 0.1.0-beta.0
 
 First beta. The library is feature-complete for the beta milestone: everything beyond the stability baseline is **opt-in** — a dedicated extension or a mounted UI component — so `MinimalPreset` stays paragraph-only. 287/287 unit tests, `prepack` + `publint` clean.

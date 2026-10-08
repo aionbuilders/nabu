@@ -1,6 +1,5 @@
 <script>
     import RichText from '../../behaviors/text/RichText.svelte';
-    import { getPlaceholder } from '../../utils/placeholders.js';
     /** @type {{block: import('./blockquote.svelte.js').BlockquoteBlock}}*/
     let {block} = $props();
 </script>
@@ -9,7 +8,7 @@
     bind:this={block.element}
     data-block-id={block.id}
     data-block-type="blockquote"
-    data-placeholder={block.text ? '' : getPlaceholder('blockquote')}
+    data-placeholder={block.placeholder}
     class="nabu-blockquote"
     class:debug={block.nabu.debugging}
     class:selected={block.selected}

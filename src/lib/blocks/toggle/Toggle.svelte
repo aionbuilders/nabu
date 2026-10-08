@@ -1,7 +1,6 @@
 <script>
     import Block from "../Block.svelte";
     import RichText from '../../behaviors/text/RichText.svelte';
-    import { getPlaceholder } from '../../utils/placeholders.js';
     /** @type {{ block: import('./toggle.svelte.js').ToggleBlock }} */
     let { block } = $props();
 </script>
@@ -21,7 +20,7 @@
             class="nabu-toggle-header"
             data-block-id={block.id}
             data-block-type="toggle"
-            data-placeholder={block.text ? '' : getPlaceholder('toggle')}
+            data-placeholder={block.placeholder}
         ><RichText delta={block.delta} /></div>
     </div>
     {#if !block.collapsed}

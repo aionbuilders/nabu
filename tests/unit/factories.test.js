@@ -17,11 +17,21 @@ describe('Paragraph.fromMarkdown (static)', () => {
     const result = Paragraph.fromMarkdown(['hello world'], {
       parseInline: (text) => [{ insert: text }],
     });
+    // Paste mode (default): a bare paragraph is plain text, so it never retypes an empty block.
     expect(result).toEqual({
       type: 'paragraph',
       delta: [{ insert: 'hello world' }],
-      partial: false,
+      partial: 'both',
     });
+  });
+
+  it('returns a whole block when importing (joinLines)', async () => {
+    const { Paragraph } = await import('$lib/blocks/paragraph/paragraph.svelte.js');
+    const result = Paragraph.fromMarkdown(['hello world'], {
+      parseInline: (text) => [{ insert: text }],
+      joinLines: true,
+    });
+    expect(result.partial).toBe(false);
   });
 
   it('returns null for empty input', async () => {

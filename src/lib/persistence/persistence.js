@@ -27,6 +27,8 @@ export { loadSnapshot, saveSnapshot, deleteSnapshot };
  * @param {Extension[]} [options.preset] - Extension preset (default: FullPreset)
  * @param {Extension[]} [options.extensions] - Additional extensions to append
  * @param {number} [options.debounce] - Auto-save debounce delay in ms (default: 2000)
+ * @param {import('../utils/placeholders.js').PlaceholdersOption} [options.placeholders] - Forwarded to Nabu
+ *   (any other Nabu init option, e.g. `files`, is forwarded too)
  * @returns {Promise<Nabu>}
  *
  * @example
@@ -45,11 +47,13 @@ export async function createPersistedEditor({
 	docId,
 	preset = FullPreset,
 	extensions = [],
-	debounce = 2000
+	debounce = 2000,
+	...init
 } = {}) {
 	const snapshot = await loadSnapshot(docId);
 
 	const nabu = new Nabu({
+		...init,
 		extensions: [...preset, ...extensions],
 		...(snapshot ? { snapshot } : {})
 	});

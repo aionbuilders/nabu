@@ -1,6 +1,5 @@
 <script>
     import RichText from '../../behaviors/text/RichText.svelte';
-    import { getPlaceholder } from '../../utils/placeholders.js';
     /** @type {{ block: import('./callout.svelte.js').CalloutBlock }} */
     let { block } = $props();
     /** @type {Record<string,string>} */
@@ -21,7 +20,7 @@
         bind:this={block.element}
         data-block-id={block.id}
         data-block-type="callout"
-        data-placeholder={block.text ? '' : getPlaceholder('callout')}
+        data-placeholder={block.placeholder}
         class:selected={block.selected}
     ><RichText delta={block.delta} /></div>
 </aside>

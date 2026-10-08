@@ -10,19 +10,17 @@ import {
 } from './helpers/editor.js';
 
 test.describe('Persistence', () => {
-  // Each test uses a unique docId to avoid cross-test contamination
-  const TEST_DOC_ID = `test-persistence-${Date.now()}`;
+  // Each test uses its own unique docId to avoid cross-test contamination
+  const uniqueDocId = () => `e2e-${test.info().testId}-${Date.now()}`;
 
   test('P0 · nabu.isNew is true for a brand-new document', async ({ page }) => {
-    await gotoEditor(page);
-    const isNew = await page.evaluate(() => (window as any).nabu?.isNew ?? true);
-    // The demo app uses 'nabu-demo' — it may or may not be new depending on prior runs.
-    // We just check the property exists and is a boolean.
-    expect(typeof isNew).toBe('boolean');
+    await gotoEditor(page, { persist: uniqueDocId() });
+    const isNew = await page.evaluate(() => (window as any).nabu?.isNew);
+    expect(isNew).toBe(true);
   });
 
   test('P0 · editor content persists across page reload', async ({ page }) => {
-    await gotoEditor(page);
+    await gotoEditor(page, { persist: uniqueDocId() });
 
     // Write content
     await page.evaluate(async () => {
@@ -44,7 +42,7 @@ test.describe('Persistence', () => {
   });
 
   test('P0 · nabu.saveNow() is callable without error', async ({ page }) => {
-    await gotoEditor(page);
+    await gotoEditor(page, { persist: uniqueDocId() });
     const result = await page.evaluate(async () => {
       try {
         await (window as any).nabu?.saveNow?.();
@@ -57,7 +55,7 @@ test.describe('Persistence', () => {
   });
 
   test('P1 · content survives soft navigation (back/forward)', async ({ page }) => {
-    await gotoEditor(page);
+    await gotoEditor(page, { persist: uniqueDocId() });
 
     await page.evaluate(async () => {
       const n = (window as any).nabu;
@@ -75,7 +73,7 @@ test.describe('Persistence', () => {
   });
 
   test('P1 · nabu.clearPersistence() removes saved data', async ({ page }) => {
-    await gotoEditor(page);
+    await gotoEditor(page, { persist: uniqueDocId() });
 
     await page.evaluate(async () => {
       const n = (window as any).nabu;
@@ -101,7 +99,7 @@ test.describe('Persistence', () => {
   });
 
   test('P2 · auto-save debounce fires within 2 seconds of typing', async ({ page }) => {
-    await gotoEditor(page);
+    await gotoEditor(page, { persist: uniqueDocId() });
 
     await page.evaluate(async () => {
       const n = (window as any).nabu;

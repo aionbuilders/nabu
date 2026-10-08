@@ -6,6 +6,7 @@ import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDir
 import { jsonToPasteBlocks } from '../utils/extensions.js';
 import { tick } from 'svelte';
 import { Pulse } from '@aionbuilders/pulse';
+import { normalizePlaceholders } from '../utils/placeholders.js';
 
 
 /**
@@ -24,6 +25,9 @@ import { Pulse } from '@aionbuilders/pulse';
 * @property {Extension[]} [extensions]
 * @property {Uint8Array<ArrayBufferLike>} [snapshot]
 * @property {import('../files/files.svelte.js').FilesConfig} [files]
+* @property {import('../utils/placeholders.js').PlaceholdersOption} [placeholders] - Hint text of empty blocks.
+*   `false`: none. `true` / omitted: defaults (shown on the empty block holding the cursor).
+*   Object: `{ show?: 'focus' | 'empty', text?: Record<blockType, string | false | ((block) => string | false)> }`.
 */
 
 /**
@@ -61,6 +65,13 @@ export class Nabu {
     #compositionStartOffset = null;
     /** @type {Block | null} bloc cible au début de la composition */
     #compositionStartBlock = null;
+    /** Configured UndoManager merge window (ms), restored after a paste isolation. */
+    #mergeInterval = 1000;
+    /** Undo steps still to push with merging disabled (paste / structural op / cut + the next one); 0 = not isolating. */
+    #isolatedSteps = 0;
+    #isolating = false;
+    /** True during the synchronous turn that started a structural undo step (see commit()). */
+    #structuralBurst = false;
 
     /** @param {NabuInit} init */
     constructor(init = {}) {
@@ -76,8 +87,9 @@ export class Nabu {
         // Initialize Undo/Redo Manager
         this.undoManager = new UndoManager(this.doc, {
             maxUndoSteps: 100,
-            mergeInterval: 1000,
+            mergeInterval: this.#mergeInterval,
             onPush: () => {
+                if (this.#isolatedSteps > 0) this.#isolatedSteps--;
                 // Save cursor position for restoration on undo/redo
                 const sel = this.selection;
                 if (!sel || !sel.anchorBlock) return { value: null, cursors: [] };
@@ -106,6 +118,7 @@ export class Nabu {
 
         this.extensions = init.extensions || [];
         this.fileConfig = init.files || {};
+        this.placeholders = normalizePlaceholders(init.placeholders);
         
         if (this.extensions?.length) {
             for (const ext of this.extensions) {
@@ -247,6 +260,12 @@ export class Nabu {
     fileConfig = {};
 
     /**
+     * Resolved `placeholders` option (see NabuInit). Reassign to change it at runtime.
+     * @type {import('../utils/placeholders.js').ResolvedPlaceholders}
+     */
+    placeholders = $state.raw(normalizePlaceholders());
+
+    /**
      * Pending inline formatting for the next typed character (active marks at a
      * collapsed cursor). null = inherit from the span at the cursor.
      * @type {Record<string, boolean> | null}
@@ -341,8 +360,77 @@ export class Nabu {
 
     async commit() {
         this.trigger("onBeforeTransaction", this);
+        // Structural operations (split, merge, delete/move of blocks, type change, list indent…)
+        // are their own undo step, and so is the typing that follows (see #hasPendingStructuralOps).
+        // Skipped when an isolation is already armed for this very commit (paste, cut).
+        let continuation = false;
+        const stepsBefore = this.#isolatedSteps;
+        if (!(this.#isolating && this.#isolatedSteps === 2) && this.#hasPendingStructuralOps()) {
+            if (this.#structuralBurst) {
+                // A second structural commit in the same synchronous turn is the same user
+                // operation (e.g. a list indent = create the sublist via nabu.insert(), which
+                // commits, then move the item): let it merge into the step just pushed.
+                continuation = true;
+                this.undoManager.setMergeInterval(this.#mergeInterval);
+            } else {
+                this.#structuralBurst = true;
+                queueMicrotask(() => { this.#structuralBurst = false; });
+                this.#isolateNextCommits();
+            }
+        }
         this.doc.commit();
+        if (continuation && this.#isolating) {
+            // The merge above must not leak: the typing after the operation stays isolated
+            // (a merged commit may still call onPush, so don't count it as a pushed step).
+            this.#isolatedSteps = stepsBefore;
+            this.undoManager.setMergeInterval(0);
+        }
+        if (this.#isolating && this.#isolatedSteps === 0) {
+            this.#isolating = false;
+            this.undoManager.setMergeInterval(this.#mergeInterval);
+        }
         await tick();
+    }
+
+    /**
+     * Whether the pending (uncommitted) Loro transaction changes the document structure:
+     * a tree create / move / delete (every block creation, destruction, re-parenting or
+     * reordering — split, merge, multi-block deletion, list indent…) or a change of a
+     * block's `type` (transforms, markdown shortcuts).
+     *
+     * This is the one central choke point: whatever the call site (tree.createNode,
+     * node.move, destroy, adoptChildren, data.set('type')…), the ops end up in the
+     * pending transaction that commit() is about to flush, so nothing has to be marked
+     * at the ~46 mutation sites.
+     * @returns {boolean}
+     */
+    #hasPendingStructuralOps() {
+        const pending = this.doc.getUncommittedOpsAsJson();
+        if (!pending) return false;
+        const treeId = this.tree.id;
+        for (const change of pending.changes) {
+            for (const op of change.ops) {
+                const content = /** @type {any} */ (op.content);
+                if (op.container === treeId) {
+                    if (content.type === 'create' || content.type === 'move' || content.type === 'delete') return true;
+                } else if (content.type === 'insert' && content.key === 'type' && op.container.endsWith(':Map')) {
+                    // `type` set on a block's data map ("cid:<nodeId>:Map"), not e.g. a file asset's MIME type.
+                    if (this.blocks.has(op.container.slice(4, -4))) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Make the next commit (a paste, a cut, a structural op) AND the one after it their own undo steps:
+     * merging is off until both pushed a step (empty commits don't count), then
+     * the configured interval is restored at the end of commit().
+     */
+    #isolateNextCommits() {
+        this.undoManager.setMergeInterval(0);
+        this.#isolating = true;
+        this.#isolatedSteps = 2;
     }
 
     /**
@@ -737,7 +825,8 @@ export class Nabu {
         const result = deleteSelectionContent(this, this);
         if (!result) return;
 
-        // 3. Single Loro transaction + restore cursor
+        // 3. Single Loro transaction (its own undo step, like a structural op) + restore cursor
+        this.#isolateNextCommits();
         this.commit();
         this.selection.setCursor(result.block, result.offset);
     }
@@ -791,15 +880,30 @@ export class Nabu {
             return;
         }
 
+        // A whole pasted block landing in an EMPTY root-level block (e.g. `# Title` into an
+        // empty paragraph) brings its type along. Pasting into existing text never coerces.
+        // Blocks nested in a container (list item…) keep their type to preserve the structure.
+        const anchorEmpty = textBehavior.container.length === 0 && !anchorBlock.parent;
+        /** @param {import('../utils/extensions.js').PasteBlock} pb */
+        const adoptType = (pb) => {
+            if (!anchorEmpty || pb.partial !== false || pb.type === anchorBlock.type || !this.registry.has(pb.type)) return;
+            const data = /** @type {any} */ (anchorBlock.node.data);
+            data.set('type', pb.type);
+            for (const [key, value] of Object.entries(pb.props || {})) data.set(key, value);
+        };
+
         // ── Inline: single flat block ─────────────────────────────────────────
         if (blocks.length === 1 && !blocks[0].children?.length) {
             const pb = blocks[0];
             const delta = pb.delta || [];
             const len = delta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
 
+            adoptType(pb);
             textBehavior.applyDelta([{ retain: offset }, ...delta]);
+            this.#isolateNextCommits();
             this.commit();
-            tick().then(() => this.selection.setCursor(anchorBlock, offset + len));
+            // A type change makes updateRoots() replace the block instance — re-fetch it.
+            tick().then(() => this.selection.setCursor(this.blocks.get(anchorBlock.id) || anchorBlock, offset + len));
             return;
         }
 
@@ -819,7 +923,8 @@ export class Nabu {
 
         // ── First block ───────────────────────────────────────────────────────
         if (!firstPb.children?.length) {
-            // Leaf: merge content into anchor (anchor type survives)
+            // Leaf: merge content into anchor (anchor type survives, unless it was empty — see adoptType)
+            adoptType(firstPb);
             const firstDelta = firstPb.delta || [];
             if (firstDelta.length) textBehavior.applyDelta([{ retain: offset }, ...firstDelta]);
             focusOffset = offset + firstDelta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
@@ -879,6 +984,7 @@ export class Nabu {
             }
         }
 
+        this.#isolateNextCommits();
         this.commit();
         tick().then(() => {
             const fb = this.blocks.get(focusBlock.id) || focusBlock;
@@ -977,7 +1083,8 @@ export class Nabu {
             return;
         }
 
-        const fragment = interpreter.interpret(markdown, this);
+        // CommonMark semantics: consecutive lines join into one paragraph (paste splits per line).
+        const fragment = interpreter.interpret(markdown, this, { joinLines: true });
         if (!fragment) {
             this.warn('importMarkdown: nothing to import');
             return;

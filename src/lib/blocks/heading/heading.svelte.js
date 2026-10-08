@@ -37,6 +37,9 @@ export class Heading extends TextBlock {
     /** @type {number} */
     level = $state(1);
 
+    /** @param {Heading} block */
+    static placeholder = (block) => `Heading ${block.level}`;
+
     component = $derived(this.nabu.components.get("heading") || HeadingComponent);
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */

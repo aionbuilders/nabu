@@ -38,6 +38,15 @@
     return false;
   }
 
+  // If debug mode was enabled before the engine existed, wire it up as soon as it arrives.
+  $effect(() => {
+    if (typeof window === 'undefined') return;
+    if (active && engine) {
+      engine.debugging = true;
+      window.nabu = engine;
+    }
+  });
+
   $effect(() => {
     if (typeof window === 'undefined') return;
 

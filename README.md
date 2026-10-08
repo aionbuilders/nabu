@@ -149,6 +149,30 @@ const engine = createFullEditor();
 const engine = createTextEditor({ extensions: [MyExtension] });
 ```
 
+### Placeholders
+
+Empty blocks can show a hint ("Start writing...", "Heading 2", ...). Configure it with the `placeholders` option, accepted by `new Nabu()` and every factory:
+
+```js
+createFullEditor({ placeholders: false });             // no placeholders at all
+createFullEditor({ placeholders: true });              // defaults (same as omitting it)
+createFullEditor({
+  placeholders: {
+    show: 'empty',                                     // 'focus' (default) | 'empty'
+    text: {
+      paragraph: "Type '/' for commands",              // string
+      heading: (block) => `Title (h${block.level})`,   // function of the block
+      blockquote: false,                               // disable this block type
+    },
+  },
+});
+```
+
+- `show: 'focus'` (default): only the empty block that holds the cursor displays its placeholder. `show: 'empty'`: every empty block does.
+- `text`: overrides per block type. A string, `false` (no placeholder for that type) or a function `(block) => string | false`.
+- Defaults live on the block classes: a custom block declares `static placeholder = 'My hint'` (string, `false` or `(block) => string | false`). The resolved value is exposed as `block.placeholder` and rendered through `data-placeholder` (custom block components: `data-placeholder={block.placeholder}`).
+- Style: it is drawn with a `::after` pseudo-element (never selectable, never affects the caret or the text). Set the color with the `--nb-text-placeholder` CSS variable (default: the text color at 35% opacity, so it works on light and dark backgrounds).
+
 ## Extensions
 
 All block types and behaviors are provided as extensions. Pass them to the `Nabu` constructor:

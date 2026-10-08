@@ -301,6 +301,12 @@ export class TextBehavior {
      * Deletes the word before the cursor (Ctrl+Backspace on Win/Linux,
      * Option+Delete on Mac), including the whitespace that precedes it
      * so no orphan space is left behind (issue #4).
+     *
+     * For a collapsed selection the range is always computed from the model
+     * text, never from `event.getTargetRanges()`: browsers disagree on it
+     * (Chromium stops right after the previous space, leaving "one two " from
+     * "one two three"), so the behavior would differ per engine.
+     * Rule: remove `\s* \S+ \s*` ending at the cursor ("one two three|" -> "one two").
      * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
      */
     handleDeleteWordBackward(event, sel = this.selection) {
@@ -311,19 +317,10 @@ export class TextBehavior {
             tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
             return true;
         }
-        // Prefer getTargetRanges() when available (more reliable cross-platform)
-        const ranges = event.getTargetRanges?.();
-        let deleteFrom;
-        if (ranges?.length) {
-            const r = ranges[0];
-            deleteFrom = this.calculateOffset(r.startContainer, r.startOffset);
-        } else {
-            // FIX issue #4 : inclure le whitespace AVANT le mot dans la suppression
-            const textBefore = this.text.slice(0, sel.from);
-            // \s* leading : l'espace qui précède le mot est supprimé aussi (comportement Mac)
-            const wordMatch = textBefore.match(/(\s*\S+\s*)$/);
-            deleteFrom = wordMatch ? sel.from - wordMatch[0].length : 0;
-        }
+        const textBefore = this.text.slice(0, sel.from);
+        // \s* leading : l'espace qui précède le mot est supprimé aussi (comportement Mac)
+        const wordMatch = textBefore.match(/(\s*\S+\s*)$/);
+        const deleteFrom = wordMatch ? sel.from - wordMatch[0].length : 0;
         const len = sel.from - deleteFrom;
         if (len > 0) this.delete({ index: deleteFrom, length: len });
         this.block.commit();
@@ -332,8 +329,19 @@ export class TextBehavior {
     }
 
     /**
-     * Deletes the word after the cursor (Ctrl+Delete / Option+Fn+Delete),
-     * including its trailing whitespace/punctuation.
+     * Deletes the word after the cursor (Ctrl+Delete / Option+Fn+Delete).
+     *
+     * Like backward deletion, a collapsed selection is resolved from the model
+     * text only (`getTargetRanges()` is ignored: it is engine-dependent).
+     * Rule, so that the result never has a double space nor glued words:
+     *  - the cursor is right before the word ("one |two three") -> remove the
+     *    word and its trailing whitespace -> "one three";
+     *  - whitespace sits between the cursor and the word ("one| two three")
+     *    -> remove that leading whitespace and the word, keep the trailing
+     *    whitespace -> "one three";
+     *  - last word of the text -> remove it with its leading whitespace
+     *    ("one two| three" -> "one two").
+     * If only whitespace remains after the cursor, it is all removed.
      * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
      */
     handleDeleteWordForward(event, sel = this.selection) {
@@ -344,18 +352,15 @@ export class TextBehavior {
             tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
             return true;
         }
-        const ranges = event.getTargetRanges?.();
-        let deleteTo;
-        if (ranges?.length) {
-            const r = ranges[0];
-            deleteTo = this.calculateOffset(r.endContainer, r.endOffset);
-        } else {
-            const textAfter = this.text.slice(sel.from);
-            // Inclure le whitespace leading + le mot + son trailing whitespace
-            const wordMatch = textAfter.match(/^(\s*\S+\s*)/);
-            deleteTo = sel.from + (wordMatch ? wordMatch[0].length : textAfter.length);
+        const textAfter = this.text.slice(sel.from);
+        const wordMatch = textAfter.match(/^(\s*)(\S+)(\s*)/);
+        let len;
+        if (!wordMatch) len = textAfter.length;
+        else {
+            const [, leading, word, trailing] = wordMatch;
+            // Leading whitespace present: keep the trailing one as the separator.
+            len = leading ? leading.length + word.length : word.length + trailing.length;
         }
-        const len = deleteTo - sel.from;
         if (len > 0) this.delete({ index: sel.from, length: len });
         this.block.commit();
         tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));

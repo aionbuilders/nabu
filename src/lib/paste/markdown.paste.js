@@ -87,15 +87,16 @@ export const MarkdownPasteExtension = new Extension('markdown-paste', {
             /**
              * @param {string} raw
              * @param {import('../blocks/nabu.svelte.js').Nabu} nabu
+             * @param {import('../utils/extensions.js').PasteInterpretOptions} [options]
              * @returns {import('../utils/extensions.js').PasteFragment | null}
              */
-            interpret(raw, nabu) {
+            interpret(raw, nabu, options) {
                 try {
                     const lines = raw.split(/\r?\n/);
                     const ruleset = buildMarkdownRuleset(nabu);
                     if (!ruleset.length) return null;
 
-                    const helpers = { parseInline: parseMarkdownInline };
+                    const helpers = { parseInline: parseMarkdownInline, joinLines: !!options?.joinLines };
 
                     /** @type {import('../utils/extensions.js').PasteBlock[]} */
                     const blocks = [];
@@ -115,7 +116,7 @@ export const MarkdownPasteExtension = new Extension('markdown-paste', {
 
                             if (!detects) continue;
 
-                            const count = rule.consume(lines, i);
+                            const count = rule.consume(lines, i, helpers);
                             const consumed = lines.slice(i, i + count);
                             const pb = BlockClass.fromMarkdown(consumed, helpers, rule);
 

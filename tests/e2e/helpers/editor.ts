@@ -4,7 +4,7 @@
  * Key constraints (from test plan):
  *  - NEVER use page.fill() on contenteditable
  *  - Only keyboard.type() / keyboard.press()
- *  - window.nabu accessed via page.evaluate() after window.__nabu_debug?.()
+ *  - window.nabu (set by the /e2e route) accessed via page.evaluate()
  *  - waitForEditor() uses page.waitForFunction()
  */
 
@@ -26,38 +26,33 @@ export interface NabuSnapshot {
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 
 /**
- * Navigate to the app and wait for the editor to be ready.
- * Enables debug mode so window.nabu is available.
+ * Navigate to the dedicated e2e route and wait for the editor to be ready.
+ * Without `persist` the editor is in-memory and starts empty; with
+ * `persist: docId` it is backed by IndexedDB under that docId (no seed content).
+ * `options` is forwarded (as JSON, via `?options=`) to the editor factory.
  */
-export async function gotoEditor(page: Page) {
-  console.log('Navigating to editor page...');
-  await page.goto('/');
-  console.log('Waiting for editor to initialize...');
+export async function gotoEditor(
+  page: Page,
+  opts: { persist?: string; options?: Record<string, unknown> } = {},
+) {
+  const params = new URLSearchParams();
+  if (opts.persist) params.set('persist', opts.persist);
+  // JSON-able Nabu init options (e.g. { placeholders: { show: 'empty' } }), merged into the editor init.
+  if (opts.options) params.set('options', JSON.stringify(opts.options));
+  const query = params.toString();
+  await page.goto(query ? '/e2e?' + query : '/e2e');
   await waitForEditor(page);
 }
 
 /**
- * Wait until window.nabu is defined and the editor has at least one block.
- *
- * Robust against a cold dev server: __nabu_debug (which exposes window.nabu)
- * is retried inside the polling loop until the DebugPanel has mounted, instead
- * of being called once at a fixed delay. Timeout is generous because the first
+ * Wait until the /e2e route has fully created the engine (window.__nabu_ready)
+ * and the editor has at least one block. Timeout is generous because the first
  * navigation may trigger on-demand route compilation + WASM load.
  */
 export async function waitForEditor(page: Page, timeout = 20000) {
-  // 1. Wait for the DebugPanel to register the toggle (handles slow first-mount).
   await page.waitForFunction(
-    () => typeof (window as any).__nabu_debug === 'function',
-    { timeout },
-  );
-  // 2. Enable debug EXACTLY ONCE. __nabu_debug is a toggle — calling it twice
-  //    would turn debug (and window.nabu) back off, so guard on !window.nabu.
-  await page.evaluate(() => {
-    if (!(window as any).nabu) (window as any).__nabu_debug();
-  });
-  // 3. Wait for window.nabu to be exposed and the editor to have its blocks.
-  await page.waitForFunction(
-    () => !!(window as any).nabu && (window as any).nabu.children?.length >= 0,
+    () => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0,
+    null,
     { timeout },
   );
 }

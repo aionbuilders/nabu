@@ -61,6 +61,8 @@ export class ToggleBlock extends MegaBlock {
     /** @type {boolean} */
     collapsed = $state(false);
 
+    static placeholder = 'Toggle…';
+
     component = $derived(this.nabu.components.get("toggle") || ToggleComponent);
 
     get text() { return this.behavior.text; }

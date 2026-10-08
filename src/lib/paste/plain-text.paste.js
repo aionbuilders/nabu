@@ -2,8 +2,8 @@ import { Extension } from '../utils/extensions.js';
 
 /**
  * Interprète text/plain comme du texte pur.
- * - Double saut de ligne (\n\n) → blocs séparés
- * - Saut simple (\n) → soft break dans le même bloc
+ * - Chaque ligne non vide → un bloc (une ligne = un bloc)
+ * - Les lignes vides ne sont que des séparateurs (aucun paragraphe vide)
  * Priorité 0 (fallback de dernier recours).
  */
 export const PlainTextPasteExtension = new Extension('plain-text-paste', {
@@ -16,7 +16,7 @@ export const PlainTextPasteExtension = new Extension('plain-text-paste', {
                 if (!raw) return null;
 
                 const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-                const paragraphs = normalized.split(/\n\n+/).filter(Boolean);
+                const paragraphs = normalized.split('\n').filter(line => line.trim());
                 if (paragraphs.length === 0) return null;
 
                 if (paragraphs.length === 1) {

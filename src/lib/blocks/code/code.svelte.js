@@ -71,6 +71,8 @@ export class CodeBlock extends TextBlock {
     /** @type {string | null} */
     language = $state(null);
 
+    static placeholder = 'Code…';
+
     component = $derived(this.nabu.components.get("code") || CodeComponent);
 
     /**

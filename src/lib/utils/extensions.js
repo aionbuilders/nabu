@@ -20,7 +20,14 @@
  * @typedef {Object} PasteInterpreter
  * @property {string} format - MIME type géré ('application/x-nabu+json', 'text/html', 'text/plain')
  * @property {number} [priority] - Plus haut = appelé en premier (default: 0)
- * @property {(raw: string, nabu: Nabu) => PasteFragment | null} interpret
+ * @property {(raw: string, nabu: Nabu, options?: PasteInterpretOptions) => PasteFragment | null} interpret
+ */
+
+/**
+ * @typedef {Object} PasteInterpretOptions
+ * @property {boolean} [joinLines] - false/absent (paste): one non-blank line = one block.
+ *   true (`importMarkdown`): CommonMark semantics, consecutive lines join into one paragraph.
+ *   Forwarded to block markdown rules as `helpers.joinLines` (and 3rd arg of `consume`).
  */
 
 /**

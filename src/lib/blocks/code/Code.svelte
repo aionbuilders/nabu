@@ -1,5 +1,4 @@
 <script>
-    import { getPlaceholder } from '../../utils/placeholders.js';
     /** @type {{ block: import('./code.svelte.js').CodeBlock }} */
     let { block } = $props();
     const LANGS = ['plaintext', 'javascript', 'typescript', 'html', 'css', 'json', 'python', 'rust', 'bash', 'markdown', 'sql', 'go'];
@@ -19,7 +18,7 @@
         bind:this={block.element}
         data-block-id={block.id}
         data-block-type="code"
-        data-placeholder={block.text ? '' : getPlaceholder('code')}
+        data-placeholder={block.placeholder}
         class="nabu-code"
         class:debug={block.nabu.debugging}
         class:selected={block.selected}

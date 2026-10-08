@@ -7,6 +7,7 @@
 import { tick } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { Variable } from "./variable.svelte.js";
+import { resolvePlaceholderText } from "../utils/placeholders.js";
 
 
 export class Block {
@@ -112,6 +113,30 @@ export class Block {
     });
 
     component = $derived(this.nabu.components.get(this.type) || null);
+
+    /**
+     * Resolved placeholder to render in `data-placeholder` ('' = none). Combines the
+     * Nabu `placeholders` option, the block's emptiness and — with `show: 'focus'`
+     * (default) — whether it holds the collapsed cursor.
+     *
+     * The default text is declared by each block class as `static placeholder`
+     * (string, `false`, or `(block) => string | false`), overridable per type through
+     * the `placeholders.text` option. Blocks without a text behavior never show one.
+     * (No `static placeholder` is declared here: Svelte forbids a static and a
+     * reactive field with the same name in one class.)
+     * @type {string}
+     */
+    placeholder = $derived.by(() => {
+        const config = this.nabu.placeholders;
+        if (!config.enabled) return '';
+        const text = this.behaviors.get("text");
+        if (!text || text.text) return '';
+        if (config.show === 'focus') {
+            const sel = this.nabu.selection;
+            if (!sel.isCollapsed || sel.anchorBlock !== this) return '';
+        }
+        return resolvePlaceholderText(/** @type {any} */ (this), config.text);
+    });
 
     /** @type {HTMLElement | null} */
     element = $state(null);

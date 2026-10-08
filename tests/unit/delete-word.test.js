@@ -82,6 +82,17 @@ describe('TextBehavior deleteWordBackward', () => {
     expect(b.container.delete).toHaveBeenCalledWith(5, 6); // " world"
   });
 
+  it('ignores getTargetRanges() for a collapsed selection (Chromium leaves an orphan space otherwise)', () => {
+    const b = makeBehavior('one two three');
+    const event = makeEvent('deleteWordBackward');
+    // Chromium reports a range starting right after "two "
+    event.getTargetRanges = () => [{ startContainer: {}, startOffset: 8 }];
+    b.calculateOffset = vi.fn(() => 8);
+    b.handleBeforeInput(event, makeSel(13));
+    expect(b.calculateOffset).not.toHaveBeenCalled();
+    expect(b.container.delete).toHaveBeenCalledWith(7, 6); // " three" -> "one two"
+  });
+
   it('does nothing at offset 0', () => {
     const b = makeBehavior('hello');
     b.handleBeforeInput(makeEvent('deleteWordBackward'), makeSel(0));
@@ -98,10 +109,38 @@ describe('TextBehavior deleteWordBackward', () => {
 // ── deleteWordForward ──────────────────────────────────────────────────────
 
 describe('TextBehavior deleteWordForward', () => {
-  it('deletes the next word including leading + trailing whitespace', () => {
+  it('removes leading whitespace + word and keeps the separator ("hello| world after")', () => {
     const b = makeBehavior('hello world after');
     b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(5));
-    expect(b.container.delete).toHaveBeenCalledWith(5, 7); // " world "
+    expect(b.container.delete).toHaveBeenCalledWith(5, 6); // " world" -> "hello after"
+  });
+
+  it('removes the word and its trailing whitespace when the cursor is right before it', () => {
+    const b = makeBehavior('one two three');
+    b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(4));
+    expect(b.container.delete).toHaveBeenCalledWith(4, 4); // "two " -> "one three"
+  });
+
+  it('removes the last word with its leading whitespace', () => {
+    const b = makeBehavior('one two three');
+    b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(7));
+    expect(b.container.delete).toHaveBeenCalledWith(7, 6); // " three" -> "one two"
+  });
+
+  it('removes trailing whitespace only when no word follows', () => {
+    const b = makeBehavior('one   ');
+    b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(3));
+    expect(b.container.delete).toHaveBeenCalledWith(3, 3);
+  });
+
+  it('ignores getTargetRanges() for a collapsed selection', () => {
+    const b = makeBehavior('one two three');
+    const event = makeEvent('deleteWordForward');
+    event.getTargetRanges = () => [{ endContainer: {}, endOffset: 0 }];
+    b.calculateOffset = vi.fn(() => 7);
+    b.handleBeforeInput(event, makeSel(3));
+    expect(b.calculateOffset).not.toHaveBeenCalled();
+    expect(b.container.delete).toHaveBeenCalledWith(3, 4); // " two"
   });
 
   it('does nothing at end of text', () => {

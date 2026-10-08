@@ -13,8 +13,6 @@ import {
 
 test.describe('Action Bus (nabu.exec)', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173');
-
     await gotoEditor(page);
     await clearAndReset(page);
     await focusEditor(page);
