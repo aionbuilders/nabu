@@ -1,28 +1,3 @@
-import { List } from '../blocks/list/list.svelte.js';
-import { ListItem } from '../blocks/list/list-item.svelte.js';
-
-/**
- * Transform the current anchor block (a paragraph) into a list of the given type.
- * Mirrors the "- "/"1. " creation flow. Isolated here so the slash menu doesn't
- * depend on internal list actions.
- * @param {import('../blocks/nabu.svelte.js').Nabu} nabu
- * @param {"bullet"|"ordered"|"todo"} listType
- */
-function createListInBlock(nabu, listType) {
-    const block = nabu.selection.anchorBlock;
-    if (!block) return;
-    const beh = block.behaviors?.get('text');
-    const delta = beh ? beh.container.toDelta() : [];
-    const parentNode = block.node.parent();
-    const parentId = parentNode?.id.toString() ?? null;
-    const index = block.node.index();
-    const list = List.create(nabu, 'list', { listType }, parentId, index);
-    const itemProps = listType === 'todo' ? { delta, checked: false } : { delta };
-    const item = ListItem.create(nabu, 'list-item', itemProps, list.node.id.toString());
-    block.destroy();
-    nabu.commit().then(() => { const f = nabu.blocks.get(item.id); if (f) f.focus({ start: 0, end: 0 }); });
-}
-
 /**
  * @typedef {Object} SlashCommand
  * @property {string} title
@@ -38,9 +13,9 @@ export const DEFAULT_SLASH_COMMANDS = [
   { title: 'Heading 1',     icon: 'H1', aliases: ['h1','title','heading'],  run: (e) => e.exec('heading:1') },
   { title: 'Heading 2',     icon: 'H2', aliases: ['h2','subtitle'],         run: (e) => e.exec('heading:2') },
   { title: 'Heading 3',     icon: 'H3', aliases: ['h3'],                    run: (e) => e.exec('heading:3') },
-  { title: 'Bulleted list', icon: '•',  aliases: ['bullet','ul','list'],    run: (e) => createListInBlock(e, 'bullet') },
-  { title: 'Numbered list', icon: '1.', aliases: ['numbered','ol','ordered'], run: (e) => createListInBlock(e, 'ordered') },
-  { title: 'To-do list',    icon: '☑',  aliases: ['todo','task','checkbox','checklist'], run: (e) => createListInBlock(e, 'todo') },
+  { title: 'Bulleted list', icon: '•',  aliases: ['bullet','ul','list'],    run: (e) => e.exec('list:convert', { listType: 'bullet' }) },
+  { title: 'Numbered list', icon: '1.', aliases: ['numbered','ol','ordered'], run: (e) => e.exec('list:convert', { listType: 'ordered' }) },
+  { title: 'To-do list',    icon: '☑',  aliases: ['todo','task','checkbox','checklist'], run: (e) => e.exec('list:convert', { listType: 'todo' }) },
   { title: 'Code',          icon: '<>', aliases: ['code','snippet'],        run: (e) => e.exec('code') },
   { title: 'Callout',       icon: '💡', aliases: ['callout','note','info','warning'], run: (e) => e.exec('callout') },
   { title: 'Quote',         icon: '"',  aliases: ['quote','blockquote'],    run: (e) => e.exec('blockquote') },

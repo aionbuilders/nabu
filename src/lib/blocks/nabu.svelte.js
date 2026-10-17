@@ -504,6 +504,15 @@ export class Nabu {
     }
 
     /**
+     * Make the NEXT commit its own undo step (and the typing right after it another one), even though it
+     * holds no structural op: for a non-structural change that must undo on its own, e.g. a flag toggled
+     * from the keyboard, which would otherwise merge with the typing around it. Call it just before commit().
+     */
+    isolateUndoStep() {
+        this.#isolateNextCommits();
+    }
+
+    /**
      * Run Loro mutations as a single transaction, then optionally restore the cursor.
      * Centralizes the "mutate → commit → setCursor" dance used by most actions.
      * @param {() => void} mutateFn  - Mutations Loro ici. Ne PAS appeler commit() dedans.

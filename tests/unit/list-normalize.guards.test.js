@@ -27,6 +27,8 @@ const CORE_FILES = [
   'blocks/container.utils.js',
   'blocks/selection.svelte.js',
   'utils/extensions.js',
+  'blocks/block.extension.js',
+  'ui/slash-menu.svelte.js',
 ];
 
 const blockFolders = readdirSync(join(root, 'blocks')).filter((name) => statSync(join(root, 'blocks', name)).isDirectory());

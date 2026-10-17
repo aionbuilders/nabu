@@ -41,7 +41,7 @@ const isAlive = (node) => {
 
 /**
  * Inspects the pending (uncommitted) transaction. Returns null when it does not change the document
- * structure (no tree create / move / delete, no block `type` change): no list invariant can have been
+ * structure (no tree create / move / delete, no block `type` or list `listType` change): no list invariant can have been
  * broken, nothing to do. Otherwise returns the ids of the nodes created by the transaction.
  * @param {Nabu} nabu
  * @returns {{ created: Set<string> } | null}
@@ -59,7 +59,7 @@ function inspectPendingOps(nabu) {
             if (op.container === treeId) {
                 if (content.type === "create") { structural = true; created.add(String(content.target)); }
                 else if (content.type === "move" || content.type === "delete") structural = true;
-            } else if (content.type === "insert" && content.key === "type" && op.container.endsWith(":Map")) {
+            } else if (content.type === "insert" && (content.key === "type" || content.key === "listType") && op.container.endsWith(":Map")) {
                 structural = true;
             }
         }

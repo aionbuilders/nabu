@@ -771,14 +771,41 @@ test.describe('F · Todo lists', () => {
     await expectValid(page);
   });
 
-  test('22 · there is NO keyboard toggle for a todo: Ctrl+Enter is a no-op', async ({ page }) => {
+  test('22 · Ctrl+Enter toggles the todo item (caret unchanged), a second press unchecks, one undo step each', async ({ page }) => {
     await buildDoc(page, [TODO(I('t1'), I('t2', { checked: true }))]);
-    await focusEnd(page, 't1');
+    await focusAt(page, 't1', 1);
     await press(page, 'Control+Enter');
-    // CURRENT: nothing is toggled, no item is created (the toggle is mouse-only: ListItem.svelte checkbox button).
-    await expectOutline(page, 'todo[[ ] t1, [x] t2]');
-    await expectCaret(page, 't1|');
-    expect(await typeAndOutline(page, 'Q')).toBe('todo[[ ] t1Q, [x] t2]');
+    // DECIDED: Ctrl/Cmd+Enter toggles `checked` of the todo item under the caret; the caret stays; no item is created.
+    await expectOutline(page, 'todo[[x] t1, [x] t2]');
+    await expectCaret(page, 't|1');
+    expect(await typeAndOutline(page, 'Q')).toBe('todo[[x] tQ1, [x] t2]');
+    await focusAt(page, 'tQ1', 2);
+    await press(page, 'Control+Enter');
+    await expectOutline(page, 'todo[[ ] tQ1, [x] t2]');
+    await undo(page);
+    await expectOutline(page, 'todo[[x] tQ1, [x] t2]');
+    await expectValid(page);
+  });
+
+  test('22b · Ctrl+Enter with a selection over several todo items: any unchecked -> check all, else uncheck all', async ({ page }) => {
+    await buildDoc(page, [TODO(I('t1', { checked: true }), I('t2'), I('t3', { sub: TODO(I('t4', { checked: true })) }))]);
+    await selectRange(page, 't1', 1, 't3', 1);
+    await press(page, 'Control+Enter');
+    await expectOutline(page, 'todo[[x] t1, [x] t2, [x] t3 > todo[[x] t4]]');
+    await expectCaret(page, 't1@1 -> t3@1');
+    await press(page, 'Control+Enter');
+    await expectOutline(page, 'todo[[ ] t1, [ ] t2, [ ] t3 > todo[[x] t4]]');
+    await undo(page);
+    await expectOutline(page, 'todo[[x] t1, [x] t2, [x] t3 > todo[[x] t4]]');
+    await expectValid(page);
+  });
+
+  test('22c · Ctrl+Enter outside a todo item does nothing', async ({ page }) => {
+    await buildDoc(page, [UL(I('a'), I('b'))]);
+    await focusAt(page, 'a', 1);
+    await press(page, 'Control+Enter');
+    await expectOutline(page, 'ul[a, b]');
+    await expectCaret(page, 'a|');
   });
 });
 
@@ -892,23 +919,24 @@ test.describe('H · Misc', () => {
     expect(await getMarkdown(page)).toBe('1. one\n2. two\n  1. x\n  2. y\n3. three');
   });
 
-  test('28a · transforming a bullet item to a paragraph (block:transform) keeps the tree valid', async ({ page }) => {
+  test('28a · transforming a bullet item to a paragraph (block:transform) splits the list around it', async ({ page }) => {
     await buildDoc(page, [UL(I('a'), I('bb'), I('c'))]);
     await focusAt(page, 'bb', 1);
     await exec(page, 'block:transform', { type: 'paragraph' });
-    // BROKEN: the list-item is retyped in place ("ul[a, p(bb), c]"): a paragraph under a list, the list is not split
-    // (block.extension.js transformBlock only sets `type`; no un-nesting for blocks inside a container).
+    // DECIDED (P-26): only that item changes type, in place: same result as Backspace on a top-level item.
+    await expectOutline(page, 'ul[a] ; p(bb) ; ul[c]');
     expect(await texts(page)).toEqual(['a', 'bb', 'c']);
+    await expectCaret(page, 'b|b');
     await expectValidSoft(page);
     expect(await typeAndOutline(page)).toContain('bXb');
   });
 
-  test('28b · transforming an item WITH children to a paragraph does not hide its children', async ({ page }) => {
+  test('28b · transforming an item WITH children to a paragraph keeps its children as a list right below', async ({ page }) => {
     await buildDoc(page, [UL(I('a'), I('bb', UL(I('b1'))), I('c'))]);
     await focusAt(page, 'bb', 1);
     await exec(page, 'block:transform', { type: 'paragraph' });
-    // BROKEN: besides 28a's invalid tree, the paragraph block has no children renderer: "b1" stays in the model
-    // (p(bb){ul[b1]}) but disappears from the DOM / serializers.
+    // DECIDED (P-26): the sub-items stay a list right after the new block.
+    await expectOutline(page, 'ul[a] ; p(bb) ; ul[b1, c]');
     expect(await texts(page)).toEqual(['a', 'bb', 'b1', 'c']);
     await expect(getEditor(page)).toContainText('b1');
     await expectValidSoft(page);
@@ -921,24 +949,23 @@ test.describe('H · Misc', () => {
     await flushRender(page);
   };
 
-  test('28c · slash menu "Numbered list" on a bullet item', async ({ page }) => {
+  test('28c · slash menu "Numbered list" on a bullet item turns ONLY that item into an ordered list', async ({ page }) => {
     await buildDoc(page, [UL(I('a'), I(''), I('c'))]);
     await focusEmpty(page);
     await slashCmd(page, 'numb');
-    // BROKEN: a NEW ordered list is created as a direct child of the bullet list ("ul[a, ol[∅], c]"): list under list.
-    // slash-menu.svelte.js createListInBlock replaces the anchor block by a List at the same index, whatever its
-    // parent. (Notion / Docs: the item changes list type in place, splitting the surrounding list.)
-    expect(await texts(page)).toEqual(['a', 'c']);
+    // DECIDED (P-26): the surrounding list is split around the item.
+    await expectOutline(page, 'ul[a] ; ol[∅] ; ul[c]');
+    await expectCaret(page, '|');
+    expect(await typeAndOutline(page)).toBe('ul[a] ; ol[X] ; ul[c]');
     await expectValidSoft(page);
-    expect(await typeAndOutline(page)).toContain('X');
   });
 
   test('28d · slash menu "To-do list" on a bullet item', async ({ page }) => {
     await buildDoc(page, [UL(I('a'), I(''), I('c'))]);
     await focusEmpty(page);
     await slashCmd(page, 'to-do');
-    // BROKEN: same cause as 28c ("ul[a, todo[[ ] ∅], c]").
-    expect(await texts(page)).toEqual(['a', 'c']);
+    // DECIDED (P-26): same as 28c; the item enters the todo list unchecked.
+    await expectOutline(page, 'ul[a] ; todo[[ ] ∅] ; ul[c]');
     await expectValidSoft(page);
   });
 
@@ -946,8 +973,75 @@ test.describe('H · Misc', () => {
     await buildDoc(page, [UL(I('a'), I(''), I('c'))]);
     await focusEmpty(page);
     await slashCmd(page, 'text');
-    // BROKEN: same cause as 28a (exec('paragraph') -> block:transform in place).
-    expect(await texts(page)).toEqual(['a', 'c']);
+    // DECIDED (P-26): same as 28a.
+    await expectOutline(page, 'ul[a] ; p(∅) ; ul[c]');
     await expectValidSoft(page);
+  });
+
+  test('28f · "Numbered list" on a bullet item keeps its text and caret; converting to the SAME type does nothing', async ({ page }) => {
+    await buildDoc(page, [UL(I('a'), I('bb'), I('c'))]);
+    await focusAt(page, 'bb', 1);
+    await exec(page, 'list:convert', { listType: 'bullet' });
+    await expectOutline(page, 'ul[a, bb, c]');
+    await exec(page, 'list:convert', { listType: 'ordered' });
+    await expectOutline(page, 'ul[a] ; ol[bb] ; ul[c]');
+    await expectCaret(page, 'b|b');
+    await expectMd(page, '- a\n\n1. bb\n\n- c');
+    await undo(page);
+    await expectOutline(page, 'ul[a, bb, c]');
+    await expectValid(page);
+  });
+
+  test('28g · the LAST bullet item right above an ordered list becomes part of it', async ({ page }) => {
+    await buildDoc(page, [UL(I('a'), I('b')), OL(I('x'), I('y'))]);
+    await focusAt(page, 'b', 1);
+    await exec(page, 'list:convert', { listType: 'ordered' });
+    await expectOutline(page, 'ul[a] ; ol[b, x, y]');
+    await expectValid(page);
+  });
+
+  test('28h · "Text" on a MIDDLE ordered item: the numbering of the tail continues', async ({ page }) => {
+    await buildDoc(page, [OL(I('a'), I('b'), I('c'), I('d'))]);
+    await focusAt(page, 'b', 1);
+    await exec(page, 'paragraph');
+    await expectOutline(page, 'ol[a] ; p(b) ; ol[c, d]');
+    const lists = page.locator('ol[data-block-type="list"]');
+    await expect(lists.nth(1)).toHaveAttribute('start', '3');
+    await expectMd(page, '1. a\n\nb\n\n3. c\n4. d');
+    await expectValid(page);
+  });
+
+  test('28i · "Heading 1" on a NESTED item: unindented to the top level (followers become its children), then lifted', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', UL(I('s1'), I('s2'), I('s3'))), I('z'))]);
+    await focusAt(page, 's2', 1);
+    await exec(page, 'heading:1');
+    // DECIDED (P-26): same as pressing Backspace until the item is top-level, then on it: order and items are kept.
+    await expectOutline(page, 'ul[a > ul[s1]] ; heading(s2) ; ul[s3, z]');
+    expect(await texts(page)).toEqual(['a', 's1', 's2', 's3', 'z']);
+    await expectCaret(page, 's|2');
+    await expectValid(page);
+    await undo(page);
+    await expectOutline(page, 'ul[a > ul[s1, s2, s3], z]');
+  });
+
+  test('28j · "To-do list" on an item WITH children keeps them; leaving the todo list drops `checked`', async ({ page }) => {
+    await buildDoc(page, [UL(I('a'), I('b', UL(I('b1'), I('b2'))), I('c'))]);
+    await focusAt(page, 'b', 1);
+    await exec(page, 'list:convert', { listType: 'todo' });
+    await expectOutline(page, 'ul[a] ; todo[[ ] b > ul[b1, b2]] ; ul[c]');
+    await press(page, 'Control+Enter');
+    await expectOutline(page, 'ul[a] ; todo[[x] b > ul[b1, b2]] ; ul[c]');
+    await exec(page, 'list:convert', { listType: 'bullet' });
+    await expectOutline(page, 'ul[a, b > ul[b1, b2], c]');
+    expect((await getJson(page)).blocks[0].children[1].checked).toBeUndefined();
+    await expectValid(page);
+  });
+
+  test('28k · "# " typed at the start of a list item follows the same rule (list split, item becomes a heading)', async ({ page }) => {
+    await buildDoc(page, [UL(I('a'), I('b'), I('c'))]);
+    await focusAt(page, 'b', 0);
+    await page.keyboard.type('# ');
+    await expectOutline(page, 'ul[a] ; heading(b) ; ul[c]');
+    await expectValid(page);
   });
 });

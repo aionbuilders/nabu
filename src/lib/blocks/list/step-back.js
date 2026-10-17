@@ -17,12 +17,16 @@ import { List, listStart } from "./list.svelte.js";
 import { typeOf, kids, sublistOf, dropIfEmpty, moveItems } from "./indent.js";
 
 /**
- * Takes a top-level item out of its list and retypes it as a paragraph. Moves only; no commit.
+ * Takes a top-level item out of its list and retypes it as `type` (a paragraph for the step back, any
+ * block for a type change: heading, quote, code…). Moves only; no commit. The `checked` flag is dropped,
+ * `props` are written on the node (e.g. a heading `level`).
  * @param {Nabu} nabu
  * @param {NabuNode} item
+ * @param {string} [type]
+ * @param {Record<string, any>} [props]
  * @returns {boolean} whether the item was lifted (false when it is nested / not in a list)
  */
-export function liftItemToParagraph(nabu, item) {
+export function liftItemTo(nabu, item, type = "paragraph", props = {}) {
     const list = item.parent();
     if (!list || typeOf(list) !== "list" || typeOf(list.parent()) === "list-item") return false;
 
@@ -50,9 +54,18 @@ export function liftItemToParagraph(nabu, item) {
     dropIfEmpty(nabu, list);
 
     if (/** @type {any} */ (item.data).get("checked") !== undefined) /** @type {any} */ (item.data).delete("checked");
-    item.data.set("type", "paragraph");
+    item.data.set("type", type);
+    for (const [key, value] of Object.entries(props)) /** @type {any} */ (item.data).set(key, value);
     return true;
 }
+
+/**
+ * Takes a top-level item out of its list and retypes it as a paragraph. Moves only; no commit.
+ * @param {Nabu} nabu
+ * @param {NabuNode} item
+ * @returns {boolean} whether the item was lifted (false when it is nested / not in a list)
+ */
+export const liftItemToParagraph = (nabu, item) => liftItemTo(nabu, item, "paragraph");
 
 /**
  * Step a list item back one level (see the file header). Resolves once committed and the caret is back.

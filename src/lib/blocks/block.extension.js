@@ -15,13 +15,7 @@ async function transformBlock(nabu, type, props = {}) {
     if (!block) return;
     const blockId = block.id;
     const offset = block.behaviors?.get('text')?.selection?.from ?? 0;
-    await nabu.transact(() => {
-        const data = /** @type {any} */ (block.node.data);
-        data.set("type", type);
-        for (const [key, value] of Object.entries(props)) {
-            data.set(key, value);
-        }
-    });
+    await nabu.transact(() => block.retype(type, props));
     // After the commit, updateRoots() replaces the block instance — fetch the new one.
     const newBlock = nabu.blocks.get(blockId);
     if (newBlock) nabu.focus({ from: { block: newBlock, offset }, to: { block: newBlock, offset } });

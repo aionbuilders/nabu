@@ -258,12 +258,24 @@ export class Block {
      * @param {Object} [props={}] 
      */
     transformTo(newType, props = {}) {
+        this.retype(newType, props);
+        this.commit();
+    }
+
+    /**
+     * The mutations of a type change, without the commit: the caller owns the transaction
+     * (`transformTo`, the `block:transform` action…). By default the block is retyped IN PLACE (same node:
+     * its id, text and position survive). Override it when a block cannot simply change type where it
+     * stands (e.g. because its parent only accepts some children): do the same job with Loro mutations only.
+     * @param {string} newType
+     * @param {Object} [props={}]
+     */
+    retype(newType, props = {}) {
         const data = this.node.data;
         data.set("type", newType);
         for (const [key, value] of Object.entries(props)) {
             data.set(key, value);
         }
-        this.commit();
     }
 
     /** @param {number} index @param {string} text */

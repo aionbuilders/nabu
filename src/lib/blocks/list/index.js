@@ -5,6 +5,8 @@ import { ListItem } from "./list-item.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
 import { normalizeLists } from "./normalize.js";
 import { moveItems, selectedItems, handleTab } from "./indent.js";
+import { convertToList } from "./to-list.js";
+import { toggleTodos } from "./todos-toggle.js";
 import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
 
 const ListExtension = extension("list", {
@@ -16,6 +18,8 @@ const ListExtension = extension("list", {
         // the lowest common ancestor (a List, a container, the root), which does not know about indenting.
         // A selection inside one block is handled by ListItem.keydown.
         onKeyDown: (nabu, event) => {
+            // Ctrl/Cmd+Enter: toggle the to-do item(s) the selection touches.
+            if (toggleTodos(nabu, event)) return nabu.BREAK;
             const sel = nabu.selection;
             if (sel.anchorBlock === sel.focusBlock) return nabu.CONTINUE;
             return handleTab(nabu, event) ? nabu.BREAK : nabu.CONTINUE;
@@ -33,6 +37,9 @@ const ListItemExtension = extension("list-item", {
         // Every list item the selection touches (the anchor item for a caret).
         'list:indent': (nabu) => { moveItems(nabu, selectedItems(nabu), false); },
         'list:unindent': (nabu) => { moveItems(nabu, selectedItems(nabu), true); },
+        // Make the block holding the caret a list of that type: a list item changes type ON ITS OWN (the
+        // surrounding list is split around it), any other text block is replaced by a new list.
+        'list:convert': (nabu, data) => convertToList(nabu, data?.listType),
     }
 });
 

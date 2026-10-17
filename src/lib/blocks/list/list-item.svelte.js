@@ -2,6 +2,7 @@ import { MegaBlock } from "../megablock.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
 import { List } from "./list.svelte.js";
 import { moveItems, handleTab } from "./indent.js";
+import { retypeItem } from "./convert.js";
 import { LoroText } from "loro-crdt";
 import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 
@@ -178,6 +179,16 @@ export class ListItem extends MegaBlock {
         // list before the caller had the chance to fill it.
         const newList = List.create(this.nabu, "list", { listType }, this.node.id.toString());
         return newList;
+    }
+
+    /**
+     * A list item cannot simply change type where it stands (a list only holds items): it leaves its list,
+     * which is split around it, and keeps its text, marks and caret. See convert.js.
+     * @param {string} newType
+     * @param {Object} [props={}]
+     */
+    retype(newType, props = {}) {
+        retypeItem(this.nabu, /** @type {NabuNode} */ (this.node), newType, props);
     }
 
     /** @param {KeyboardEvent} event */
