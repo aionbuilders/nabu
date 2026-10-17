@@ -6,8 +6,9 @@
  * (`violations` / `expectValid`: list-item only under a list, list only at root or under an item, no empty list,
  * Block instances + DOM in sync with the tree).
  *
- * Convention: a test documents the CURRENT behaviour in a one-line "CURRENT:" comment when it is coherent and
- * data-preserving (product decisions: Notion / Google Docs / ProseMirror differ). A test is left FAILING only when
+ * Convention: a test documents the DECIDED (product owner) behaviour in a one-line "DECIDED:" comment, or the CURRENT
+ * one ("CURRENT:") when it is coherent and data-preserving but not specifically decided (Notion / Google Docs /
+ * ProseMirror differ). A test is left FAILING only when
  * the behaviour is clearly broken (invalid/orphaned tree, lost text or children, lost caret / swallowed keystroke,
  * exception in the console, undo not restoring the state). Failing tests are tagged "BROKEN:" in their comment.
  *
@@ -107,7 +108,7 @@ test.describe('A · Enter in lists', () => {
     await buildDoc(page, [UL(I('a'), I(''), I('b'))]);
     await focusEmpty(page);
     await press(page, 'Enter');
-    // CURRENT: list is split in two with an empty paragraph in between (same as Notion / Google Docs).
+    // DECIDED: a top-level empty item exits the list: split in two with an empty paragraph in between.
     await expectOutline(page, 'ul[a] ; p(∅) ; ul[b]');
     await expectCaret(page, '|');
     expect(await typeAndOutline(page)).toBe('ul[a] ; p(X) ; ul[b]');
@@ -118,52 +119,94 @@ test.describe('A · Enter in lists', () => {
     await buildDoc(page, [UL(I(''), I('b'))]);
     await focusEmpty(page);
     await press(page, 'Enter');
-    // BROKEN: the original list is left EMPTY ("ul[] ; p(∅) ; ul[b]"): list.svelte.js only destroys it when there
-    // are no followers (`currentIndex === 0 && followers.length === 0`).
-    expect(await texts(page)).toEqual(['b']);
+    // DECIDED: the emptied original list is removed; the paragraph comes first, the rest stays a list.
+    await expectOutline(page, 'p(∅) ; ul[b]');
     await expectCaret(page, '|');
-    await expectValidSoft(page);
+    await expectValid(page);
   });
 
   test('4c · Enter on an EMPTY LAST item exits the list into a paragraph right after it', async ({ page }) => {
     await buildDoc(page, [UL(I('a'), I(''))]);
     await focusEmpty(page);
     await press(page, 'Enter');
-    // CURRENT: the empty item is removed, a paragraph follows the list.
+    // DECIDED: the empty item becomes a paragraph right after the list.
     await expectOutline(page, 'ul[a] ; p(∅)');
     expect(await typeAndOutline(page)).toBe('ul[a] ; p(X)');
     await expectValid(page);
   });
 
-  test('5a · Enter on an EMPTY NESTED item that is the last child of its sublist', async ({ page }) => {
+  test('5a · Enter on an EMPTY NESTED item that is the last child of its sublist unindents it one level', async ({ page }) => {
     await buildDoc(page, [UL(I('a', UL(I('s1'), I(''))), I('b'))]);
     await focusEmpty(page);
     await press(page, 'Enter');
-    // BROKEN: the exit paragraph is inserted INSIDE the parent list-item ("ul[a > ul[s1] p(∅), b]"): a paragraph
-    // under a list-item. list.svelte.js onSplit CAS 1 uses `this.node.parent()` (the list-item) as the insertion
-    // parent without lifting the new block out of the item. (Notion / Docs: the item is outdented one level.)
-    expect(await texts(page)).toEqual(['a', 's1', 'b']);
+    // DECIDED: step back one level, exactly like Shift+Tab: the item lands after its parent "a", caret stays in it.
+    await expectOutline(page, 'ul[a > ul[s1], ∅, b]');
     await expectCaret(page, '|');
-    await expectValidSoft(page);
-    expect(await typeAndOutline(page)).toContain('X');
+    expect(await typeAndOutline(page)).toBe('ul[a > ul[s1], X, b]');
+    await expectValid(page);
   });
 
-  test('5b · Enter on an EMPTY NESTED item in the middle of its sublist', async ({ page }) => {
+  test('5b · Enter on an EMPTY NESTED item in the middle of its sublist unindents it and its followers become its children', async ({ page }) => {
     await buildDoc(page, [UL(I('a', UL(I('s1'), I(''), I('s2'))), I('b'))]);
     await focusEmpty(page);
     await press(page, 'Enter');
-    // BROKEN: same root cause as 5a, plus the sublist is cut in two ("a > ul[s1] p(∅) ul[s2]": two sublists and a
-    // paragraph under one list-item). No text is lost.
-    expect(await texts(page)).toEqual(['a', 's1', 's2', 'b']);
+    // DECIDED: same as Shift+Tab (unindentNode): "s2" is adopted as a child of the unindented item.
+    await expectOutline(page, 'ul[a > ul[s1], ∅ > ul[s2], b]');
     await expectCaret(page, '|');
-    await expectValidSoft(page);
+    expect(await typeAndOutline(page)).toBe('ul[a > ul[s1], X > ul[s2], b]');
+    await expectValid(page);
+  });
+
+  test('5c · Enter on an empty nested item twice goes back to the root level, a third Enter exits the list', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', UL(I('s1'), I(''))), I('b'))]);
+    await focusEmpty(page);
+    await press(page, 'Enter');
+    await expectOutline(page, 'ul[a > ul[s1], ∅, b]');
+    await press(page, 'Enter');
+    // DECIDED: the 2nd Enter is the top-level case: the list is split around a paragraph.
+    await expectOutline(page, 'ul[a > ul[s1]] ; p(∅) ; ul[b]');
+    await expectCaret(page, '|');
+    expect(await typeAndOutline(page)).toBe('ul[a > ul[s1]] ; p(X) ; ul[b]');
+    await expectValid(page);
+  });
+
+  test('5d · one Ctrl+Z after Enter on an empty item restores structure and caret (nested and top-level)', async ({ page }) => {
+    await buildDoc(page, [UL(I('a'), I(''), I('b', UL(I('s'), I(''))))]);
+    const original = await outline(page);
+    await focusEmpty(page, 1); // the nested one
+    await press(page, 'Enter');
+    await expectOutline(page, 'ul[a, ∅, b > ul[s], ∅]');
+    await undo(page);
+    await expectOutline(page, original);
+    await expectCaret(page, '|');
+    expect(await typeAndOutline(page)).toBe('ul[a, ∅, b > ul[s, X]]');
+    await expectValid(page);
+
+    await buildDoc(page, [UL(I('a'), I(''), I('b'))]);
+    await focusEmpty(page);
+    await press(page, 'Enter');
+    await expectOutline(page, 'ul[a] ; p(∅) ; ul[b]');
+    await undo(page);
+    await expectOutline(page, 'ul[a, ∅, b]');
+    await expectCaret(page, '|');
+    await expectValid(page);
+  });
+
+  test('5e · Enter on an empty item of an ORDERED list keeps the numbering of the tail', async ({ page }) => {
+    await buildDoc(page, [OL(I('a'), I(''), I('c'), I('d'))]);
+    await focusEmpty(page);
+    await press(page, 'Enter');
+    await expectOutline(page, 'ol[a] ; p(∅) ; ol[c, d]');
+    await expect(page.locator('ol[data-block-type="list"]').nth(1)).toHaveAttribute('start', '3');
+    await expectMd(page, '1. a\n\n3. c\n4. d');
+    await expectValid(page);
   });
 
   test('6 · Enter on an empty item that is the ONLY item of the list removes the list', async ({ page }) => {
     await buildDoc(page, [UL(I(''))]);
     await focusEmpty(page);
     await press(page, 'Enter');
-    // CURRENT: list replaced by an empty paragraph (caret in it).
+    // DECIDED: the list disappears, replaced by an empty paragraph (caret in it).
     await expectOutline(page, 'p(∅)');
     expect(await typeAndOutline(page)).toBe('p(X)');
     await expectValid(page);
@@ -185,64 +228,148 @@ test.describe('A · Enter in lists', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('B · Backspace / Delete in lists', () => {
-  test('7a · Backspace at offset 0 of a MIDDLE item (no children) merges it into the previous item', async ({ page }) => {
+  test('7a · Backspace at offset 0 of a MIDDLE item (no children) turns ONLY that item into a paragraph', async ({ page }) => {
     await buildDoc(page, [UL(I('aa'), I('bb'), I('cc'))]);
     await focusAt(page, 'bb', 0);
     await press(page, 'Backspace');
-    // CURRENT: text merged into the previous item, item removed, caret at the junction.
-    // (Notion: first Backspace outdents / converts to paragraph; Docs: merges like here.)
+    // DECIDED: step back one level: the list is split around the paragraph, text and caret preserved.
+    await expectOutline(page, 'ul[aa] ; p(bb) ; ul[cc]');
+    await expectCaret(page, '|bb');
+    expect(await typeAndOutline(page)).toBe('ul[aa] ; p(Xbb) ; ul[cc]');
+    await expectValid(page);
+  });
+
+  test('7a2 · a SECOND Backspace then merges the paragraph into the last item above', async ({ page }) => {
+    await buildDoc(page, [UL(I('aa'), I('bb'), I('cc'))]);
+    await focusAt(page, 'bb', 0);
+    await press(page, 'Backspace');
+    await press(page, 'Backspace');
+    // DECIDED: the normal paragraph merge (the two lists become adjacent again and merge).
     await expectOutline(page, 'ul[aabb, cc]');
     await expectCaret(page, 'aa|bb');
     expect(await typeAndOutline(page)).toBe('ul[aaXbb, cc]');
     await expectValid(page);
   });
 
-  test('7b · Backspace at offset 0 of the FIRST item of a list that follows a paragraph merges into that paragraph', async ({ page }) => {
+  test('7a3 · Backspace with a selection, or not at offset 0, keeps its usual meaning', async ({ page }) => {
+    await buildDoc(page, [UL(I('aa'), I('bb'), I('cc'))]);
+    await focusAt(page, 'bb', 1);
+    await press(page, 'Backspace');
+    await expectOutline(page, 'ul[aa, b, cc]');
+    await selectRange(page, 'aa', 0, 'b', 1);
+    await press(page, 'Backspace');
+    expect(await texts(page)).toEqual(['cc']);
+    await expectValid(page);
+  });
+
+  test('7b · Backspace at offset 0 of the FIRST item of a list that follows a paragraph turns it into a paragraph (no merge yet)', async ({ page }) => {
     await buildDoc(page, [P('p0'), UL(I('aa'), I('bb'))]);
     await focusAt(page, 'aa', 0);
     await press(page, 'Backspace');
-    // CURRENT: the first item's text is appended to the previous paragraph; the rest of the list stays.
+    // DECIDED: the item leaves the list first; a second Backspace would merge it into "p0".
+    await expectOutline(page, 'p(p0) ; p(aa) ; ul[bb]');
+    await expectCaret(page, '|aa');
+    await press(page, 'Backspace');
     await expectOutline(page, 'p(p0aa) ; ul[bb]');
     await expectCaret(page, 'p0|aa');
     await expectValid(page);
   });
 
-  test('7b2 · Backspace at offset 0 of the first item of the FIRST list of the document does nothing', async ({ page }) => {
+  test('7b2 · Backspace at offset 0 of the first item of the FIRST list of the document turns it into a paragraph', async ({ page }) => {
     await buildDoc(page, [UL(I('aa'), I('bb'))]);
     await focusAt(page, 'aa', 0);
     await press(page, 'Backspace');
-    // CURRENT: no-op (nothing before to merge into); caret stays and typing still works. (Notion: converts the item to a paragraph.)
-    await expectOutline(page, 'ul[aa, bb]');
+    // DECIDED: top-level -> paragraph, the rest stays a list; caret and typing intact.
+    await expectOutline(page, 'p(aa) ; ul[bb]');
     await expectCaret(page, '|aa');
-    expect(await typeAndOutline(page)).toBe('ul[Xaa, bb]');
+    expect(await typeAndOutline(page)).toBe('p(Xaa) ; ul[bb]');
     await expectValid(page);
   });
 
-  test('7c · Backspace at offset 0 of the FIRST item of a nested sublist merges it into the parent item', async ({ page }) => {
+  test('7c · Backspace at offset 0 of the FIRST item of a nested sublist unindents it one level', async ({ page }) => {
     await buildDoc(page, [UL(I('aa', UL(I('s1'), I('s2'))), I('bb'))]);
     await focusAt(page, 's1', 0);
     await press(page, 'Backspace');
-    // CURRENT: "s1" is appended to the parent's text; its siblings stay nested under the parent.
-    await expectOutline(page, 'ul[aas1 > ul[s2], bb]');
-    await expectCaret(page, 'aa|s1');
+    // DECIDED: like Shift+Tab: "s1" lands after "aa" and adopts its follower "s2"; caret stays at offset 0.
+    await expectOutline(page, 'ul[aa, s1 > ul[s2], bb]');
+    await expectCaret(page, '|s1');
+    expect(await typeAndOutline(page)).toBe('ul[aa, Xs1 > ul[s2], bb]');
     await expectValid(page);
   });
 
-  test('8 · Backspace at offset 0 of an item that HAS children: text merges up, children are kept and follow', async ({ page }) => {
+  test('7d · Backspace on a nested item, twice: unindent, then the item becomes a paragraph', async ({ page }) => {
+    await buildDoc(page, [UL(I('aa', UL(I('s1'))), I('bb'))]);
+    await focusAt(page, 's1', 0);
+    await press(page, 'Backspace');
+    await expectOutline(page, 'ul[aa, s1, bb]');
+    await press(page, 'Backspace');
+    await expectOutline(page, 'ul[aa] ; p(s1) ; ul[bb]');
+    await expectCaret(page, '|s1');
+    await expectValid(page);
+  });
+
+  test('7e · Backspace on a middle top-level item of an ORDERED list keeps the numbering (<ol start>, markdown)', async ({ page }) => {
+    await buildDoc(page, [OL(I('a'), I('b'), I('c'))]);
+    await focusAt(page, 'b', 0);
+    await press(page, 'Backspace');
+    // DECIDED: the tail list starts at the number its first item had (3).
+    await expectOutline(page, 'ol[a] ; p(b) ; ol[c]');
+    const lists = page.locator('ol[data-block-type="list"]');
+    await expect(lists).toHaveCount(2);
+    await expect(lists.nth(0)).not.toHaveAttribute('start', /.*/);
+    await expect(lists.nth(1)).toHaveAttribute('start', '3');
+    await expectMd(page, '1. a\n\nb\n\n3. c');
+    await expectValid(page);
+  });
+
+  test('7f · one Ctrl+Z after Backspace restores structure + caret (top-level and nested)', async ({ page }) => {
+    await buildDoc(page, [OL(I('a'), I('bb', UL(I('s1'), I('s2'))), I('c'))]);
+    const original = await outline(page);
+    await focusAt(page, 'bb', 0);
+    await press(page, 'Backspace');
+    await expectOutline(page, 'ol[a] ; p(bb) ; ul[s1, s2] ; ol[c]');
+    await undo(page);
+    await expectOutline(page, original);
+    await expectCaret(page, '|bb');
+    await expectMd(page, '1. a\n2. bb\n  - s1\n  - s2\n3. c');
+    expect(await typeAndOutline(page)).toBe('ol[a, Xbb > ul[s1, s2], c]');
+    await expectValid(page);
+
+    await focusAt(page, 's2', 0);
+    await press(page, 'Backspace');
+    await expectOutline(page, 'ol[a, Xbb > ul[s1], s2, c]');
+    await undo(page);
+    await expectOutline(page, 'ol[a, Xbb > ul[s1, s2], c]');
+    await expectCaret(page, '|s2');
+    await expectValid(page);
+  });
+
+  test('8 · Backspace at offset 0 of an item that HAS children: the item becomes a paragraph, the children stay a list right below', async ({ page }) => {
     await buildDoc(page, [UL(I('aa'), I('Parent', UL(I('c1'), I('c2'))), I('bb'))]);
     await focusAt(page, 'Parent', 0);
     await press(page, 'Backspace');
-    // CURRENT: merged into "aa"; its children are re-parented under the surviving item (nothing lost).
-    await expectOutline(page, 'ul[aaParent > ul[c1, c2], bb]');
-    await expectCaret(page, 'aa|Parent');
+    // DECIDED: nothing lost, no other item changes type; the sub-items keep their relative nesting
+    // (and merge with the list of the items that followed, which has the same type and is now adjacent).
+    await expectOutline(page, 'ul[aa] ; p(Parent) ; ul[c1, c2, bb]');
+    await expectCaret(page, '|Parent');
     await expectValid(page);
   });
 
-  test('8b · Backspace at offset 0 of an item whose PREVIOUS item has children merges into that previous item\'s LAST descendant', async ({ page }) => {
+  test('8a · Backspace on an item with NESTED grandchildren keeps their relative nesting', async ({ page }) => {
+    await buildDoc(page, [UL(I('P', UL(I('c1', UL(I('g1'))), I('c2'))))]);
+    await focusAt(page, 'P', 0);
+    await press(page, 'Backspace');
+    await expectOutline(page, 'p(P) ; ul[c1 > ul[g1], c2]');
+    await expectValid(page);
+  });
+
+  test('8b · Backspace at offset 0 of an item whose PREVIOUS item has children turns it into a paragraph, that list is untouched', async ({ page }) => {
     await buildDoc(page, [UL(I('a', UL(I('a1'), I('a2'))), I('b'))]);
     await focusAt(page, 'b', 0);
     await press(page, 'Backspace');
-    // CURRENT: merged into the visually previous line ("a2"), like a flat editor would.
+    // DECIDED: top-level -> paragraph; a SECOND Backspace merges into the last descendant ("a2"), like a flat editor.
+    await expectOutline(page, 'ul[a > ul[a1, a2]] ; p(b)');
+    await press(page, 'Backspace');
     await expectOutline(page, 'ul[a > ul[a1, a2b]]');
     await expectCaret(page, 'a2|b');
     await expectValid(page);
@@ -296,15 +423,44 @@ test.describe('B · Backspace / Delete in lists', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('C · Tab / Shift+Tab', () => {
-  test('11 · Tab on an item that HAS children: nothing lost, but the subtree does not move along', async ({ page }) => {
+  test('11 · Tab on an item that HAS children: the whole subtree moves along', async ({ page }) => {
     await buildDoc(page, [UL(I('a'), I('bbb', UL(I('b1'), I('b2'))), I('c'))]);
     await focusAt(page, 'bbb', 1);
     await press(page, 'Tab');
-    // CURRENT: "bbb" goes under "a"; its former children are HOISTED to be its following siblings (they keep
-    // their visual depth; they are no longer children of bbb). (Notion / PM: the whole subtree moves one level deeper.)
-    await expectMd(page, '- a\n  - bbb\n  - b1\n  - b2\n- c');
-    // BROKEN: the old (now empty) sublist of "bbb" is left behind: "bbb > ul[]" (empty list node).
-    await expectValidSoft(page);
+    // DECIDED: "bbb" goes under "a" and keeps its children (they go one level deeper with it).
+    await expectOutline(page, 'ul[a > ul[bbb > ul[b1, b2]], c]');
+    await expectMd(page, '- a\n  - bbb\n    - b1\n    - b2\n- c');
+    await expectCaret(page, 'b|bb');
+    await expectValid(page);
+  });
+
+  test('11a · Tab on an item with children, then Ctrl+Z: structure and caret restored in one step', async ({ page }) => {
+    await buildDoc(page, [UL(I('a'), I('bbb', UL(I('b1'), I('b2'))), I('c'))]);
+    const original = await outline(page);
+    await focusAt(page, 'bbb', 1);
+    await press(page, 'Tab');
+    await undo(page);
+    await expectOutline(page, original);
+    await expectCaret(page, 'b|bb');
+    await expectValid(page);
+  });
+
+  test('11c · Shift+Tab on a nested item with children keeps its children; the followers are appended after them', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', UL(I('s1', UL(I('k1'))), I('s2'))), I('b'))]);
+    await focusAt(page, 's1', 1);
+    await press(page, 'Shift+Tab');
+    // DECIDED: its own children stay its children (the follower "s2" joins them).
+    await expectOutline(page, 'ul[a, s1 > ul[k1, s2], b]');
+    await expectCaret(page, 's|1');
+    await expectValid(page);
+  });
+
+  test('11d · Tab with several selected items: a selected child moves with its selected parent, once', async ({ page }) => {
+    await buildDoc(page, [UL(I('a'), I('bbb', UL(I('b1'), I('b2'))), I('c'))]);
+    await selectRange(page, 'bbb', 0, 'c', 1);
+    await press(page, 'Tab');
+    await expectOutline(page, 'ul[a > ul[bbb > ul[b1, b2], c]]');
+    await expectValid(page);
   });
 
   test('11b · Tab keeps a COLLAPSED caret at the same offset, and typing continues there', async ({ page }) => {

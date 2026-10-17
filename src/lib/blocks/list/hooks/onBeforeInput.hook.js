@@ -2,6 +2,7 @@ import { tick } from "svelte";
 import { TextBehavior } from "../../../behaviors/text";
 import { List } from "../list.svelte.js";
 import { ListItem } from "../list-item.svelte.js";
+import { stepBack } from "../step-back.js";
 
 /**
  * @import { Nabu, Block } from "../..";
@@ -17,6 +18,16 @@ import { ListItem } from "../list-item.svelte.js";
  */
 export const onBeforeInput = (nabu, event, block) => {
     const { BREAK, CONTINUE } = nabu;
+
+    // Backspace at offset 0 of a list item (collapsed caret): step back one level instead of merging into
+    // the previous block. A nested item is unindented, a top-level one becomes a paragraph (the next
+    // Backspace then merges it like any paragraph). See step-back.js.
+    if (event.inputType === "deleteContentBackward" && block instanceof ListItem) {
+        const sel = block.behavior.selection;
+        if (!sel || !sel.isCollapsed || sel.from !== 0) return CONTINUE;
+        stepBack(nabu, /** @type {import('../../nabu.svelte.js').NabuNode} */ (block.node));
+        return BREAK;
+    }
 
     if (event.data !== " ") return CONTINUE;
     if (block.type !== "paragraph") return CONTINUE;

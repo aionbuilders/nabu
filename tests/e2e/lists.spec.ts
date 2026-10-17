@@ -131,15 +131,19 @@ test.describe('Lists', () => {
 
   // P2 ─────────────────────────────────────────────────────────────────────
 
-  test('P2 · Backspace at start of list item merges with previous item', async ({ page }) => {
+  test('P2 · Backspace at start of list item steps back (paragraph), a second one merges with the previous item', async ({ page }) => {
     await typeText(page, 'first');
     await press(page, 'Enter');
     await typeText(page, 'second');
     await press(page, 'Home');
     await press(page, 'Backspace');
 
-    const md = await getMarkdown(page);
-    expect(md).toContain('firstsecond');
+    // 1st Backspace: the item leaves the list and becomes a paragraph below it
+    await expect.poll(() => getMarkdown(page)).toBe('- first\n\nsecond');
+
+    // 2nd Backspace: the usual paragraph merge into the item above
+    await press(page, 'Backspace');
+    await expect.poll(() => getMarkdown(page)).toContain('firstsecond');
   });
 
   test('P2 · list survives undo', async ({ page }) => {

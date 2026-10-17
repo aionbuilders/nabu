@@ -12,13 +12,13 @@
 import { List } from "./list.svelte.js";
 
 /** @param {NabuNode | null | undefined} node */
-const typeOf = (node) => /** @type {any} */ (node?.data.get("type"));
+export const typeOf = (node) => /** @type {any} */ (node?.data.get("type"));
 
 /** @param {NabuNode} node @returns {NabuNode[]} */
-const kids = (node) => /** @type {NabuNode[]} */ (node.children() ?? []);
+export const kids = (node) => /** @type {NabuNode[]} */ (node.children() ?? []);
 
 /** Sublist of an item, read from the tree (not from the possibly stale Block). @param {NabuNode} item */
-const sublistOf = (item) => kids(item).find((child) => typeOf(child) === "list");
+export const sublistOf = (item) => kids(item).find((child) => typeOf(child) === "list");
 
 /**
  * Sublist of an item, created (empty, appended) when missing. No `nabu.insert()`: it commits, and the
@@ -42,13 +42,13 @@ function getOrCreateSublist(nabu, item) {
  * @param {Nabu} nabu
  * @param {NabuNode | null | undefined} list
  */
-function dropIfEmpty(nabu, list) {
+export function dropIfEmpty(nabu, list) {
     if (list && typeOf(list) === "list" && !kids(list).length) nabu.tree.delete(list.id);
 }
 
 /**
- * Indent one item: it goes at the end of its previous sibling's sublist, and hoists its own children
- * right after itself. Moves only; no commit.
+ * Indent one item: it goes at the end of its previous sibling's sublist, and its whole subtree moves
+ * along (its own sublist stays attached to it, so its children stay its children). Moves only; no commit.
  * @param {Nabu} nabu
  * @param {NabuNode} item
  * @returns {boolean} whether the item moved
@@ -60,18 +60,13 @@ export function indentNode(nabu, item) {
     const previous = parentList && kids(parentList)[index - 1];
     if (!previous || typeOf(previous) !== "list-item") return false;
 
-    const targetId = getOrCreateSublist(nabu, previous).id.toString();
-    const own = sublistOf(item);
-    const ownChildren = own ? kids(own) : [];
-    nabu.tree.move(item.id.toString(), targetId);
-    for (const child of ownChildren) nabu.tree.move(child.id.toString(), targetId);
-    dropIfEmpty(nabu, own);
+    nabu.tree.move(item.id.toString(), getOrCreateSublist(nabu, previous).id.toString());
     return true;
 }
 
 /**
  * Unindent one item: it goes right after its parent item, and the siblings that followed it become its
- * children. Moves only; no commit.
+ * children (after the ones it already has: its own subtree stays attached). Moves only; no commit.
  * @param {Nabu} nabu
  * @param {NabuNode} item
  * @returns {boolean} whether the item moved
@@ -145,11 +140,22 @@ export async function restoreSelection(nabu, snapshot) {
  */
 export async function moveItems(nabu, items, unindent) {
     const snapshot = captureSelection(nabu);
-    let moved = false;
-    for (const item of items) {
-        if (unindent ? unindentNode(nabu, item) : indentNode(nabu, item)) moved = true;
-    }
-    if (!moved) return false;
+    // Ancestors read BEFORE any move of the batch: an item whose original ancestor is selected AND moved
+    // goes along with it as part of the subtree, so it must not be moved a second time. (Later moves
+    // re-parent items: s2 adopted by an unindented s1 is still processed, it was no descendant of s1.)
+    const ancestors = items.map((item) => {
+        /** @type {string[]} */
+        const ids = [];
+        for (let a = item.parent(); a; a = a.parent()) ids.push(a.id.toString());
+        return ids;
+    });
+    /** @type {Set<string>} */
+    const moved = new Set();
+    items.forEach((item, i) => {
+        if (ancestors[i].some((id) => moved.has(id))) return;
+        if (unindent ? unindentNode(nabu, item) : indentNode(nabu, item)) moved.add(item.id.toString());
+    });
+    if (!moved.size) return false;
     await nabu.commit();
     await restoreSelection(nabu, snapshot);
     return true;

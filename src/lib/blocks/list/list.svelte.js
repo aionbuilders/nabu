@@ -1,6 +1,7 @@
 import { MegaBlock } from "../megablock.svelte.js";
 import { ListBehavior } from "./list.behavior.svelte.js";
 import ListComponent from "./List.svelte";
+import { stepBack } from "./step-back.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -73,41 +74,11 @@ export class List extends MegaBlock {
     onSplit(event, data) {
         const { from: sourceItem, offset, delta } = data;
         
-        // --- CAS 1 : L'item est vide (Demande de sortie de liste) ---
+        // --- CAS 1 : empty item = step back one level (nested: unindent; top-level: leave the list as a paragraph) ---
         if (sourceItem.text.length === 0) {
-            const currentIndex = sourceItem.node.index();
-            const siblings = this.node.children();
-            const followers = siblings.slice(currentIndex + 1);
-            
-            // 1. On identifie le point d'insertion (juste après la liste actuelle)
-            const parentNode = this.node.parent();
-            const grandParentId = parentNode?.id.toString() || null;
-            const myIndexInGrandParent = this.node.index();
-            
-            // 2. On insère le paragraphe de sortie juste après cette liste
-            const newParagraph = this.nabu.insert("paragraph", {}, grandParentId, myIndexInGrandParent + 1);
-            
-            // 3. Si on était au milieu de la liste, on crée une nouvelle liste après le paragraphe pour les "followers"
-            if (followers.length > 0) {
-                // List.create, not nabu.insert(): that commits, and the empty list would be normalized away
-                // before the followers get moved into it.
-                const newList = List.create(this.nabu, "list", { listType: this.listType }, grandParentId, myIndexInGrandParent + 2);
-                for (const follower of followers) {
-                    this.nabu.tree.move(follower.id.toString(), newList.node.id.toString());
-                }
-            }
-            
-            // 4. On détruit l'item vide actuel
-            sourceItem.destroy();
-            
-            // 5. Si la liste d'origine est devenue vide, on la supprime aussi
-            if (currentIndex === 0 && followers.length === 0) {
-                this.destroy();
-            }
-
-            this.nabu.commit().then(() => this.nabu.selection.setCursor(newParagraph, 0));
-            
-            return { block: newParagraph };
+            // Same node in both cases (a top-level item is retyped), so the returned block stays valid.
+            stepBack(this.nabu, /** @type {import('../nabu.svelte.js').NabuNode} */ (sourceItem.node));
+            return { block: sourceItem };
         }
         
         // --- CAS 2 : Comportement normal (Créer un nouvel item en dessous) ---
