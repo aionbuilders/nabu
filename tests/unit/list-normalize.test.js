@@ -170,23 +170,78 @@ describe('list normalizer', () => {
     expect(idsByText(engine)).toEqual(before);
   });
 
-  it('R3a — several sublists in an item are merged into the first one', async () => {
+  it('DECIDED (P-28) R3a — an item may hold several sublists of different types, in order (nothing is merged)', async () => {
     const engine = await makeEditor();
     const root = mkList(engine, null);
     const x = mkItem(engine, root, 'X');
-    const first = mkList(engine, x);
+    const first = mkList(engine, x, 'bullet');
     mkItem(engine, first, 'a');
-    const second = mkList(engine, x);
+    const second = mkList(engine, x, 'ordered');
     mkItem(engine, second, 'b');
-    mkItem(engine, second, 'c');
-    const firstId = first.id.toString();
+    const third = mkList(engine, x, 'bullet');
+    mkItem(engine, third, 'c');
     const before = idsByText(engine);
 
     await engine.commit();
 
-    expect(doc(engine)).toEqual(['list:bullet[item:X[list:bullet[item:a, item:b, item:c]]]']);
-    expect(findByText(engine, 'X').children()[0].id.toString()).toBe(firstId);
+    expect(doc(engine)).toEqual(['list:bullet[item:X[list:bullet[item:a], list:ordered[item:b], list:bullet[item:c]]]']);
     expect(idsByText(engine)).toEqual(before);
+  });
+
+  it('R4 at the nested level — ADJACENT sublists of the same type merge, the first keeps its start', async () => {
+    const engine = await makeEditor();
+    const root = mkList(engine, null);
+    const x = mkItem(engine, root, 'X');
+    const first = mkList(engine, x, 'ordered', { start: 3 });
+    mkItem(engine, first, 'a');
+    const second = mkList(engine, x, 'ordered', { start: 7 });
+    mkItem(engine, second, 'b');
+    const third = mkList(engine, x, 'bullet');
+    mkItem(engine, third, 'c');
+    const fourth = mkList(engine, x, 'bullet');
+    mkItem(engine, fourth, 'd');
+    const firstId = first.id.toString();
+    const thirdId = third.id.toString();
+    const before = idsByText(engine);
+
+    await engine.commit();
+
+    expect(doc(engine)).toEqual(['list:bullet[item:X[list:ordered@3[item:a, item:b], list:bullet[item:c, item:d]]]']);
+    const children = findByText(engine, 'X').children();
+    expect(children[0].id.toString()).toBe(firstId);
+    expect(children[1].id.toString()).toBe(thirdId);
+    expect(idsByText(engine)).toEqual(before);
+  });
+
+  it('nested: same-type sublists separated by another type are NOT merged', async () => {
+    const engine = await makeEditor();
+    const root = mkList(engine, null);
+    const x = mkItem(engine, root, 'X');
+    mkItem(engine, mkList(engine, x, 'bullet'), 'a');
+    mkItem(engine, mkList(engine, x, 'todo'), 'b');
+    mkItem(engine, mkList(engine, x, 'bullet'), 'c');
+    await engine.commit();
+    expect(doc(engine)).toEqual(['list:bullet[item:X[list:bullet[item:a], list:todo[item:b], list:bullet[item:c]]]']);
+  });
+
+  it('nested: changing the listType of the middle sublist re-merges its neighbours (one undo step)', async () => {
+    const engine = await makeEditor();
+    const root = mkList(engine, null);
+    const x = mkItem(engine, root, 'X');
+    mkItem(engine, mkList(engine, x, 'bullet'), 'a');
+    const middle = mkList(engine, x, 'ordered');
+    mkItem(engine, middle, 'b');
+    mkItem(engine, mkList(engine, x, 'bullet'), 'c');
+    await engine.commit();
+    engine.undoManager.clear();
+
+    middle.data.set('listType', 'bullet');
+    await engine.commit();
+
+    expect(doc(engine)).toEqual(['list:bullet[item:X[list:bullet[item:a, item:b, item:c]]]']);
+    engine.undoManager.undo();
+    await engine.commit();
+    expect(doc(engine)).toEqual(['list:bullet[item:X[list:bullet[item:a], list:ordered[item:b], list:bullet[item:c]]]']);
   });
 
   it('R3b — a non-list child of an item is hoisted after it, and splits the list', async () => {

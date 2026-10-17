@@ -1045,3 +1045,132 @@ test.describe('H · Misc', () => {
     await expectValid(page);
   });
 });
+
+// ── I. Several consecutive sublists of DIFFERENT types under one item (P-28) ──────────────────────────
+test.describe('I · Several sublists in one item (P-28)', () => {
+  const slash = async (page: Page, query: string) => {
+    await page.keyboard.type('/' + query);
+    await page.waitForSelector('.nabu-slash');
+    await press(page, 'Enter');
+    await flushRender(page);
+  };
+  /** Tags of the blocks rendered directly in the children wrapper of the item showing `text`, in DOM order. */
+  const sublistTags = (page: Page, text: string) =>
+    page.evaluate((t) => {
+      const li = [...document.querySelectorAll('li[data-block-type="list-item"]')]
+        .find((el) => el.querySelector(':scope > .item-content')?.textContent === t)!;
+      return [...li.querySelectorAll(':scope > .item-children > [data-block-type="list"]')].map((el) => el.tagName.toLowerCase());
+    }, text);
+
+  test('P-28a · slash "Numbered list" on a MIDDLE nested item splits its sublist in place: ul, ol, ul inside the same <li>', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', UL(I('s1'), I(''), I('s3'))), I('z'))]);
+    await focusEmpty(page);
+    await slash(page, 'numb');
+    // DECIDED (P-28): no promotion to the top level; the three parts are sibling sublists of "a".
+    await expectOutline(page, 'ul[a > ul[s1] ol[∅] ul[s3], z]');
+    await expectCaret(page, '|');
+    await page.keyboard.type('s2');
+    await expectOutline(page, 'ul[a > ul[s1] ol[s2] ul[s3], z]');
+    expect(await sublistTags(page, 'a')).toEqual(['ul', 'ol', 'ul']);
+    await expectMd(page, '- a\n  - s1\n  1. s2\n  - s3\n- z');
+    await expectValid(page);
+  });
+
+  test('P-28b · Ctrl+Z restores the single sublist and the caret in ONE step; redo re-applies', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', UL(I('s1'), I('s2'), I('s3'))))]);
+    await focusAt(page, 's2', 1);
+    await exec(page, 'list:convert', { listType: 'ordered' });
+    await expectOutline(page, 'ul[a > ul[s1] ol[s2] ul[s3]]');
+    await undo(page);
+    await expectOutline(page, 'ul[a > ul[s1, s2, s3]]');
+    expect(await sublistTags(page, 'a')).toEqual(['ul']);
+    await expectCaret(page, 's|2');
+    await redo(page);
+    await expectOutline(page, 'ul[a > ul[s1] ol[s2] ul[s3]]');
+    await expectValid(page);
+  });
+
+  test('P-28c · converting s2 back to a bullet re-merges the three sublists into one', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', [UL(I('s1')), OL(I('s2')), UL(I('s3'))]))]);
+    await expectOutline(page, 'ul[a > ul[s1] ol[s2] ul[s3]]');
+    await focusAt(page, 's2', 1);
+    await exec(page, 'list:convert', { listType: 'bullet' });
+    await expectOutline(page, 'ul[a > ul[s1, s2, s3]]');
+    expect(await sublistTags(page, 'a')).toEqual(['ul']);
+    await expectMd(page, '- a\n  - s1\n  - s2\n  - s3');
+    await expectValid(page);
+  });
+
+  test('P-28d · the "after" part of an ordered sublist keeps counting', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', OL(I('s1'), I('s2'), I('s3'), I('s4'))))]);
+    await focusAt(page, 's2', 1);
+    await exec(page, 'list:convert', { listType: 'bullet' });
+    await expectOutline(page, 'ul[a > ol[s1] ul[s2] ol[s3, s4]]');
+    await expect(page.locator('li:has(> .item-content:text-is("a")) > .item-children > ol').nth(1)).toHaveAttribute('start', '3');
+    await expectMd(page, '- a\n  1. s1\n  - s2\n  3. s3\n  4. s4');
+    await expectValid(page);
+  });
+
+  test('P-28e · Tab under a sibling whose LAST sublist has another type opens a new sublist of the item\'s type', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', OL(I('o1'))), I('b'))]);
+    await focusAt(page, 'b', 1);
+    await press(page, 'Tab');
+    await expectOutline(page, 'ul[a > ol[o1] ul[b]]');
+    expect(await sublistTags(page, 'a')).toEqual(['ol', 'ul']);
+    await expectMd(page, '- a\n  1. o1\n  - b');
+    await expectCaret(page, 'b|');
+    await undo(page);
+    await expectOutline(page, 'ul[a > ol[o1], b]');
+    await expectValid(page);
+  });
+
+  test('P-28f · Tab under a sibling whose last sublist has the SAME type joins it', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', [OL(I('o1')), UL(I('s1'))]), I('b'))]);
+    await focusAt(page, 'b', 1);
+    await press(page, 'Tab');
+    await expectOutline(page, 'ul[a > ol[o1] ul[s1, b]]');
+    await expectValid(page);
+  });
+
+  test('P-28g · Shift+Tab: the followers become children in a sublist of THEIR type, after the item\'s own sublists', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', UL(I('s1', OL(I('o1'))), I('s2'), I('s3'))))]);
+    await focusAt(page, 's1', 1);
+    await press(page, 'Shift+Tab');
+    await expectOutline(page, 'ul[a, s1 > ol[o1] ul[s2, s3]]');
+    expect(await sublistTags(page, 's1')).toEqual(['ol', 'ul']);
+    await expectCaret(page, 's|1');
+    await undo(page);
+    await expectOutline(page, 'ul[a > ul[s1 > ol[o1], s2, s3]]');
+    await expectValid(page);
+  });
+
+  test('P-28h · Shift+Tab on an item of the first sublist keeps the document order (later sublists follow it)', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', [UL(I('s1'), I('s2')), OL(I('o1'))]))]);
+    await focusAt(page, 's1', 1);
+    await press(page, 'Shift+Tab');
+    await expectOutline(page, 'ul[a, s1 > ul[s2] ol[o1]]');
+    expect(await texts(page)).toEqual(['a', 's1', 's2', 'o1']);
+    await expectValid(page);
+  });
+
+  test('P-28i · Backspace at offset 0 of a nested item in a middle sublist unindents it like Shift+Tab', async ({ page }) => {
+    await buildDoc(page, [UL(I('a', [UL(I('s1')), OL(I('o1'), I('o2')), UL(I('s2'))]))]);
+    await focusAt(page, 'o1', 0);
+    await press(page, 'Backspace');
+    await expectOutline(page, 'ul[a > ul[s1], o1 > ol[o2] ul[s2]]');
+    await expectValid(page);
+  });
+
+  test('P-28j · pasted markdown with consecutive nested lists of different types keeps them; the markdown export is identical', async ({ page }) => {
+    await buildDoc(page, [P('')]);
+    await focusEmpty(page);
+    const md = '- a\n  - s1\n  1. s2\n  - s3';
+    await pasteText(page, md);
+    // CURRENT: a list pasted into an empty paragraph is inserted after it (the paragraph stays).
+    await expectOutline(page, 'p(∅) ; ul[a > ul[s1] ol[s2] ul[s3]]');
+    const list = (await getJson(page)).blocks.at(-1);
+    expect(list.children[0].children.map((c: any) => c.props.listType)).toEqual(['bullet', 'ordered', 'bullet']);
+    expect(await sublistTags(page, 'a')).toEqual(['ul', 'ol', 'ul']);
+    await expectValid(page);
+  });
+});

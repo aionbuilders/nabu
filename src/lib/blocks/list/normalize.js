@@ -12,10 +12,12 @@
  *  - R2b a child of a `list` that is neither a `list-item` nor a `list` is hoisted out: the list is split
  *        around it (items before stay, the block goes right after, items after go into a new list of the
  *        same `listType`, without `start`, after the block).
- *  - R3a a `list-item` with several sublists: the extra ones are merged into the first, in order.
+ *  - R3a (P-28) a `list-item` may hold SEVERAL sublists, of different types, in order: nothing to do here,
+ *        only R4 applies to them (adjacent sublists of the same type merge, as at the root).
  *  - R3b a `list-item` with a non-list child: that child (and what follows it, to keep the document
  *        order) is hoisted right after the item, in its parent. R2a / R2b then finish the job.
- *  - R4  adjacent lists of the same `listType` merge into the first one (which keeps its `start`).
+ *  - R4  adjacent lists of the same `listType` merge into the first one (which keeps its `start`), whatever
+ *        their parent (the root, a container, a list item).
  *
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
  */
@@ -185,16 +187,6 @@ function fixItem(nabu, item) {
         for (const child of children.slice(foreignIndex)) {
             child.moveAfter(anchor);
             anchor = child;
-        }
-        return true;
-    }
-
-    // R3a — several sublists: merge the extra ones into the first
-    if (children.length > 1) {
-        const [first, ...extras] = children;
-        for (const extra of extras) {
-            moveAll(extra, first);
-            remove(nabu, extra);
         }
         return true;
     }

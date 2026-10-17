@@ -15,7 +15,7 @@ import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text
  */
 
 /**
- * Indent a list item (Tab behavior): move into previous sibling's sublist, hoist own children.
+ * Indent a list item (Tab behavior): move under the previous sibling (into its last sublist when of the same type, else a new one).
  * The selection (collapsed caret or range) is restored afterwards. See indent.js.
  * @param {ListItem} item
  * @returns {boolean}
@@ -70,8 +70,9 @@ export class ListItem extends MegaBlock {
                 prefix = listType === 'ordered' ? `${((/** @type {any} */ (this.parent)?.start ?? 1) + this.index)}.` : '-';
             }
             const lines = [`${indent}${prefix} ${this.behavior.toMarkdown()}`];
-            if (this.sublist) {
-                const sublistMd = this.sublist.serialize('markdown');
+            // Every sublist, in order (an item may hold several, of different types: P-28).
+            for (const sublist of this.sublists) {
+                const sublistMd = sublist.serialize('markdown');
                 if (sublistMd) lines.push(sublistMd);
             }
             return lines.join('\n');
@@ -148,7 +149,11 @@ export class ListItem extends MegaBlock {
         return { block: this, offset: this.behavior.text.length };
     }
 
-    sublist = $derived(this.children.find(child => child.node.data.get("type") === "list"));
+    /** Every sublist, in order: an item may hold several, of different types (`a > [ul[…], ol[…], ul[…]]`). */
+    sublists = $derived(this.children.filter(child => child.node.data.get("type") === "list"));
+
+    /** The first sublist (see `sublists`). */
+    sublist = $derived(this.sublists[0]);
 
     /**
      * A ListItem must always live inside a List.
@@ -168,17 +173,17 @@ export class ListItem extends MegaBlock {
     }
 
     /**
-     * Retourne la sous-liste existante, ou en crée une nouvelle à la fin des enfants.
+     * The sublist that receives a child of type `listType`: the LAST sublist when it has that type, otherwise
+     * a new one appended after the existing sublists (an item may hold several sublists of different types).
      * @param {"bullet" | "ordered" | "todo"} [listType]
      */
     getOrCreateSublist(listType = /** @type {any} */ (this.parent)?.listType || "bullet") {
-        if (this.sublist) return this.sublist;
-        
-        // S'il n'y en a pas, on demande à Nabu d'en créer une en tant qu'enfant de ce ListItem
+        const last = this.sublists.at(-1);
+        if (last && /** @type {any} */ (last).listType === listType) return last;
+
         // No nabu.insert() here: it commits, and the list schema normalizer would delete this still-empty
         // list before the caller had the chance to fill it.
-        const newList = List.create(this.nabu, "list", { listType }, this.node.id.toString());
-        return newList;
+        return List.create(this.nabu, "list", { listType }, this.node.id.toString());
     }
 
     /**

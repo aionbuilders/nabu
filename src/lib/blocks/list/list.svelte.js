@@ -177,8 +177,8 @@ export class List extends MegaBlock {
         if (!tokens.length) return null;
 
         /**
-         * Recursively build a List PasteBlock from a flat token array.
-         * Items at `baseDepth` become direct children; deeper tokens become sublists.
+         * Builds ONE List PasteBlock from a flat token array. Items at the shallowest depth become direct
+         * children; deeper tokens become the sublists of the item they follow.
          * @param {ListToken[]} toks
          * @returns {import('../../utils/extensions.js').PasteBlock}
          */
@@ -208,13 +208,35 @@ export class List extends MegaBlock {
                 /** @type {import('../../utils/extensions.js').PasteBlock} */
                 const item = { type: 'list-item', delta: parseInline(toks[i].text), partial: false };
                 if (toks[i].task) item.props = { checked: toks[i].checked };
-                if (subToks.length) item.children = [buildList(subToks)];
+                if (subToks.length) item.children = buildSublists(subToks);
 
                 items.push(item);
                 i = j;
             }
 
             return { type: 'list', props: start === null ? { listType } : { listType, start }, children: items, partial: false };
+        }
+
+        /**
+         * The sublists of an item (P-28): consecutive base-depth items of a different kind (numbered vs
+         * bulleted / to-do) are separate sublists, in order (`- a` / `  - s1` / `  1. s2` / `  - s3` gives
+         * ul[s1], ol[s2], ul[s3]). Each item keeps its own deeper tokens.
+         * @param {ListToken[]} toks
+         * @returns {import('../../utils/extensions.js').PasteBlock[]}
+         */
+        function buildSublists(toks) {
+            const baseDepth = Math.min(...toks.map(t => t.depth));
+            /** @type {ListToken[][]} */
+            const runs = [];
+            /** @type {boolean | null} */
+            let runOrdered = null;
+            for (const tok of toks) {
+                if (tok.depth === baseDepth) {
+                    if (tok.ordered !== runOrdered) { runs.push([]); runOrdered = tok.ordered; }
+                } else if (!runs.length) continue; // deeper tokens before any base item: dropped, as buildList does
+                runs[runs.length - 1].push(tok);
+            }
+            return runs.map(buildList);
         }
 
         return buildList(tokens);

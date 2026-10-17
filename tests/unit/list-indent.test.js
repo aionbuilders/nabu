@@ -9,6 +9,7 @@ import { Nabu } from '$lib/blocks/nabu.svelte.js';
 import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
 import { ListExtension, ListItemExtension, List, ListItem } from '$lib/blocks/list/index.js';
 import { moveItems, selectedItems, handleTab } from '$lib/blocks/list/indent.js';
+import { liftItemToParagraph, stepBack } from '$lib/blocks/list/step-back.js';
 
 async function makeEditor() {
   const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension] });
@@ -30,7 +31,7 @@ function build(engine, specs, parent = null) {
 
 const outline = (node) => {
   if (node.data.get('type') === 'list') return `[${(node.children() ?? []).map(outline).join(', ')}]`;
-  const sub = (node.children() ?? []).map(outline).join('');
+  const sub = (node.children() ?? []).map(outline).join(' ');
   return node.data.get('text').toString() + (sub ? ` > ${sub}` : '');
 };
 const doc = (engine) => engine.tree.roots().slice(1).map(outline).join('');
@@ -137,5 +138,125 @@ describe('list Tab / Shift+Tab on several items', () => {
     expect(event.preventDefault).toHaveBeenCalled();
     await engine.commit();
     expect(doc(engine)).toBe('[aaa > [bbb, ccc]]');
+  });
+});
+
+// --- P-28: an item may hold SEVERAL sublists of different types -------------------------------------------
+
+/** Typed builder: `{ type, items: [[text, ...sublistSpecs]] }`. */
+function buildTyped(engine, spec, parent = null) {
+  const list = List.create(engine, 'list', { listType: spec.type ?? 'bullet', start: spec.start }, parent?.id.toString());
+  for (const [text, ...subs] of spec.items) {
+    const item = ListItem.create(engine, 'list-item', { text }, list.node.id.toString());
+    for (const sub of subs) buildTyped(engine, sub, item.node);
+  }
+  return list.node;
+}
+const ul = (...items) => ({ type: 'bullet', items });
+const ol = (...items) => ({ type: 'ordered', items });
+const typedOutline = (node) => {
+  if (node.data.get('type') === 'list') {
+    const lt = node.data.get('listType');
+    const start = node.data.get('start');
+    return `${lt === 'ordered' ? 'ol' : lt === 'todo' ? 'todo' : 'ul'}${start ? `@${start}` : ''}[${(node.children() ?? []).map(typedOutline).join(', ')}]`;
+  }
+  const sub = (node.children() ?? []).map(typedOutline).join(' ');
+  return node.data.get('text').toString() + (sub ? ` > ${sub}` : '');
+};
+const typedDoc = (engine) => engine.tree.roots().slice(1).map(typedOutline).join(' ; ');
+async function setupTyped(...specs) {
+  const engine = await makeEditor();
+  for (const spec of specs) buildTyped(engine, spec);
+  await engine.commit();
+  engine.undoManager.clear();
+  return engine;
+}
+const run = async (engine, texts, unindent) => {
+  select(engine, ...texts);
+  return moveItems(engine, selectedItems(engine), unindent);
+};
+
+describe('P-28 Tab / Shift+Tab with several sublists of different types', () => {
+  it('Tab: joins the previous sibling\'s LAST sublist when it has the item\'s list type', async () => {
+    const engine = await setupTyped(ul(['a', ul(['s1'])], ['b']));
+    await run(engine, ['b'], false);
+    expect(typedDoc(engine)).toBe('ul[a > ul[s1, b]]');
+  });
+
+  it('Tab: otherwise a new sublist of the item\'s list type is appended after the existing ones', async () => {
+    const engine = await setupTyped(ul(['a', ol(['o1'], ['o2'])], ['b']));
+    await run(engine, ['b'], false);
+    expect(typedDoc(engine)).toBe('ul[a > ol[o1, o2] ul[b]]');
+  });
+
+  it('Tab: only the LAST sublist counts (ul, ol, ul -> joins the last ul)', async () => {
+    const engine = await setupTyped(ul(['a', ul(['s1']), ol(['o1']), ul(['s2'])], ['b'], ['c']));
+    await run(engine, ['b'], false);
+    expect(typedDoc(engine)).toBe('ul[a > ul[s1] ol[o1] ul[s2, b], c]');
+    await run(engine, ['c'], false);
+    expect(typedDoc(engine)).toBe('ul[a > ul[s1] ol[o1] ul[s2, b, c]]');
+  });
+
+  it('Tab: the item keeps its own sublists (of several types) and the type of its list decides the target', async () => {
+    const engine = await setupTyped(ol(['a', ul(['s1'])], ['b', ul(['x']), ol(['y'])]));
+    await run(engine, ['b'], false);
+    expect(typedDoc(engine)).toBe('ol[a > ul[s1] ol[b > ul[x] ol[y]]]');
+  });
+
+  it('Tab on several items: they land together in one new sublist of their list type', async () => {
+    const engine = await setupTyped(ul(['a', ol(['o1'])], ['b'], ['c']));
+    await run(engine, ['b', 'c'], false);
+    expect(typedDoc(engine)).toBe('ul[a > ol[o1] ul[b, c]]');
+  });
+
+  it('Shift+Tab: the followers become children in a sublist of THEIR type, after the item\'s own sublists', async () => {
+    const engine = await setupTyped(ul(['a', ul(['s1', ol(['o1'])], ['s2'], ['s3'])]));
+    await run(engine, ['s1'], true);
+    expect(typedDoc(engine)).toBe('ul[a, s1 > ol[o1] ul[s2, s3]]');
+  });
+
+  it('Shift+Tab: followers of the same type as the item\'s last sublist merge into it', async () => {
+    const engine = await setupTyped(ul(['a', ul(['s1', ul(['x'])], ['s2'])]));
+    await run(engine, ['s1'], true);
+    expect(typedDoc(engine)).toBe('ul[a, s1 > ul[x, s2]]');
+  });
+
+  it('Shift+Tab: the sublists of the parent that followed the item\'s list keep the document order', async () => {
+    const engine = await setupTyped(ul(['a', ul(['s1'], ['s2']), ol(['t1']), ul(['t2'])], ['z']));
+    await run(engine, ['s1'], true);
+    expect(typedDoc(engine)).toBe('ul[a, s1 > ul[s2] ol[t1] ul[t2], z]');
+  });
+
+  it('Shift+Tab on an item of a middle sublist leaves the other sublists of the parent in place', async () => {
+    const engine = await setupTyped(ul(['a', ul(['s1']), ol(['o1'], ['o2']), ul(['s2'])]));
+    await run(engine, ['o2'], true);
+    expect(typedDoc(engine)).toBe('ul[a > ul[s1] ol[o1], o2 > ul[s2]]');
+  });
+
+  it('Shift+Tab on a whole middle sublist: no empty list, neighbours of the same type re-merge', async () => {
+    const engine = await setupTyped(ul(['a', ul(['s1']), ol(['o1']), ul(['s2'])]));
+    await run(engine, ['o1'], true);
+    expect(typedDoc(engine)).toBe('ul[a > ul[s1], o1 > ul[s2]]');
+  });
+
+  it('Tab then undo is ONE step', async () => {
+    const engine = await setupTyped(ul(['a', ol(['o1'])], ['b'], ['c']));
+    await run(engine, ['b', 'c'], false);
+    engine.undo();
+    expect(typedDoc(engine)).toBe('ul[a > ol[o1], b, c]');
+    expect(engine.undoManager.canUndo()).toBe(false);
+  });
+
+  it('step back (Enter on empty / Backspace) of a nested item is Shift+Tab', async () => {
+    const engine = await setupTyped(ul(['a', ul(['s1'], ['s2']), ol(['o1'])]));
+    await stepBack(engine, nodeOf(engine, 's1'));
+    expect(typedDoc(engine)).toBe('ul[a, s1 > ul[s2] ol[o1]]');
+  });
+
+  it('step back of a top-level item: ALL its sublists stay lists right after the paragraph, in order', async () => {
+    const engine = await setupTyped(ul(['a'], ['b', ul(['x']), ol(['y']), ul(['z'])], ['c']));
+    expect(liftItemToParagraph(engine, nodeOf(engine, 'b'))).toBe(true);
+    await engine.commit();
+    expect(typedDoc(engine)).toBe('ul[a] ; b ; ul[x] ; ol[y] ; ul[z, c]');
   });
 });

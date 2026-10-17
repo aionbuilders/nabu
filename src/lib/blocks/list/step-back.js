@@ -4,7 +4,7 @@
  *  - a NESTED item is unindented one level (exactly Shift+Tab: its following siblings become its children);
  *  - a TOP-LEVEL item leaves the list and becomes a paragraph (same node, so its id, text, marks and caret
  *    survive). The list is split around it: the items before stay, the items after go into a new list
- *    placed after the paragraph. The item's own sublist is moved out right after the paragraph (nothing is
+ *    placed after the paragraph. The item's own sublists (it may have several, of different types) are moved out right after the paragraph, in order (nothing is
  *    lost, the relative nesting is kept). An ORDERED tail list keeps counting where the list left off
  *    (`start`), so `1. a 2. b 3. c` with b removed reads `1. a`, `b`, `3. c`.
  *
@@ -14,7 +14,7 @@
  */
 
 import { List, listStart } from "./list.svelte.js";
-import { typeOf, kids, sublistOf, dropIfEmpty, moveItems } from "./indent.js";
+import { typeOf, kids, sublistsOf, dropIfEmpty, moveItems } from "./indent.js";
 
 /**
  * Takes a top-level item out of its list and retypes it as `type` (a paragraph for the step back, any
@@ -32,7 +32,7 @@ export function liftItemTo(nabu, item, type = "paragraph", props = {}) {
 
     const index = item.index() ?? 0;
     const followers = kids(list).slice(index + 1);
-    const own = sublistOf(item);
+    const own = sublistsOf(item);
     const listType = /** @type {any} */ (list.data.get("listType")) || "bullet";
     // The number the first follower had: the list's own start + the items before it (item included).
     const tailStart = (listStart(listType, list.data.get("start")) ?? 1) + index + 1;
@@ -41,9 +41,9 @@ export function liftItemTo(nabu, item, type = "paragraph", props = {}) {
     item.moveAfter(list);
     /** @type {NabuNode} */
     let anchor = item;
-    if (own) {
-        own.moveAfter(anchor);
-        anchor = own;
+    for (const sublist of own) {
+        sublist.moveAfter(anchor);
+        anchor = sublist;
     }
     if (followers.length) {
         // List.create, not nabu.insert(): that commits, and the empty tail would be normalized away.

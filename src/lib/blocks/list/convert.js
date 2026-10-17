@@ -1,19 +1,20 @@
 /**
  * Changing the TYPE of ONE list item, in place: the rest of the list is not touched.
  *
- *  - to another LIST type (bullet / ordered / todo): the item (with its sublist) goes into a new list of the
+ *  - to another LIST type (bullet / ordered / todo): the item (with its sublists) goes into a new list of the
  *    target type, placed between the part of the list before it and the part after it (both keep their
  *    type; an ORDERED tail keeps counting through `start`). Adjacent lists of the same type are merged by the
  *    normalizer afterwards. The same type is a no-op. Entering a todo list sets `checked: false`, leaving
  *    one drops `checked`.
+ *    This works at ANY nesting level (P-28): inside a sublist the three parts are sublists of the same
+ *    parent item, in place, side by side (`a > [ul[s1], ol[s2], ul[s3]]`); nothing is promoted. A sole child
+ *    converted to another list type just changes the type of its list (which the normalizer then merges with
+ *    an adjacent sublist of the new type).
  *  - to any other block (paragraph, heading, quote, code…): the item leaves its list exactly like the
- *    top-level Backspace (see step-back.js `liftItemTo`).
- *  - a NESTED item cannot stay where it is when its type changes: a list item holds ONE sublist, so a sublist
- *    cannot be split in three, and a non-list block cannot live in a list. It is first unindented up to the top
- *    level (exactly what repeated Shift+Tab / Backspace do: the following siblings, level after level, become
- *    its children, so the document order and every item survive) and then converted as a top-level item.
- *    The only exception is the sole child of its sublist converted to another list type: the sublist itself
- *    changes type.
+ *    top-level Backspace (see step-back.js `liftItemTo`). A NESTED item cannot become a non-list block where it
+ *    is (a list only holds items), so it is first unindented up to the top level (exactly what repeated
+ *    Shift+Tab / Backspace do: the following siblings, level after level, become its children, so the
+ *    document order and every item survive) and then lifted as a top-level item.
  *
  * Moves on tree NODES only, no commit (the caller owns the transaction, hence the undo step).
  *
@@ -21,11 +22,8 @@
  */
 
 import { List, listStart } from "./list.svelte.js";
-import { typeOf, kids, dropIfEmpty, unindentNode } from "./indent.js";
+import { typeOf, kids, listTypeOf, dropIfEmpty, unindentNode } from "./indent.js";
 import { liftItemTo } from "./step-back.js";
-
-/** @param {NabuNode | null | undefined} node */
-const listTypeOf = (node) => /** @type {any} */ (node?.data)?.get("listType") || "bullet";
 
 /** Whether the item sits in a sublist of another item. @param {NabuNode} item */
 const isNested = (item) => typeOf(item.parent()?.parent()) === "list-item";
@@ -61,16 +59,8 @@ export function retypeItem(nabu, item, type, props = {}) {
  * @returns {boolean} whether something changed (false: already of that type, or not in a list)
  */
 export function convertItemToListType(nabu, item, listType) {
-    let list = item.parent();
+    const list = item.parent();
     if (!list || typeOf(list) !== "list" || listTypeOf(list) === listType) return false;
-    if (kids(list).length > 1) {
-        hoistToTopLevel(nabu, item);
-        list = item.parent();
-        if (!list || typeOf(list) !== "list") return false;
-        // The hoisted item may already be in a list of the target type (its former parent's).
-        if (listTypeOf(list) === listType) return true;
-    }
-
     const current = listTypeOf(list);
     const data = /** @type {any} */ (item.data);
     if (kids(list).length === 1) {

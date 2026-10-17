@@ -15,16 +15,17 @@ import { flushRender } from './editor.js';
 
 // ── Fixture spec ───────────────────────────────────────────────────────────
 
-export type ItemSpec = { text: string; checked?: boolean; sub?: ListSpec };
+/** An item holds 0..n sublists (P-28): one list, or several consecutive ones of different types. */
+export type ItemSpec = { text: string; checked?: boolean; sub?: ListSpec | ListSpec[] };
 export type ListSpec = { kind: 'list'; listType: 'bullet' | 'ordered' | 'todo'; start?: number; items: ItemSpec[] };
 export type ParaSpec = { kind: 'p'; text: string };
 export type BlockSpec = ListSpec | ParaSpec;
 
 /** `P('text')` -> a root paragraph. */
 export const P = (text: string): ParaSpec => ({ kind: 'p', text });
-/** `I('text', sub?)` -> a list item, optionally with a sublist. `checked` is meaningful in todo lists. */
-export const I = (text: string, sub?: ListSpec | { checked?: boolean; sub?: ListSpec }): ItemSpec => {
-  if (sub && (sub as ListSpec).kind === 'list') return { text, sub: sub as ListSpec };
+/** `I('text', sub?)` -> a list item, optionally with a sublist (or an array of sublists). `checked` is meaningful in todo lists. */
+export const I = (text: string, sub?: ListSpec | ListSpec[] | { checked?: boolean; sub?: ListSpec | ListSpec[] }): ItemSpec => {
+  if (Array.isArray(sub) || (sub && (sub as ListSpec).kind === 'list')) return { text, sub: sub as ListSpec | ListSpec[] };
   return { text, ...(sub as any) };
 };
 /** `UL(items...)` / `OL(items...)` / `TODO(items...)` -> a list. */
@@ -44,7 +45,7 @@ export async function buildDoc(page: Page, blocks: BlockSpec[]) {
         if (it.checked !== undefined) props.checked = it.checked;
         else if (spec.listType === 'todo') props.checked = false;
         const item = n.insert('list-item', props, list.id, i);
-        if (it.sub) addList(it.sub, item.id, null);
+        for (const sub of ([] as any[]).concat(it.sub ?? [])) addList(sub, item.id, null);
       });
     };
     specs.forEach((s: any, i: number) => {
@@ -115,7 +116,14 @@ export async function violations(page: Page): Promise<string[]> {
       if (type === 'list') for (const k of kids) if (k.data.get('type') !== 'list-item') out.push(`list ${id} has child ${k.data.get('type')}`);
       if (type === 'list-item') {
         const lists = kids.filter((k) => k.data.get('type') === 'list');
-        if (lists.length > 1) out.push(`list-item ${id} has ${lists.length} sublists`);
+        // P-28: several sublists are fine, but two ADJACENT ones of the same type must have been merged
+        kids.forEach((k, i) => {
+          const prev = kids[i - 1];
+          if (prev && prev.data.get('type') === 'list' && k.data.get('type') === 'list'
+            && (prev.data.get('listType') || 'bullet') === (k.data.get('listType') || 'bullet')) {
+            out.push(`list-item ${id} has two adjacent sublists of the same type`);
+          }
+        });
         if (lists.length !== kids.length) out.push(`list-item ${id} has a non-list child`);
       }
       const block = n.blocks.get(id);

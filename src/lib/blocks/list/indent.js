@@ -2,7 +2,7 @@
  * Indent / unindent of list items (Tab / Shift+Tab), for one item or for every item a selection touches.
  *
  * Everything works on Loro tree NODES, never on the Block instances: inside one batch of moves the
- * Block state (`children`, `sublist`, `parent`) is stale until the commit, and the later moves of the
+ * Block state (`children`, `sublists`, `parent`) is stale until the commit, and the later moves of the
  * batch depend on the earlier ones. All the moves belong to ONE transaction (one undo step); the
  * selection is captured before and restored after.
  *
@@ -17,21 +17,29 @@ export const typeOf = (node) => /** @type {any} */ (node?.data.get("type"));
 /** @param {NabuNode} node @returns {NabuNode[]} */
 export const kids = (node) => /** @type {NabuNode[]} */ (node.children() ?? []);
 
-/** Sublist of an item, read from the tree (not from the possibly stale Block). @param {NabuNode} item */
-export const sublistOf = (item) => kids(item).find((child) => typeOf(child) === "list");
+/** `listType` of a list node (`bullet` when unset). @param {NabuNode | null | undefined} list */
+export const listTypeOf = (list) => /** @type {any} */ (list?.data)?.get("listType") || "bullet";
 
 /**
- * Sublist of an item, created (empty, appended) when missing. No `nabu.insert()`: it commits, and the
- * normalizer would delete the still-empty list before the caller fills it.
+ * Sublists of an item, in order, read from the tree (not from the possibly stale Block). An item may hold
+ * SEVERAL, of different types (P-28): `a > [ul[s1], ol[s2], ul[s3]]`.
+ * @param {NabuNode} item
+ * @returns {NabuNode[]}
+ */
+export const sublistsOf = (item) => kids(item).filter((child) => typeOf(child) === "list");
+
+/**
+ * The sublist of `item` that receives a child of type `listType`: its LAST sublist when that one has the
+ * same type, otherwise a new sublist of that type appended after the existing ones. No `nabu.insert()`: it
+ * commits, and the normalizer would delete the still-empty list before the caller fills it.
  * @param {Nabu} nabu
  * @param {NabuNode} item
+ * @param {string} listType
  * @returns {NabuNode}
  */
-function getOrCreateSublist(nabu, item) {
-    const existing = sublistOf(item);
-    if (existing) return existing;
-    const parentList = item.parent();
-    const listType = /** @type {any} */ (parentList?.data.get("listType")) || "bullet";
+function sublistForType(nabu, item, listType) {
+    const last = kids(item).at(-1);
+    if (last && typeOf(last) === "list" && listTypeOf(last) === listType) return last;
     return List.create(nabu, "list", { listType }, item.id.toString()).node;
 }
 
@@ -47,8 +55,10 @@ export function dropIfEmpty(nabu, list) {
 }
 
 /**
- * Indent one item: it goes at the end of its previous sibling's sublist, and its whole subtree moves
- * along (its own sublist stays attached to it, so its children stay its children). Moves only; no commit.
+ * Indent one item: it goes under its previous sibling, at the end of that sibling's LAST sublist when that
+ * sublist has the same type as the item's current list, otherwise in a new sublist of that type appended
+ * after the sibling's sublists. Its whole subtree moves along (its own sublists stay attached to it). Moves
+ * only; no commit.
  * @param {Nabu} nabu
  * @param {NabuNode} item
  * @returns {boolean} whether the item moved
@@ -60,13 +70,15 @@ export function indentNode(nabu, item) {
     const previous = parentList && kids(parentList)[index - 1];
     if (!previous || typeOf(previous) !== "list-item") return false;
 
-    nabu.tree.move(item.id.toString(), getOrCreateSublist(nabu, previous).id.toString());
+    nabu.tree.move(item.id.toString(), sublistForType(nabu, previous, listTypeOf(parentList)).id.toString());
     return true;
 }
 
 /**
  * Unindent one item: it goes right after its parent item, and the siblings that followed it become its
- * children (after the ones it already has: its own subtree stays attached). Moves only; no commit.
+ * children, in a sublist of THEIR list type appended after the sublists it already has (its own subtree
+ * stays attached). To keep the document order, the sublists of the parent item that came after the item's
+ * list follow them. Moves only; no commit.
  * @param {Nabu} nabu
  * @param {NabuNode} item
  * @returns {boolean} whether the item moved
@@ -79,10 +91,12 @@ export function unindentNode(nabu, item) {
     if (!targetList) return false;
 
     const followers = kids(parentList).slice((item.index() ?? 0) + 1);
+    const laterSublists = kids(parentItem).slice((parentList.index() ?? 0) + 1);
     if (followers.length) {
-        const sublistId = getOrCreateSublist(nabu, item).id.toString();
+        const sublistId = sublistForType(nabu, item, listTypeOf(parentList)).id.toString();
         for (const follower of followers) nabu.tree.move(follower.id.toString(), sublistId);
     }
+    for (const later of laterSublists) nabu.tree.move(later.id.toString(), item.id.toString());
     nabu.tree.move(item.id.toString(), targetList.id.toString(), (parentItem.index() ?? 0) + 1);
     dropIfEmpty(nabu, parentList);
     return true;

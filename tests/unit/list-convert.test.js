@@ -25,7 +25,8 @@ function build(engine, spec, parent = null) {
   const list = List.create(engine, 'list', { listType: type, start }, parent?.id.toString());
   for (const [text, sub, checked] of items) {
     const item = ListItem.create(engine, 'list-item', { text, checked: checked ?? (type === 'todo' ? false : undefined) }, list.node.id.toString());
-    if (sub) build(engine, sub, item.node);
+    // `sub`: one sublist spec, or an array of them (an item may hold several sublists, P-28)
+    for (const one of Array.isArray(sub) ? sub : sub ? [sub] : []) build(engine, one, item.node);
   }
   return list.node;
 }
@@ -44,7 +45,7 @@ const outline = (node) => {
   const text = node.data.get('text').toString();
   const checked = node.data.get('checked');
   const mark = checked === undefined ? '' : checked ? '[x] ' : '[ ] ';
-  const sub = (node.children() ?? []).map(outline).join('');
+  const sub = (node.children() ?? []).map(outline).join(' ');
   const label = type === 'list-item' ? mark + text : `${type === 'heading' ? 'h' + node.data.get('level') : type}(${text})`;
   return label + (sub ? ` > ${sub}` : '');
 };
@@ -137,10 +138,55 @@ describe('list item -> another LIST type', () => {
     expect(doc(engine)).toBe('ul[a > ol[s], b]');
   });
 
-  it('nested item with siblings: unindented to the top level, followers become its children', async () => {
+  it('DECIDED (P-28): nested item with siblings is converted IN PLACE, the sublist is split inside the same parent item', async () => {
     const engine = await setup(ul(['a', ul(['s1'], ['s2'], ['s3'])], ['z']));
     await convert(engine, 's2', 'ordered');
-    expect(doc(engine)).toBe('ul[a > ul[s1]] ; ol[s2 > ul[s3]] ; ul[z]');
+    expect(doc(engine)).toBe('ul[a > ul[s1] ol[s2] ul[s3], z]');
+  });
+
+  it('nested: first / last item, no promotion and no empty sublist', async () => {
+    const engine = await setup(ul(['a', ul(['s1'], ['s2'], ['s3'])]));
+    await convert(engine, 's1', 'ordered');
+    expect(doc(engine)).toBe('ul[a > ol[s1] ul[s2, s3]]');
+    await convert(engine, 's3', 'todo');
+    expect(doc(engine)).toBe('ul[a > ol[s1] ul[s2] todo[[ ] s3]]');
+  });
+
+  it('nested: the converted item keeps its own children', async () => {
+    const engine = await setup(ul(['a', ul(['s1'], ['s2', ul(['g'])], ['s3'])]));
+    await convert(engine, 's2', 'ordered');
+    expect(doc(engine)).toBe('ul[a > ul[s1] ol[s2 > ul[g]] ul[s3]]');
+  });
+
+  it('nested ordered: the "after" part keeps counting (start)', async () => {
+    const engine = await setup(ul(['a', ol(undefined, ['s1'], ['s2'], ['s3'], ['s4'])]));
+    await convert(engine, 's2', 'bullet');
+    expect(doc(engine)).toBe('ul[a > ol[s1] ul[s2] ol@3[s3, s4]]');
+  });
+
+  it('nested: converting back re-merges the sublists into one', async () => {
+    const engine = await setup(ul(['a', ul(['s1'], ['s2'], ['s3'])]));
+    await convert(engine, 's2', 'ordered');
+    expect(doc(engine)).toBe('ul[a > ul[s1] ol[s2] ul[s3]]');
+    await convert(engine, 's2', 'bullet');
+    expect(doc(engine)).toBe('ul[a > ul[s1, s2, s3]]');
+  });
+
+  it('nested: converting next to a sublist of the target type joins it', async () => {
+    const engine = await setup(ul(['a', [ul(['s1']), ol(undefined, ['o1']), ul(['s2'], ['s3'])]]));
+    await convert(engine, 's2', 'ordered');
+    expect(doc(engine)).toBe('ul[a > ul[s1] ol[o1, s2] ul[s3]]');
+  });
+
+  it('nested conversion is ONE undo step (and redo restores it)', async () => {
+    const engine = await setup(ul(['a', ul(['s1'], ['s2'], ['s3'])]));
+    await convert(engine, 's2', 'ordered');
+    engine.undoManager.undo();
+    await engine.commit();
+    expect(doc(engine)).toBe('ul[a > ul[s1, s2, s3]]');
+    engine.undoManager.redo();
+    await engine.commit();
+    expect(doc(engine)).toBe('ul[a > ul[s1] ol[s2] ul[s3]]');
   });
 });
 
