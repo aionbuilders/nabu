@@ -36,5 +36,9 @@ export default defineConfig({
     },
   ],
   timeout: 20000,
+  // A single dev server can't boot the editor fast enough for more browsers than
+  // this: at 12 workers (default on 24 cores) ~480 tests started timing out in
+  // beforeEach, with no wall-time gain over 6.
+  workers: 6,
   reporter: [['list', { printSteps: true }], ['json', { outputFile: 'tests/results.json' }]],
 });

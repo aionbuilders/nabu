@@ -243,7 +243,7 @@ export class ToggleBlock extends MegaBlock {
      * @param {number|null} [index=null]
      */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index != null ? index : undefined);
+        const node = nabu.tree.createNode(parentId || undefined, index ?? undefined);
         /** @type {any} */ (node.data).set('type', 'toggle');
         /** @type {any} */ (node.data).set('collapsed', props.collapsed ?? false);
         const container = /** @type {any} */ (node.data).setContainer('text', new LoroText());

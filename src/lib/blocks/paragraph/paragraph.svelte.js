@@ -84,7 +84,7 @@ export class Paragraph extends TextBlock {
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index || undefined);
+        const node = nabu.tree.createNode(parentId || undefined, index ?? undefined);
         node.data.set("type", "paragraph");
         const container = node.data.setContainer("text", new LoroText());
         if (props.text) container.insert(0, props.text || "Start writing...");

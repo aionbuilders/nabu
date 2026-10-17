@@ -67,6 +67,8 @@ export class CodeBlock extends TextBlock {
     transformsEnabled = false;
     /** @type {boolean} */
     marksEnabled = false;
+    /** @type {boolean} */
+    pastesAsPlainText = true;
 
     /** @type {string | null} */
     language = $state(null);
@@ -212,7 +214,7 @@ export class CodeBlock extends TextBlock {
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(/** @type {any} */ (parentId || undefined), index || undefined);
+        const node = nabu.tree.createNode(/** @type {any} */ (parentId || undefined), index ?? undefined);
         /** @type {any} */ (node.data).set('type', 'code');
         if (props.language) /** @type {any} */ (node.data).set('language', props.language);
         const container = /** @type {any} */ (node.data).setContainer('text', new LoroText());

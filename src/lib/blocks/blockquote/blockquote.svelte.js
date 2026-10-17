@@ -82,7 +82,7 @@ export class BlockquoteBlock extends TextBlock {
 
     /** @param {Nabu} nabu @param {string} type @param {{text?: string, delta?: import('loro-crdt').Delta<string>[]}} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(/** @type {any} */ (parentId || undefined), index || undefined);
+        const node = nabu.tree.createNode(/** @type {any} */ (parentId || undefined), index ?? undefined);
         /** @type {any} */ (node.data).set("type", "blockquote");
         const container = /** @type {any} */ (node.data).setContainer("text", new LoroText());
         if (props.text) container.insert(0, props.text);

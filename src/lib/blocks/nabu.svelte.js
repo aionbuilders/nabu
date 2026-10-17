@@ -71,6 +71,16 @@ function blockPath(block) {
     return path;
 }
 
+/**
+ * True for the input types that can trigger a block transform (typing / Enter), as opposed to
+ * deletions.
+ * @param {Event | { inputType?: string }} e
+ */
+export const isTransformInput = (e) => {
+    const type = /** @type {any} */ (e).inputType;
+    return type === 'insertText' || type === 'insertParagraph' || type === 'insertLineBreak' || type === 'insertSoftLineBreak';
+};
+
 export class Nabu {
     /** @type {Pulse} */
     #pulse = new Pulse();
@@ -543,9 +553,13 @@ export class Nabu {
      * @param {Block} block  the block the shortcut was typed in
      * @param {string} trigger  text of the trigger key, inserted before transforming ('' = none)
      * @param {(behavior: any) => void} transform  mutations only (it may commit itself, e.g. via transformTo)
-     * @returns {Promise<void>}
+     * @returns {Promise<void>}  resolves immediately, doing nothing, when `block.transformsEnabled === false`
      */
     async shortcut(block, trigger, transform) {
+        // Defence in depth: a block that opts out of transforms (`transformsEnabled === false`) never
+        // converts. The primary guard is upstream (dispatchEventToSelection skips the extension hooks
+        // for typing in such a block, so the keystroke proceeds as plain text); this covers direct callers.
+        if (block.transformsEnabled === false) return;
         const behavior = block.behaviors.get('text');
         const sel = behavior?.selection;
         if (!behavior || !sel) return;
@@ -754,8 +768,12 @@ export class Nabu {
         const sel = this.selection;
         if (!sel.anchorBlock || !sel.focusBlock) return;
         
-        // 1. Essayer les hooks globaux d'extension d'abord
-        if (hookName) {
+        // 1. Essayer les hooks globaux d'extension d'abord.
+        // Un bloc `transformsEnabled === false` (code, callout, toggle…) ne se laisse pas transformer
+        // par la frappe (raccourcis markdown `# `, `> `, ``` …) : on saute les hooks sur les insertions
+        // (les hooks de suppression — sortie de bloc, garde-fous — tournent toujours) et la frappe
+        // continue comme du texte normal. Même règle que TextBehavior.handleBeforeInput.
+        if (hookName && !(hookName === 'onBeforeInput' && isTransformInput(e) && sel.anchorBlock.transformsEnabled === false)) {
             const hooks = this.hooks.get(hookName) || [];
             for (const hook of hooks) {
                 const handled = hook(this, e, sel.anchorBlock);
@@ -1012,6 +1030,15 @@ export class Nabu {
         const clipboard = e.clipboardData;
         if (!clipboard) return;
 
+        // A block with `pastesAsPlainText` (code…) is a verbatim buffer: take the clipboard text as-is,
+        // before any interpreter (markdown / HTML / nabu JSON) gets a chance to split it into blocks.
+        const target = this.selection.anchorBlock;
+        if (target && target === this.selection.focusBlock && target.pastesAsPlainText) {
+            const text = clipboard.getData('text/plain');
+            if (text) this.#pasteVerbatim(target, text);
+            return;
+        }
+
         const sorted = [...this.#pasteInterpreters].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
 
         for (const interpreter of sorted) {
@@ -1025,6 +1052,25 @@ export class Nabu {
         }
 
         this.warn('handlePaste: no interpreter matched');
+    }
+
+    /**
+     * Insert `text` verbatim at the caret of `block`, replacing its selection: no interpretation, no new
+     * block. One undo step (isolated commit).
+     * @param {Block} block
+     * @param {string} text
+     */
+    #pasteVerbatim(block, text) {
+        const behavior = block.behaviors?.get('text');
+        const sel = behavior?.selection;
+        if (!behavior || !sel) return;
+        const from = Math.min(sel.from, sel.to);
+        const to = Math.max(sel.from, sel.to);
+        if (to > from) behavior.delete({ index: from, length: to - from });
+        behavior.insert(from, text);
+        this.#isolateNextCommits();
+        this.commit();
+        tick().then(() => this.selection.setCursor(this.blocks.get(block.id) || block, from + text.length));
     }
 
     /**

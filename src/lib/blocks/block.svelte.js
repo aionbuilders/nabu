@@ -82,6 +82,8 @@ export class Block {
     transformsEnabled = true;
     /** When false, inline marks (bold/italic/...) are never applied to this block. @type {boolean} */
     marksEnabled = true;
+    /** When true, pasting inside this block inserts the clipboard's text/plain verbatim (replacing the selection), skipping every paste interpreter: no blocks created, no markdown/HTML interpretation. @type {boolean} */
+    pastesAsPlainText = false;
 
     /**
      * Resolve a document-local offset to { block, offset } within this block.
@@ -447,7 +449,7 @@ export class Block {
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index || undefined);
+        const node = nabu.tree.createNode(parentId || undefined, index ?? undefined);
         node.data.set("type", type);
         const block = Block.load(nabu, node);
         return block;

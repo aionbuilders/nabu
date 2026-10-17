@@ -60,7 +60,7 @@ export class MediaBlock extends Block {
      * @returns {any}
      */
     static createNode(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(/** @type {any} */ (parentId || undefined), index || undefined);
+        const node = nabu.tree.createNode(/** @type {any} */ (parentId || undefined), index ?? undefined);
         const d = /** @type {any} */ (node.data);
         d.set('type', type); d.set('ref', props.ref || ''); d.set('alt', props.alt || '');
         d.set('status', props.status || 'ready'); d.set('name', props.name || '');
