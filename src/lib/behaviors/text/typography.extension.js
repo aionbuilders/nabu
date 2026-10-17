@@ -3,12 +3,13 @@ import { TextBehavior } from './text.behavior.svelte.js';
 
 /**
  * Smart typography input rules.
- * Currently: `-- ` → `— ` (em-dash substitution while typing).
+ * Currently: `-- ` → `— ` (em-dash substitution while typing). A longer run of dashes (`--- `,
+ * a divider-like `-----`) is left alone: the `--` must not be preceded by another `-`.
  */
 export const TypographyExtension = new Extension('typography', {
     inputRules: [
         {
-            pattern: /--$/,
+            pattern: /(?<!-)--$/,
             handler(nabu, block, match, sel) {
                 // Only convert when the trailing space is typed, so sequences
                 // like `--help` keep their double dash.

@@ -51,6 +51,21 @@ export const DEFAULT_SLASH_COMMANDS = [
   { title: 'File',          icon: '📎', aliases: ['file','attachment','upload','document'], run: (e) => e.exec('file:pick') },
 ];
 
+/**
+ * Filter slash commands by a query. Titles match by SUBSTRING (`/head` -> "Heading 1"), aliases
+ * by PREFIX (`/bul` -> "Bulleted list" via "bullet"); a substring alias match would make `/ul`
+ * also hit Divider through its "r-ul-e" alias. Case-insensitive; an empty query keeps everything.
+ * @param {SlashCommand[]} commands @param {string} query
+ * @returns {SlashCommand[]}
+ */
+export function filterSlashCommands(commands, query) {
+    const q = query.toLowerCase();
+    if (!q) return commands;
+    return commands.filter(c =>
+        c.title.toLowerCase().includes(q) ||
+        (c.aliases || []).some(a => a.toLowerCase().startsWith(q)));
+}
+
 export class SlashMenuController {
     /** @type {import('../blocks/nabu.svelte.js').Nabu} */
     #engine;
@@ -77,11 +92,7 @@ export class SlashMenuController {
 
     filteredItems = $derived.by(() => {
         if (!this.match) return [];
-        const q = this.query.toLowerCase();
-        if (!q) return this.commands;
-        return this.commands.filter(c =>
-            c.title.toLowerCase().includes(q) ||
-            (c.aliases || []).some(a => a.toLowerCase().includes(q)));
+        return filterSlashCommands(this.commands, this.query);
     });
 
     /** @type {number | null} slashStart of a dismissed (Escape) trigger */
@@ -107,6 +118,8 @@ export class SlashMenuController {
         if (beh) beh.delete({ index: m.slashStart, length: m.cursor - m.slashStart });
         await this.#engine.commit();
         this.#engine.selection.setCursor(m.block, m.slashStart);
+        // The command reads selection.anchorBlock: don't wait for the async `selectionchange`.
+        this.#engine.selection.sync?.();
         this.close();
         item.run(this.#engine);
     }

@@ -8,6 +8,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TextBehavior } from '$lib/behaviors/text/text.behavior.svelte.js';
 import { MarkdownShortcutsExtension } from '$lib/behaviors/text/markdown-shortcuts.extension.js';
+import { TypographyExtension } from '$lib/behaviors/text/typography.extension.js';
 
 // ── Mock LoroText container ────────────────────────────────────────────────
 
@@ -173,5 +174,128 @@ describe('MarkdownShortcutsExtension', () => {
     expect(b.container.mark).not.toHaveBeenCalled();
     expect(b.container.delete).not.toHaveBeenCalled();
     expect(b.container.insert).toHaveBeenCalledWith(6, '!');
+  });
+
+  // ── P-09: ***x*** typed character by character ────────────────────────────
+
+  /** Types `typed` one char at a time through the real input path; returns the behavior. Applied conversions rewrite the text. */
+  function typeAll(typed, { rules: r = rules, start = '' } = {}) {
+    // The mock container is static, so replay the states by hand: for each char, the text before the cursor is typed[0..i).
+    const fired = [];
+    for (let i = 0; i < typed.length; i++) {
+      const b = makeBehavior(start + typed.slice(0, i), { inputRules: r });
+      b.handleBeforeInput(makeEvent('insertText', typed[i]), makeSel((start + typed.slice(0, i)).length));
+      fired.push({ i, converted: b.container.mark.mock.calls.length > 0, b });
+    }
+    return fired;
+  }
+
+  it('***both*** typed char by char: nothing fires before the 3rd closing "*", then bold+italic', () => {
+    const fired = typeAll('***both***');
+    // no conversion until the very last char (text before it: '***both**')
+    expect(fired.slice(0, -1).some(f => f.converted)).toBe(false);
+    const last = fired.at(-1).b;
+    expect(last.container.delete).toHaveBeenCalledWith(0, 9);
+    expect(last.container.insert).toHaveBeenCalledWith(0, 'both');
+    expect(last.container.mark).toHaveBeenCalledWith({ start: 0, end: 4 }, 'bold', true);
+    expect(last.container.mark).toHaveBeenCalledWith({ start: 0, end: 4 }, 'italic', true);
+    expect(last.container.mark).toHaveBeenCalledTimes(2);
+  });
+
+  it('**bold** / *it* still work when typed char by char', () => {
+    for (const [typed, inner, mark] of [['**bold**', 'bold', 'bold'], ['*it*', 'it', 'italic']]) {
+      const fired = typeAll(typed);
+      expect(fired.slice(0, -1).some(f => f.converted)).toBe(false);
+      const last = fired.at(-1).b;
+      expect(last.container.insert).toHaveBeenCalledWith(0, inner);
+      expect(last.container.mark).toHaveBeenCalledWith({ start: 0, end: inner.length }, mark, true);
+    }
+  });
+
+  it('the bold rule does not fire inside a longer asterisk run ("***x*" + "*")', () => {
+    const b = makeBehavior('***x*', { inputRules: rules });
+    b.handleBeforeInput(makeEvent('insertText', '*'), makeSel(5));
+    expect(b.container.mark).not.toHaveBeenCalled();
+    expect(b.container.insert).toHaveBeenCalledWith(5, '*');
+  });
+
+  // ── P-10: flanking rules / false positives ────────────────────────────────
+
+  /** Whether typing `char` after `text` (cursor at the end, or at `cursor`) converts something. */
+  function converts(text, char, cursor = text.length) {
+    const b = makeBehavior(text, { inputRules: rules });
+    b.handleBeforeInput(makeEvent('insertText', char), makeSel(cursor));
+    return b.container.mark.mock.calls.length > 0;
+  }
+
+  it('whitespace-flanked asterisks stay literal ("2 * 3 * 4", "* not *")', () => {
+    expect(converts('2 * 3 ', '*')).toBe(false);
+    expect(converts('* not ', '*')).toBe(false);
+    expect(converts('* not', '*')).toBe(false);   // opener followed by whitespace
+    expect(converts('** not *', '*')).toBe(false);
+    expect(converts('**bold *', '*')).toBe(false); // closer preceded by whitespace
+    expect(converts('~~ x~', '~')).toBe(false);
+    expect(converts('~~x ~', '~')).toBe(false);
+    expect(converts('_ x', '_')).toBe(false);
+    expect(converts('_x ', '_')).toBe(false);
+  });
+
+  it('"*" is allowed intraword (CommonMark): "a*b" + "*" -> italic b', () => {
+    expect(converts('a*b', '*')).toBe(true);
+  });
+
+  it('"_" never opens or closes intraword', () => {
+    expect(converts('snake_case', '_')).toBe(false);        // intraword opener
+    expect(converts('foo__bar_', '_')).toBe(false);         // intraword "__" opener
+    expect(converts('_it', '_', 3)).toBe(true);
+    expect(converts('x _it', '_')).toBe(true);              // opener after a space
+    expect(converts('(_it', '_')).toBe(true);               // opener after punctuation
+    expect(converts('__bold_', '_')).toBe(true);
+    expect(converts('x __bold_', '_')).toBe(true);
+  });
+
+  it('"_" does not close when a letter/digit follows the cursor (intraword closer)', () => {
+    // "_it|abc": typing "_" would close in the middle of a word
+    expect(converts('_itabc', '_', 3)).toBe(false);
+    // …but before whitespace / punctuation / end it does
+    expect(converts('_it y', '_', 3)).toBe(true);
+    expect(converts('_it.', '_', 3)).toBe(true);
+  });
+
+  it('snake_case_name typed char by char never converts', () => {
+    expect(typeAll('snake_case_name').some(f => f.converted)).toBe(false);
+  });
+
+  it('`code` keeps inner spaces but needs a non-space char and no longer backtick run', () => {
+    expect(converts('`a b', '`')).toBe(true);
+    expect(converts('`', '`')).toBe(false);       // empty
+    expect(converts('`  ', '`')).toBe(false);     // spaces only
+    expect(converts('``x', '`')).toBe(false);     // inside a run of backticks
+  });
+});
+
+describe('TypographyExtension', () => {
+  const rules = TypographyExtension.inputRules;
+  const type = (text, data = ' ') => {
+    const b = makeBehavior(text, { inputRules: rules });
+    b.handleBeforeInput(makeEvent('insertText', data), makeSel(text.length));
+    return b;
+  };
+
+  it('"-- " after a word becomes an em dash', () => {
+    const b = type('abc --');
+    expect(b.container.delete).toHaveBeenCalledWith(4, 2);
+    expect(b.container.insert).toHaveBeenCalledWith(4, '— ');
+  });
+
+  it('"--- " is left alone (the "--" is preceded by another "-")', () => {
+    const b = type('abc ---');
+    expect(b.container.delete).not.toHaveBeenCalled();
+    expect(b.container.insert).toHaveBeenCalledWith(7, ' ');
+  });
+
+  it('"--" followed by a non-space char keeps the double dash', () => {
+    const b = type('abc --', 'h');
+    expect(b.container.delete).not.toHaveBeenCalled();
   });
 });

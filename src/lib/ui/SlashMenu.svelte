@@ -3,18 +3,65 @@
   /** @type {{ engine: import('../blocks/nabu.svelte.js').Nabu, commands?: import('./slash-menu.svelte.js').SlashCommand[] }} */
   let { engine, commands = DEFAULT_SLASH_COMMANDS } = $props();
   const ctrl = new SlashMenuController(engine, commands);
-  let pos = $state({ top: 0, left: 0 });
+  /** @type {HTMLElement | null} */
+  let menuEl = $state(null);
+  /** Viewport coordinates (the menu is `position: fixed`): anchored by `top` (below the caret) or `bottom` (above it). */
+  /** @type {{ top: number | null, bottom: number | null, left: number, maxHeight: number }} */
+  let pos = $state({ top: 0, bottom: null, left: 0, maxHeight: 320 });
+
+  const GAP = 4;      // space between the caret line and the menu
+  const MARGIN = 8;   // minimum distance to the viewport edges
+  const MAX_HEIGHT = 320; // keep in sync with the CSS max-height
+  const MIN_HEIGHT = 100; // never squash the menu below this, even in a tiny viewport
 
   // Reset the highlighted item whenever the query changes.
   $effect(() => { ctrl.query; ctrl.selectedIndex = 0; });
 
-  // Position the popup just below the caret when open.
+  // Place the popup next to the caret, in viewport coordinates, inside the viewport:
+  // below the caret line, or flipped above it when there is no room below; clamped horizontally.
+  function place() {
+    const range = engine.selection?.firstRange;
+    if (!range || !menuEl) return;
+    let r = range.getBoundingClientRect();
+    // A collapsed range on an empty line can report an all-zero rect: fall back to the block.
+    if (!r.width && !r.height) {
+      const el = ctrl.match?.block?.element;
+      if (el) r = el.getBoundingClientRect();
+    }
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    // Natural height: full content (scrollHeight) + borders, capped like the CSS max-height.
+    const full = menuEl.scrollHeight + (menuEl.offsetHeight - menuEl.clientHeight);
+    const natural = Math.min(MAX_HEIGHT, full);
+    const spaceBelow = vh - r.bottom - GAP - MARGIN;
+    const spaceAbove = r.top - GAP - MARGIN;
+    const left = Math.max(MARGIN, Math.min(r.left, vw - MARGIN - menuEl.offsetWidth));
+    if (natural <= spaceBelow || spaceBelow >= spaceAbove) {
+      pos = { top: r.bottom + GAP, bottom: null, left, maxHeight: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, spaceBelow)) };
+    } else {
+      pos = { top: null, bottom: vh - r.top + GAP, left, maxHeight: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, spaceAbove)) };
+    }
+  }
+
   $effect(() => {
     if (!ctrl.open) return;
-    const range = engine.selection?.firstRange;
-    if (!range) return;
-    const r = range.getBoundingClientRect();
-    pos = { top: r.bottom + window.scrollY + 4, left: r.left + window.scrollX };
+    ctrl.filteredItems.length; // the menu height depends on it
+    menuEl;                    // re-run once the element is mounted
+    engine.selection?.firstRange;
+    place();
+  });
+
+  // The menu is fixed: follow the caret when the page scrolls / resizes while it is open.
+  $effect(() => {
+    if (!ctrl.open) return;
+    /** @param {Event} e */
+    const onScroll = (e) => { if (e.target !== menuEl) place(); }; // not the menu's own list scrolling
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', place);
+    };
   });
 
   // Capture keyboard navigation ONLY while the menu is open (capture phase so it
@@ -34,7 +81,16 @@
 </script>
 
 {#if ctrl.open}
-<div class="nabu-slash" data-nabu-ui contenteditable="false" style="top: {pos.top}px; left: {pos.left}px;">
+<div
+  bind:this={menuEl}
+  class="nabu-slash"
+  data-nabu-ui
+  contenteditable="false"
+  style:top={pos.top === null ? null : `${pos.top}px`}
+  style:bottom={pos.bottom === null ? null : `${pos.bottom}px`}
+  style:left="{pos.left}px"
+  style:max-height="{pos.maxHeight}px"
+>
   {#each ctrl.filteredItems as item, i (item.title)}
     <button
       class="nabu-slash-item"

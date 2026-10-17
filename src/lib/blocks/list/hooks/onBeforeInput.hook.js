@@ -34,6 +34,8 @@ export const onBeforeInput = (nabu, event, block) => {
     let prefixLength = 0;
     /** @type {boolean | undefined} */
     let checked = undefined;
+    /** @type {number | undefined} */
+    let start = undefined;
 
     if (textBeforeCursor.match(/^-$/)) {
         listType = "bullet";
@@ -41,6 +43,7 @@ export const onBeforeInput = (nabu, event, block) => {
     } else if (textBeforeCursor.match(/^\d+\.$/)) {
         listType = "ordered";
         prefixLength = textBeforeCursor.length;
+        start = parseInt(textBeforeCursor, 10); // "3. " starts the list at 3 (List drops it when it is 1)
     } else if (textBeforeCursor.match(/^\[\s?\]$/)) {
         listType = "todo";
         checked = false;
@@ -52,37 +55,44 @@ export const onBeforeInput = (nabu, event, block) => {
     }
 
     if (!listType) return CONTINUE;
+    const type = listType;
 
-    // Delete the prefix ("- " trigger: delete the "-"; "1. " trigger: delete the "1.")
-    behavior.delete({ index: 0, length: prefixLength });
+    /** @type {string | null} */
+    let listItemId = null;
 
-    // Capture remaining text delta (everything after the prefix)
-    const delta = behavior.container.toDelta();
+    // Undo gives back the typed trigger ("- ", "1. "…, space included): see Nabu.shortcut()
+    nabu.shortcut(block, " ", (b) => {
+        // Delete the prefix and the trigger space ("- " -> "", "1. " -> "")
+        b.delete({ index: 0, length: prefixLength + 1 });
 
-    // Get current tree position from live Loro state (pre-commit)
-    const parentNode = block.node.parent();
-    const parentId = parentNode?.id.toString() ?? null;
-    const index = block.node.index();
+        // Capture remaining text delta (everything after the prefix)
+        const delta = b.container.toDelta();
 
-    // Create the List at the same position as the paragraph
-    const list = List.create(nabu, "list", { listType }, parentId, index);
+        // Get current tree position from live Loro state (pre-commit)
+        const parentNode = block.node.parent();
+        const parentId = parentNode?.id.toString() ?? null;
+        const index = block.node.index();
 
-    // Create the ListItem inside the list with the captured content
-    /** @type {Record<string, any>} */
-    const itemProps = { delta };
-    if (checked !== undefined) itemProps.checked = checked;
-    const listItem = ListItem.create(nabu, "list-item", itemProps, list.node.id.toString());
+        // Create the List at the same position as the paragraph
+        /** @type {Record<string, any>} */
+        const listProps = { listType: type };
+        if (start !== undefined) listProps.start = start;
+        const list = List.create(nabu, "list", listProps, parentId, index);
 
-    // Destroy the original paragraph (no commit)
-    block.destroy();
+        // Create the ListItem inside the list with the captured content
+        /** @type {Record<string, any>} */
+        const itemProps = { delta };
+        if (checked !== undefined) itemProps.checked = checked;
+        const listItem = ListItem.create(nabu, "list-item", itemProps, list.node.id.toString());
+        listItemId = listItem.node.id.toString();
 
-    // Commit the whole operation as a single transaction
-    nabu.commit();
+        // Destroy the original paragraph; shortcut() commits the whole operation as one transaction
+        block.destroy();
+    });
 
     // Restore focus to the new list-item
-    const listItemId = listItem.node.id.toString();
     tick().then(() => {
-        const updatedListItem = nabu.blocks.get(listItemId);
+        const updatedListItem = listItemId ? nabu.blocks.get(listItemId) : null;
         if (updatedListItem) updatedListItem.focus({ start: 0, end: 0 });
     });
 

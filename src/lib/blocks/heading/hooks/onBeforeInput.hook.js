@@ -42,11 +42,13 @@ export const onBeforeInput = (nabu, event, block) => {
     
     if (block.type === "heading" && block.level === level) return CONTINUE;
     
-    behavior.delete({index: 0, length: level});
-    
     const blockId = block.node.id.toString();
-    
-    block.transformTo("heading", { level });
+
+    // Undo gives back "# " (trigger space included): see Nabu.shortcut()
+    nabu.shortcut(block, " ", (b) => {
+        b.delete({index: 0, length: level + 1}); // the hashes + the trigger space
+        block.transformTo("heading", { level });
+    });
     
     tick().then(() => {
         const block = nabu.blocks.get(blockId);

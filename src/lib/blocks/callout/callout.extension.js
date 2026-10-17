@@ -42,9 +42,12 @@ const onBeforeInput = (nabu, event, block) => {
     // "! " at the start of a text block → transform into a callout (variant note)
     if (event.inputType === 'insertText' && event.data === ' ') {
         if (behavior.text.slice(0, sel.from) !== '!') return CONTINUE;
-        behavior.delete({ index: 0, length: 1 });
         const blockId = block.node.id.toString();
-        block.transformTo('callout');
+        // Undo gives back "! " (trigger space included): see Nabu.shortcut()
+        nabu.shortcut(block, ' ', (b) => {
+            b.delete({ index: 0, length: 2 });
+            block.transformTo('callout');
+        });
         tick().then(() => {
             const fresh = nabu.blocks.get(blockId);
             if (fresh) fresh.focus({ start: 0, end: 0 });

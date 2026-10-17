@@ -7,8 +7,20 @@ import ListComponent from "./List.svelte";
  */
 
 /**
- * @typedef {NabuNode<{type: "list", listType: "bullet" | "ordered" | "todo"}>} ListNode
+ * @typedef {NabuNode<{type: "list", listType: "bullet" | "ordered" | "todo", start?: number}>} ListNode
  */
+
+/**
+ * Normalize a list's `start` number: only meaningful for ORDERED lists, and `1` is the default.
+ * @param {string | undefined} listType
+ * @param {any} start  a number, a numeric string (markdown / `<ol start>`), or nothing
+ * @returns {number | null}  the number to store / emit, or null = default (omit it)
+ */
+export function listStart(listType, start) {
+    if (listType !== 'ordered' || start === undefined || start === null || start === '') return null;
+    const n = Number(start);
+    return Number.isInteger(n) && n >= 0 && n !== 1 ? n : null;
+}
 
 
 
@@ -29,14 +41,20 @@ export class List extends MegaBlock {
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'list',
-            props: { listType: this.listType },
+            props: this.clipboardProps,
             children: this.children.map(child => child.serialize('json')).filter(Boolean)
         }));
     }
 
     listType = $derived(this.behavior.listType);
 
-    get clipboardProps() { return { listType: this.listType }; }
+    /** First number of an ORDERED list (`<ol start>`); null = 1, the default. @type {number | null} */
+    start = $derived(listStart(this.behavior.listType, this.behavior.start));
+
+    /** `start` is only emitted when it is not the default. */
+    get clipboardProps() {
+        return this.start === null ? { listType: this.listType } : { listType: this.listType, start: this.start };
+    }
 
     component = $derived(this.nabu.components.get("list") || ListComponent);
 
@@ -127,8 +145,9 @@ export class List extends MegaBlock {
      */
     static toMarkdown(pb, { recurse, depth = 0 }) {
         const listType = pb.props?.listType ?? 'bullet';
+        const start = listStart(listType, pb.props?.start) ?? 1;
         return (pb.children || [])
-            .map((child, i) => recurse(child, { listType, index: i, depth }))
+            .map((child, i) => recurse(child, { listType, index: i, depth, start }))
             .join('\n');
     }
 
@@ -139,7 +158,8 @@ export class List extends MegaBlock {
     static toHtml(pb, { recurse }) {
         const tag = pb.props?.listType === 'ordered' ? 'ol' : 'ul';
         const cls = pb.props?.listType === 'todo' ? ' class="contains-task-list"' : '';
-        return `<${tag}${cls}>${(pb.children || []).map(recurse).join('')}</${tag}>`;
+        const start = listStart(pb.props?.listType, pb.props?.start);
+        return `<${tag}${cls}${start === null ? '' : ` start="${start}"`}>${(pb.children || []).map(recurse).join('')}</${tag}>`;
     }
 
     static markdownRules = [
@@ -164,20 +184,21 @@ export class List extends MegaBlock {
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromMarkdown(lines, { parseInline }) {
-        /** @typedef {{ depth: number, ordered: boolean, task: boolean, checked: boolean, text: string }} ListToken */
+        /** @typedef {{ depth: number, ordered: boolean, num: number, task: boolean, checked: boolean, text: string }} ListToken */
 
         /** @type {ListToken[]} */
-        const tokens = lines.flatMap(line => {
+        const tokens = lines.flatMap(/** @returns {ListToken[]} */ (line) => {
             const m = line.match(/^([ \t]*)([-*+]|\d+[.)]) +(.*)/);
             if (!m) return [];
             const rawText = m[3];
+            const num = parseInt(m[2], 10); // NaN for bullets
             const taskMatch = rawText.match(/^\[( |x|X)?\]\s*(.*)/);
             if (taskMatch) {
                 const inner = taskMatch[1] ?? '';
                 const rest = taskMatch[2];
-                return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), task: true, checked: /[xX]/.test(inner), text: rest }];
+                return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), num, task: true, checked: /[xX]/.test(inner), text: rest }];
             }
-            return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), task: false, checked: false, text: rawText }];
+            return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), num, task: false, checked: false, text: rawText }];
         });
 
         if (!tokens.length) return null;
@@ -194,6 +215,8 @@ export class List extends MegaBlock {
             // Task takes precedence: if ANY base-depth item is a task, list is todo
             const hasTask = baseItems.some(t => t.task);
             const listType = hasTask ? 'todo' : (baseItems.find(t => t.depth === baseDepth)?.ordered ? 'ordered' : 'bullet');
+            // CommonMark: an ordered list starts at the number of its first item (`3. a` / `4. b` -> start 3)
+            const start = listStart(listType, baseItems[0].num);
             /** @type {import('../../utils/extensions.js').PasteBlock[]} */
             const items = [];
             let i = 0;
@@ -218,7 +241,7 @@ export class List extends MegaBlock {
                 i = j;
             }
 
-            return { type: 'list', props: { listType }, children: items, partial: false };
+            return { type: 'list', props: start === null ? { listType } : { listType, start }, children: items, partial: false };
         }
 
         return buildList(tokens);
@@ -244,7 +267,8 @@ export class List extends MegaBlock {
         if (listType !== 'todo' && children.some(c => c.props?.checked !== undefined)) {
             listType = 'todo';
         }
-        return { type: 'list', props: { listType }, children, partial: false };
+        const start = listStart(listType, el.getAttribute?.('start'));
+        return { type: 'list', props: start === null ? { listType } : { listType, start }, children, partial: false };
     }
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
@@ -252,6 +276,8 @@ export class List extends MegaBlock {
         const node = nabu.tree.createNode(parentId || undefined, index != null ? index : undefined);
         node.data.set("type", "list");
         node.data.set("listType", props.listType || "bullet");
+        const start = listStart(props.listType, /** @type {any} */ (props).start);
+        if (start !== null) /** @type {any} */ (node.data).set("start", start);
         const block = new List(nabu, node);
         return block;
     }

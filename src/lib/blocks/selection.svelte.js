@@ -35,6 +35,10 @@ export class NabuSelection extends SvelteSelection {
             $effect(() => {
                 /** @param {KeyboardEvent} e */
                 const onKeydown = (e) => {
+                    // Capture phase on document = runs before every other keydown handler
+                    // (root handler, slash menu…): make sure they read the CURRENT caret,
+                    // not the one from a not-yet-delivered `selectionchange`.
+                    this.sync();
                     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                         this.#pendingDirection = 'forward';
                         this.nabu.storedMarks = null;

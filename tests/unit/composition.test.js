@@ -15,7 +15,7 @@ async function makeEditor() {
   const block = engine.children[0];
   // Composition handlers read the anchor block from the selection; in unit
   // tests there is no DOM selection, so stub the minimal surface used.
-  engine.selection = { anchorBlock: block, focusBlock: block, setCursor: vi.fn() };
+  engine.selection = { anchorBlock: block, focusBlock: block, sync: vi.fn(), setCursor: vi.fn() };
   return { engine, block };
 }
 

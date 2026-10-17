@@ -24,10 +24,10 @@ const onBeforeInput = (nabu, event, block) => {
     const sel = behavior.selection;
     if (!sel || !sel.isCollapsed) return CONTINUE;
 
-    /** @param {string} type */
-    const transformAndFocus = (type) => {
+    /** @param {string} type @param {() => void} [transform] */
+    const transformAndFocus = (type, transform = () => block.transformTo(type)) => {
         const blockId = block.node.id.toString();
-        block.transformTo(type);
+        transform();
         tick().then(() => {
             const fresh = nabu.blocks.get(blockId);
             if (fresh) fresh.focus({ start: 0, end: 0 });
@@ -51,8 +51,11 @@ const onBeforeInput = (nabu, event, block) => {
     if (event.inputType === "insertText" && event.data === " ") {
         const textBeforeCursor = behavior.text.slice(0, sel.from);
         if (textBeforeCursor !== ">") return CONTINUE;
-        behavior.delete({ index: 0, length: 1 });
-        return transformAndFocus("blockquote");
+        // Undo gives back "> " (trigger space included): see Nabu.shortcut()
+        return transformAndFocus("blockquote", () => nabu.shortcut(block, " ", (b) => {
+            b.delete({ index: 0, length: 2 });
+            block.transformTo("blockquote");
+        }));
     }
 
     return CONTINUE;

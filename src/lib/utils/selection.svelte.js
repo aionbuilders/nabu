@@ -203,6 +203,34 @@ export class SvelteSelection {
     
     // Méthode pour rafraîchir la sélection manuellement
     refresh = () => this.#updateSelection();
+
+    /**
+    * Synchronise (de façon synchrone et idempotente) l'état avec la sélection DOM courante.
+    *
+    * `selectionchange` est asynchrone (tâche mise en file) : un événement d'entrée
+    * (keydown, beforeinput…) qui suit de très près un déplacement du caret verrait
+    * un état périmé. À appeler au tout début de ces handlers. Ne touche à l'état
+    * que si les points de la sélection ont réellement changé (pas de churn réactif).
+    * @returns {boolean} True si l'état a été mis à jour
+    */
+    sync = () => {
+        if (typeof window === 'undefined' || !window.getSelection) return false;
+        const raw = window.getSelection();
+        const cur = this.#sel;
+        if (!raw || raw.rangeCount === 0) {
+            if (!cur || cur.rangeCount === 0) return false;
+        } else if (cur && cur.rangeCount === raw.rangeCount && cur.type === raw.type) {
+            const range = raw.getRangeAt(0);
+            if (
+                cur.anchorNode === raw.anchorNode && cur.anchorOffset === raw.anchorOffset &&
+                cur.focusNode === raw.focusNode && cur.focusOffset === raw.focusOffset &&
+                cur.startNode === range.startContainer && cur.startOffset === range.startOffset &&
+                cur.endNode === range.endContainer && cur.endOffset === range.endOffset
+            ) return false;
+        }
+        this.#updateSelection();
+        return true;
+    };
     
     // Méthodes de manipulation de la sélection avec gestion d'erreurs
     

@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { SlashMenuController, DEFAULT_SLASH_COMMANDS } from '$lib/ui/slash-menu.svelte.js';
+import { SlashMenuController, DEFAULT_SLASH_COMMANDS, filterSlashCommands } from '$lib/ui/slash-menu.svelte.js';
 
 // ── Mock factory ──────────────────────────────────────────────────────────────
 
@@ -82,6 +82,37 @@ describe('SlashMenuController — "/head" query', () => {
         expect(titles).toContain('Heading 1');
         expect(titles).toContain('Heading 2');
         expect(titles).toContain('Heading 3');
+    });
+});
+
+// ── filtering: titles by substring, aliases by prefix ────────────────────────
+
+describe('filterSlashCommands', () => {
+    const titlesFor = (q) => filterSlashCommands(DEFAULT_SLASH_COMMANDS, q).map(c => c.title);
+
+    it('"/ul" matches Bulleted list only (not Divider via its "rule" alias)', () => {
+        expect(titlesFor('ul')).toEqual(['Bulleted list']);
+    });
+
+    it('aliases match by prefix: "/bul", "/h1", "/todo", "/hr", "/sep"', () => {
+        expect(titlesFor('bul')).toEqual(['Bulleted list']);
+        expect(titlesFor('h1')).toEqual(['Heading 1']);
+        expect(titlesFor('todo')).toEqual(['To-do list']);
+        expect(titlesFor('hr')).toEqual(['Divider']);
+        expect(titlesFor('sep')).toEqual(['Divider']);
+        expect(titlesFor('rul')).toEqual(['Divider']);  // prefix of "rule"
+        expect(titlesFor('ule')).toEqual([]);           // an inner substring of an alias no longer matches
+    });
+
+    it('titles still match by substring: "/head", "/list", "/do"', () => {
+        expect(titlesFor('head')).toEqual(['Heading 1', 'Heading 2', 'Heading 3']);
+        expect(titlesFor('list')).toEqual(['Bulleted list', 'Numbered list', 'To-do list']);
+        expect(titlesFor('do')).toContain('To-do list');
+    });
+
+    it('is case-insensitive and keeps all commands on an empty query', () => {
+        expect(titlesFor('TODO')).toEqual(['To-do list']);
+        expect(titlesFor('')).toHaveLength(DEFAULT_SLASH_COMMANDS.length);
     });
 });
 

@@ -1,6 +1,21 @@
 import { Extension } from '../../utils/extensions.js';
 import { TextBehavior } from './text.behavior.svelte.js';
 
+// Flanking rules (CommonMark, simplified): an opening delimiter must be followed by a non-whitespace
+// char and a closing one preceded by a non-whitespace char, so `2 * 3 * 4` and `* not *` stay literal.
+// Only the whitespace half of CommonMark's flanking rules is implemented (no punctuation special case).
+// `_` / `__` additionally never open or close INTRAWORD (`snake_case_name` stays literal); `*`, `~~`
+// are allowed intraword (`a*b*c` → italic b, as in CommonMark / GFM).
+
+/**
+ * Inner content of a delimited span: no `d`, non-whitespace first AND last char (a single char is fine).
+ * @param {string} d  the delimiter character
+ */
+const inner = (d) => `[^${d}\\s](?:[^${d}]*[^${d}\\s])?`;
+
+/** A letter, digit or underscore: an `_` touching one of these is intraword. */
+const WORD = '\\p{L}\\p{N}_';
+
 /**
  * Build an inputRule that, when `closeChar` is typed and `pattern` matches the
  * text before the cursor, strips the markdown delimiters and applies mark(s)
@@ -9,9 +24,11 @@ import { TextBehavior } from './text.behavior.svelte.js';
  * @param {RegExp} pattern
  * @param {string} closeChar  the closing delimiter character being typed
  * @param {string | string[]} marks  mark name(s) to apply
+ * @param {{ noIntrawordClose?: boolean }} [opts]  `noIntrawordClose`: refuse to close when the char
+ *   right after the cursor is a letter/digit (the closing `_` would be intraword)
  * @returns {import('../../utils/extensions.js').InputRule}
  */
-function markRule(pattern, closeChar, marks) {
+function markRule(pattern, closeChar, marks, opts = {}) {
     const names = Array.isArray(marks) ? marks : [marks];
     return {
         pattern,
@@ -19,6 +36,7 @@ function markRule(pattern, closeChar, marks) {
             if (sel.data !== closeChar) return;
             const behavior = block.behaviors.get('text');
             if (!(behavior instanceof TextBehavior)) return;
+            if (opts.noIntrawordClose && /[\p{L}\p{N}]/u.test(behavior.text.charAt(sel.from))) return;
             const full = match[0];   // delimiters + content present before the cursor
             const inner = match[1];  // bare content
             if (!inner) return;
@@ -35,20 +53,25 @@ function markRule(pattern, closeChar, marks) {
 
 export const MarkdownShortcutsExtension = new Extension('markdown-shortcuts', {
     // ORDER MATTERS: most-specific (longest) delimiters first.
+    // The `(?<!d)` lookbehinds make an opener the START of its delimiter run: `**…*` must not fire
+    // inside `***x*` (typing `***x***`: the 2nd closing `*` used to bold `x*` and leave a stray `*`).
     inputRules: [
         // ***bold-italic***  (asterisks) — typed final '*' after '***x**'
-        markRule(/\*\*\*([^*]+)\*\*$/, '*', ['bold', 'italic']),
+        markRule(new RegExp(`(?<!\\*)\\*\\*\\*(${inner('*')})\\*\\*$`, 'u'), '*', ['bold', 'italic']),
         // **bold**           — typed final '*' after '**x*'
-        markRule(/\*\*([^*]+)\*$/, '*', 'bold'),
+        markRule(new RegExp(`(?<!\\*)\\*\\*(${inner('*')})\\*$`, 'u'), '*', 'bold'),
         // *italic*           — typed final '*' after '*x' (not preceded by '*')
-        markRule(/(?<!\*)\*([^*]+)$/, '*', 'italic'),
+        markRule(new RegExp(`(?<!\\*)\\*(${inner('*')})$`, 'u'), '*', 'italic'),
+        // ___bold-italic___  (underscores, not intraword) — typed final '_' after '___x__'
+        markRule(new RegExp(`(?<![${WORD}])___(${inner('_')})__$`, 'u'), '_', ['bold', 'italic'], { noIntrawordClose: true }),
         // __bold__           — typed final '_' after '__x_'
-        markRule(/__([^_]+)_$/, '_', 'bold'),
-        // _italic_           — typed final '_' after '_x' (not preceded by '_')
-        markRule(/(?<!_)_([^_]+)$/, '_', 'italic'),
-        // `code`             — typed final '`' after '`x'
-        markRule(/`([^`]+)$/, '`', 'code'),
+        markRule(new RegExp(`(?<![${WORD}])__(${inner('_')})_$`, 'u'), '_', 'bold', { noIntrawordClose: true }),
+        // _italic_           — typed final '_' after '_x' (opener preceded by a non-word char or the block start)
+        markRule(new RegExp(`(?<![${WORD}])_(${inner('_')})$`, 'u'), '_', 'italic', { noIntrawordClose: true }),
+        // `code`             — typed final '`' after '`x'. Code spans keep inner spaces (`a b`), but need
+        //                       at least one non-space char and don't open inside a longer backtick run.
+        markRule(/(?<!`)`([^`]*[^`\s][^`]*)$/, '`', 'code'),
         // ~~strike~~         — typed final '~' after '~~x~'
-        markRule(/~~([^~]+)~$/, '~', 'strikethrough'),
+        markRule(new RegExp(`(?<!~)~~(${inner('~')})~$`, 'u'), '~', 'strikethrough'),
     ],
 });

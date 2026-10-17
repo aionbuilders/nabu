@@ -7,6 +7,7 @@
 
 <svelte:element
     this={block.listType === 'ordered' ? 'ol' : 'ul'}
+    start={block.listType === 'ordered' ? (block.start ?? undefined) : undefined}
     data-block-id={block.id}
     data-block-type="list"
     class="nabu-list"

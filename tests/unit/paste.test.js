@@ -19,7 +19,7 @@ async function makeEditor(extensions = [ParagraphExtension, HeadingExtension, Li
   await engine.commit();
   const block = engine.children[0];
   engine.selection = {
-    anchorBlock: block, focusBlock: block, isCollapsed: true, setCursor: vi.fn(),
+    anchorBlock: block, focusBlock: block, isCollapsed: true, sync: vi.fn(), setCursor: vi.fn(),
   };
   return { engine, block };
 }

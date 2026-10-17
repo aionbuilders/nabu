@@ -49,6 +49,27 @@ function inheritedMarkAt(behavior, pos, name) {
     return false;
 }
 
+/**
+ * @typedef {Object} UndoCursor  Caret stored with an undo step.
+ * @property {string} blockId
+ * @property {number} offset
+ * @property {number[]} [path]  child index at each level, root first (see blockPath)
+ */
+
+/**
+ * Tree path of a block: the child index at each level, root first. Read from the Block's own
+ * `parent` / `index` — still valid for a block destroyed in the very transaction being recorded,
+ * whose Loro node can no longer tell (a deleted node has no index).
+ * @param {Block} block
+ * @returns {number[]}
+ */
+function blockPath(block) {
+    /** @type {number[]} */
+    const path = [];
+    for (let b = /** @type {any} */ (block); b; b = b.parent) path.unshift(b.index);
+    return path;
+}
+
 export class Nabu {
     /** @type {Pulse} */
     #pulse = new Pulse();
@@ -72,6 +93,12 @@ export class Nabu {
     #isolating = false;
     /** True during the synchronous turn that started a structural undo step (see commit()). */
     #structuralBurst = false;
+    /**
+     * Explicit caret to store with the NEXT pushed undo step (instead of the live selection): set by
+     * shortcut() so that undoing a block shortcut puts the caret back right after the typed trigger.
+     * @type {{ block: Block, offset: number } | null}
+     */
+    #undoCursor = null;
 
     /** @param {NabuInit} init */
     constructor(init = {}) {
@@ -91,28 +118,27 @@ export class Nabu {
             onPush: () => {
                 if (this.#isolatedSteps > 0) this.#isolatedSteps--;
                 // Save cursor position for restoration on undo/redo
+                const explicit = this.#undoCursor;
+                this.#undoCursor = null;
                 const sel = this.selection;
-                if (!sel || !sel.anchorBlock) return { value: null, cursors: [] };
+                const block = explicit ? explicit.block : sel?.anchorBlock;
+                if (!block) return { value: null, cursors: [] };
 
                 return {
                     value: {
-                        blockId: sel.anchorBlock.id,
-                        offset: sel.startOffset
+                        blockId: block.id,
+                        offset: explicit ? explicit.offset : sel.startOffset,
+                        // Tree path (child index at each level): Loro gives a block RESTORED by undo
+                        // (after a delete) a new id, so the id alone can't find it again.
+                        path: blockPath(block),
                     },
                     cursors: []
                 };
             },
             onPop: (_, storedValue) => {
                 // Restore cursor position after undo/redo
-                const value = /** @type {{blockId: string, offset: number} | null} */ (storedValue?.value);
-                if (value && typeof value === 'object' && 'blockId' in value) {
-                    tick().then(() => {
-                        const block = this.blocks.get(value.blockId);
-                        if (block && block.behaviors?.has('text')) {
-                            this.selection.setCursor(block, value.offset);
-                        }
-                    });
-                }
+                const value = /** @type {UndoCursor | null} */ (storedValue?.value);
+                if (value && typeof value === 'object' && 'blockId' in value) this.#restoreCursor(value);
             }
         });
 
@@ -449,6 +475,90 @@ export class Nabu {
     }
 
     /**
+     * Apply a markdown BLOCK shortcut (`# `, `- `, `> `, `--- `…) so that undo gives back exactly what
+     * the user typed, trigger included: one Ctrl+Z after `# ` leaves a paragraph "# " with the caret
+     * after the space; a second one removes the typing as usual.
+     *
+     *  1. `trigger` (the swallowed space) is inserted at the caret and committed like normal typing;
+     *  2. `transform` runs (delete the prefix incl. the trigger, change/replace the block…) and is
+     *     committed as its own structural undo step (see commit()), whose stored caret is right
+     *     after the trigger.
+     * Both commits run in the same synchronous turn, so the intermediate "# " is never painted.
+     *
+     * For a trigger that is not text (``` + Enter), pass `trigger = ''`: nothing is inserted and
+     * undo restores the text typed before the key (the fence line, without the Enter).
+     * @param {Block} block  the block the shortcut was typed in
+     * @param {string} trigger  text of the trigger key, inserted before transforming ('' = none)
+     * @param {(behavior: any) => void} transform  mutations only (it may commit itself, e.g. via transformTo)
+     * @returns {Promise<void>}
+     */
+    async shortcut(block, trigger, transform) {
+        const behavior = block.behaviors.get('text');
+        const sel = behavior?.selection;
+        if (!behavior || !sel) return;
+        const at = sel.from;
+        if (trigger) {
+            behavior.insert(at, trigger);
+            this.commit();
+        }
+        this.#undoCursor = { block, offset: at + trigger.length };
+        transform(behavior);
+        const committed = this.commit(); // pushes the undo step synchronously (the await is only a tick)
+        this.#undoCursor = null;
+        await committed;
+    }
+
+    /**
+     * Put the caret back after an undo / redo. The stored block may have been destroyed and restored
+     * under a new id (Loro), so resolve it by id when it is still alive, else by its tree path,
+     * else the nearest text block; the offset is clamped to the block's text.
+     * @param {UndoCursor} value
+     * @param {number} [attempt]  retries while the (re)created block is not rendered yet
+     */
+    #restoreCursor(value, attempt = 0) {
+        tick().then(() => {
+            const target = this.#resolveCursor(value);
+            if (!target) return;
+            if (!target.block.element && attempt < 3) return this.#restoreCursor(value, attempt + 1);
+            this.selection.setCursor(target.block, target.offset);
+        });
+    }
+
+    /**
+     * @param {UndoCursor} value
+     * @returns {{ block: Block, offset: number } | null}
+     */
+    #resolveCursor(value) {
+        /** @param {Block | undefined | null} b */
+        const alive = (b) => !!b && !b.node.isDeleted?.() && this.tree.has(b.node.id);
+        /** @param {Block} b */
+        const withText = (b) => b.behaviors?.has('text');
+        /** @param {Block} b */
+        const clamp = (b) => Math.max(0, Math.min(value.offset, b.behaviors.get('text')?.text?.length ?? 0));
+
+        const byId = this.blocks.get(value.blockId);
+        if (alive(byId) && withText(/** @type {Block} */ (byId))) {
+            return { block: /** @type {Block} */ (byId), offset: clamp(/** @type {Block} */ (byId)) };
+        }
+
+        // Walk the stored path as far as it still exists…
+        /** @type {Block | null} */
+        let found = null;
+        /** @type {any} */
+        let level = this;
+        for (const i of value.path ?? []) {
+            const next = level.children?.[i];
+            if (!next) break;
+            found = next;
+            level = next;
+        }
+        // …then settle on a text block: that one, else its first text descendant / following block.
+        if (found && !withText(found)) found = found.findForward(withText);
+        if (!found) found = this.children.find(withText) ?? this.children[0]?.findForward(withText) ?? null;
+        return found ? { block: found, offset: clamp(found) } : null;
+    }
+
+    /**
      * True when every selected text run carries the given mark.
      * Reactive: reads block.selected and the behaviors' selections/deltas,
      * so it can be used directly in component templates (e.g. FloatingToolbar).
@@ -618,6 +728,7 @@ export class Nabu {
     
     /** @param {InputEvent} e */
     handleBeforeinput(e) {
+        this.selection.sync(); // selectionchange is async: don't act on a stale caret
         // Ne pas interférer avec la composition IME en cours : le navigateur
         // doit pouvoir muter librement le text node (insertCompositionText
         // n'est de toute façon pas annulable). Sync dans Loro à compositionend.
@@ -636,6 +747,7 @@ export class Nabu {
      * @param {CompositionEvent} e
      */
     handleCompositionStart(e) {
+        this.selection.sync();
         this.#composing = true;
         const anchor = this.selection.anchorBlock;
         if (!anchor) {
@@ -692,6 +804,7 @@ export class Nabu {
 
     /** @param {KeyboardEvent} e */
     handleKeydown(e) {
+        this.selection.sync(); // no-op when the document capture listener already synced
         // Undo: Ctrl+Z or Cmd+Z (without Shift)
         if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
             e.preventDefault();
@@ -722,6 +835,7 @@ export class Nabu {
 
     /** @param {ClipboardEvent} e */
     handleCopy(e) {
+        this.selection.sync();
         if (this.selection.isCollapsed) return;
         e.preventDefault();
 
@@ -815,6 +929,7 @@ export class Nabu {
 
     /** @param {ClipboardEvent} e */
     handleCut(e) {
+        this.selection.sync();
         if (this.selection.isCollapsed) return;
         e.preventDefault();
 
@@ -833,6 +948,7 @@ export class Nabu {
 
     /** @param {ClipboardEvent} e */
     handlePaste(e) {
+        this.selection.sync();
         e.preventDefault();
         const clipboard = e.clipboardData;
         if (!clipboard) return;

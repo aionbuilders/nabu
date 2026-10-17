@@ -22,7 +22,7 @@ async function makeEditor() {
   });
   await engine.commit();
   const block = engine.children[0];
-  engine.selection = { anchorBlock: block, focusBlock: block, isCollapsed: true, setCursor: vi.fn() };
+  engine.selection = { anchorBlock: block, focusBlock: block, isCollapsed: true, sync: vi.fn(), setCursor: vi.fn() };
   // Start from a clean undo history (the initial paragraph creation is not a step to undo).
   engine.undoManager.clear();
   return { engine, block };
@@ -229,7 +229,7 @@ describe('P-07 — structural operations are their own undo step', () => {
     Object.defineProperty(block, 'selection', { value: { from: 5, to: 11 }, configurable: true });
     engine.selection = {
       anchorBlock: block, focusBlock: block, startBlock: block, endBlock: block,
-      isCollapsed: false, setCursor: vi.fn(),
+      isCollapsed: false, sync: vi.fn(), setCursor: vi.fn(),
     };
     vi.spyOn(engine, 'handleCopy').mockImplementation(() => {});
     engine.handleCut({ preventDefault() {} });
@@ -248,7 +248,7 @@ describe('P-07 — structural operations are their own undo step', () => {
   it('paste isolation is untouched: a structural paste is still two isolated steps', async () => {
     const { engine, block } = await makeEditor();
     await typed(engine, block, 'abc');
-    engine.selection = { anchorBlock: block, focusBlock: block, isCollapsed: true, setCursor: vi.fn() };
+    engine.selection = { anchorBlock: block, focusBlock: block, isCollapsed: true, sync: vi.fn(), setCursor: vi.fn() };
     Object.defineProperty(block, 'selection', { value: { from: 3, to: 3 }, configurable: true });
     engine.insertFragment({ blocks: [
       { type: 'paragraph', partial: false, delta: [{ insert: 'x' }] },

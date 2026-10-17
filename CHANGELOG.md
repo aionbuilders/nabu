@@ -7,10 +7,24 @@
 - Plain-text paste: **one non-blank line = one block** (runs of blank lines are separators). `importMarkdown()` keeps CommonMark semantics (consecutive lines = one paragraph) via the new optional `interpret(raw, nabu, { joinLines })` argument of paste interpreters.
 - A paste is always its own undo step; the typing right after it doesn't merge into it.
 
+### Markdown shortcuts
+- Block shortcuts (`# `, `- `, `1. `, `[] `, `> `, `! `, `-- `, `--- `) now keep the trigger in the undo history: one Ctrl+Z gives back exactly what was typed (`# `, caret after the space), a second one removes the typing. Implemented once in `nabu.shortcut(block, trigger, transform)` (trigger inserted as a text commit, transform as its own structural step). The code fence (```` ```js ```` + Enter) comes back as the fence line, without the Enter.
+- Undo/redo restore the caret into the block that exists afterwards: Loro re-creates a block deleted then undone under a new id, so the stored caret now also carries the block's tree path (fixes the lost caret / swallowed key after undoing `- `, `1. `, `[] `).
+- Inline shortcuts follow CommonMark flanking rules: no whitespace just inside the delimiters (`2 * 3 * 4`, `* not *` stay literal), `_` / `__` never open or close intraword (`snake_case_name`), `` `a b` `` keeps its spaces. `***both***` typed char by char is bold+italic (the `**…*` rule no longer fires inside a `***` run); `___both___` too.
+- Typography: `-- ` becomes an em dash only when the `--` is not preceded by another `-` (`abc --- ` stays).
+- `3. ` creates an ordered list that starts at 3: new `start` prop on `List` (`<ol start>`, markdown `3.` `4.`…, markdown / HTML paste, JSON, clipboard). Omitted when 1, ignored for bullet / todo lists; an adjacent list merged into another keeps the first list's start; nested lists start at 1.
+- Fix: an ordered list created right under a bullet list was destroyed together with its item by the adjacent-list merge (lists of different types are no longer merged).
+
+### Slash menu
+- `/divider` behaves like `--- `: an empty block becomes the divider, otherwise the divider goes after the block (after the whole list inside a list); the caret lands in a new paragraph below. One shared `insertDivider()`.
+- The menu is positioned in viewport coordinates (it was off-screen on a scrolled page), flips above the caret when there is no room below, is clamped horizontally and follows the caret on scroll / resize.
+- Filtering: titles match by substring, aliases by prefix (`/ul` no longer matches Divider through "rule").
+
 ### Undo
 - Structural operations (split/Enter, block merge, multi-block deletion, block type transforms incl. markdown shortcuts, list indent/unindent, cut) are their own undo step. Detected centrally at commit time from the pending Loro transaction; plain typing still merges per second.
 
 ### Editing
+- The model selection now re-syncs synchronously from the DOM at every input entry point (keydown, beforeinput, compositionstart, copy / cut / paste) via the new idempotent `SvelteSelection.sync()`. `selectionchange` is asynchronous, so a keystroke right after a caret move could act on the previous caret: lost first character after a click, Enter splitting at the old offset, wrong marks range.
 - Word deletion (Ctrl/Alt+Backspace, Ctrl/Alt+Delete) now uses the model-based rule in every browser: the deleted word takes its surrounding whitespace with it, no orphan or doubled space. Previously Chromium's `getTargetRanges()` bypassed the fix for issue #4.
 
 ### Placeholders
@@ -18,7 +32,7 @@
 - `createPersistedEditor()` now forwards all editor init options.
 
 ### Tests
-- E2E harness: dedicated dev-only `/e2e` route (fresh editor per test, `?persist=<docId>`, `?options=<json>`), fixing a startup race that made ~35 tests time out. New `text-marks.spec.ts`. 162/162 e2e, 344/344 unit.
+- E2E harness: dedicated dev-only `/e2e` route (fresh editor per test, `?persist=<docId>`, `?options=<json>`), fixing a startup race that made ~35 tests time out. New specs: `text-marks`, `shortcuts-slash`, `fast-input`, `list-start`. 307/307 e2e, 390/390 unit.
 
 ## 0.1.0-beta.0
 

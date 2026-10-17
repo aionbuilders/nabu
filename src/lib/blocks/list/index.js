@@ -26,8 +26,10 @@ const ListExtension = extension("list", {
                 const previousBehavior = previous.behaviors.get("list");
                 if (!previousBehavior || !(previousBehavior instanceof ListBehavior)) return;
                 
-                previousBehavior.absorbs(list);
-                list.destroy();
+                // Adjacent lists of the same type merge into the first one (which keeps its `start`).
+                // absorbs() refuses a list of another type: it must then stay (typing `1. ` right under
+                // a bullet list used to destroy the new list together with its item).
+                if (previousBehavior.absorbs(list)) list.destroy();
 
             })
 

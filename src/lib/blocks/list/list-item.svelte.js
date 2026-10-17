@@ -103,7 +103,7 @@ export class ListItem extends MegaBlock {
             if (listType === 'todo') {
                 prefix = `- [${this.checked ? 'x' : ' '}]`;
             } else {
-                prefix = listType === 'ordered' ? `${this.index + 1}.` : '-';
+                prefix = listType === 'ordered' ? `${((/** @type {any} */ (this.parent)?.start ?? 1) + this.index)}.` : '-';
             }
             const lines = [`${indent}${prefix} ${this.behavior.toMarkdown()}`];
             if (this.sublist) {
@@ -264,15 +264,15 @@ export class ListItem extends MegaBlock {
 
     /**
      * @param {import('../../utils/extensions.js').PasteBlock} pb
-     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, listType?: string, index?: number, depth?: number }} helpers
+     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, listType?: string, index?: number, depth?: number, start?: number }} helpers
      */
-    static toMarkdown(pb, { recurse, listType = 'bullet', index = 0, depth = 0 }) {
+    static toMarkdown(pb, { recurse, listType = 'bullet', index = 0, depth = 0, start = 1 }) {
         const indent = '  '.repeat(depth);
         let prefix;
         if (listType === 'todo') {
             prefix = `- [${pb.props?.checked ? 'x' : ' '}]`;
         } else {
-            prefix = listType === 'ordered' ? `${index + 1}.` : '-';
+            prefix = listType === 'ordered' ? `${start + index}.` : '-';
         }
         const text = deltaToMarkdown(pb.delta || []);
         const sublists = (pb.children || []).map(sub => recurse(sub, { depth: depth + 1 })).join('\n');

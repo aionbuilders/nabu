@@ -6,7 +6,7 @@ import { MegaBlock } from "../megablock.svelte.js";
  */
 
 /**
- * @typedef {NabuNode<{type: "list", listType: "bullet" | "ordered" | "todo"}>} ListNode
+ * @typedef {NabuNode<{type: "list", listType: "bullet" | "ordered" | "todo", start?: number}>} ListNode
  */
 
 export class ListBehavior {
@@ -16,10 +16,15 @@ export class ListBehavior {
         this.nabu = block.nabu;
         this.node = /** @type {ListNode} */ (block.node);
         this.listType = /** @type {"bullet" | "ordered" | "todo"} */ (this.node.data.get("listType") || "bullet");
+        this.start = /** @type {any} */ (this.node.data.get("start")) ?? null;
         this.node.data.subscribe(() => {
             this.listType = /** @type {"bullet" | "ordered" | "todo"} */ (this.node.data.get("listType") || "bullet");
+            this.start = /** @type {any} */ (this.node.data.get("start")) ?? null;
         });
     }
+
+    /** Raw `start` number from the node (null = unset); List.start normalizes it. @type {number | null} */
+    start = $state(null);
 
     /** @type {"bullet" | "ordered" | "todo"} */
     listType = $state("bullet");

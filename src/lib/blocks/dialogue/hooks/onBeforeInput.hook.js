@@ -38,10 +38,12 @@ export const onBeforeInput = (nabu, event, block) => {
     const textBeforeCursor = behavior.text.slice(0, sel.from);
     if (textBeforeCursor !== "--") return CONTINUE;
 
-    behavior.delete({ index: 0, length: 2 });
-
     const blockId = block.node.id.toString();
-    block.transformTo("dialogue");
+    // Undo gives back "-- " (trigger space included): see Nabu.shortcut()
+    nabu.shortcut(block, " ", (b) => {
+        b.delete({ index: 0, length: 3 });
+        block.transformTo("dialogue");
+    });
 
     tick().then(() => {
         const b = nabu.blocks.get(blockId);
