@@ -10,11 +10,11 @@ import { tick } from 'svelte';
 import { Nabu } from '$lib/blocks/nabu.svelte.js';
 import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
 import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { ListExtension } from '$lib/blocks/list/index.js';
+import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
 import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
 import { PlainTextPasteExtension } from '$lib/paste/plain-text.paste.js';
 
-async function makeEditor(extensions = [ParagraphExtension, HeadingExtension, ListExtension, MarkdownPasteExtension, PlainTextPasteExtension]) {
+async function makeEditor(extensions = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, MarkdownPasteExtension, PlainTextPasteExtension]) {
   const engine = new Nabu({ extensions });
   await engine.commit();
   const block = engine.children[0];

@@ -89,7 +89,9 @@ export class List extends MegaBlock {
             
             // 3. Si on était au milieu de la liste, on crée une nouvelle liste après le paragraphe pour les "followers"
             if (followers.length > 0) {
-                const newList = this.nabu.insert("list", { listType: this.listType }, grandParentId, myIndexInGrandParent + 2);
+                // List.create, not nabu.insert(): that commits, and the empty list would be normalized away
+                // before the followers get moved into it.
+                const newList = List.create(this.nabu, "list", { listType: this.listType }, grandParentId, myIndexInGrandParent + 2);
                 for (const follower of followers) {
                     this.nabu.tree.move(follower.id.toString(), newList.node.id.toString());
                 }

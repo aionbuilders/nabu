@@ -1,5 +1,7 @@
 import { MegaBlock } from "../megablock.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
+import { List } from "./list.svelte.js";
+import { moveItems, handleTab } from "./indent.js";
 import { LoroText } from "loro-crdt";
 import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 
@@ -13,67 +15,28 @@ import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text
 
 /**
  * Indent a list item (Tab behavior): move into previous sibling's sublist, hoist own children.
+ * The selection (collapsed caret or range) is restored afterwards. See indent.js.
  * @param {ListItem} item
  * @returns {boolean}
  */
 export function indentListItem(item) {
-    const currentIndex = item.node.index();
-    if (currentIndex === 0) return false;
-
-    const parentList = item.node.parent();
-    if (!parentList) return false;
-
-    const previousNode = parentList.children()?.[currentIndex - 1];
-    if (!previousNode) return false;
-    const previousItem = item.nabu.blocks.get(previousNode.id.toString());
-    if (!previousItem || previousItem.type !== 'list-item') return false;
-
-    // @ts-ignore
-    const targetSublist = previousItem.getOrCreateSublist();
-    const targetSublistId = targetSublist.node.id.toString();
-
-    item.nabu.tree.move(item.node.id.toString(), targetSublistId);
-
-    if (item.sublist) {
-        for (const childNode of item.sublist.node.children()) {
-            item.nabu.tree.move(childNode.id.toString(), targetSublistId);
-        }
-    }
-
-    item.commit().then(() => item.behavior.block.focus());
-    return true;
+    const node = /** @type {import("../nabu.svelte.js").NabuNode} */ (item.node);
+    const movable = !!node.index() && node.parent()?.children()?.[node.index() - 1]?.data.get('type') === 'list-item';
+    if (movable) moveItems(item.nabu, [node], false);
+    return movable;
 }
 
 /**
  * Unindent a list item (Shift+Tab behavior): move out of parent sublist, carry followers.
+ * The selection (collapsed caret or range) is restored afterwards. See indent.js.
  * @param {ListItem} item
  * @returns {boolean}
  */
 export function unindentListItem(item) {
-    const parentListNode = item.node.parent();
-    if (!parentListNode) return false;
-
-    const grandParentItemNode = parentListNode.parent();
-    if (!grandParentItemNode || grandParentItemNode.data.get('type') !== 'list-item') return false;
-
-    const myIndex = item.node.index();
-    const followers = parentListNode.children().slice(myIndex + 1);
-
-    if (followers.length > 0) {
-        const mySublist = item.getOrCreateSublist();
-        for (const follower of followers) {
-            item.nabu.tree.move(follower.id.toString(), mySublist.node.id.toString());
-        }
-    }
-
-    const targetParentListNode = grandParentItemNode.parent();
-    if (!targetParentListNode) return false;
-
-    const targetIndex = grandParentItemNode.index() + 1;
-    item.nabu.tree.move(item.node.id.toString(), targetParentListNode.id.toString(), targetIndex);
-
-    item.commit().then(() => item.behavior.block.focus());
-    return true;
+    const node = /** @type {import("../nabu.svelte.js").NabuNode} */ (item.node);
+    const movable = node.parent()?.parent()?.data.get('type') === 'list-item';
+    if (movable) moveItems(item.nabu, [node], true);
+    return movable;
 }
 
 export class ListItem extends MegaBlock {
@@ -211,22 +174,19 @@ export class ListItem extends MegaBlock {
         if (this.sublist) return this.sublist;
         
         // S'il n'y en a pas, on demande à Nabu d'en créer une en tant qu'enfant de ce ListItem
-        const newList = this.nabu.insert("list", { listType }, this.node.id.toString());
+        // No nabu.insert() here: it commits, and the list schema normalizer would delete this still-empty
+        // list before the caller had the chance to fill it.
+        const newList = List.create(this.nabu, "list", { listType }, this.node.id.toString());
         return newList;
     }
 
     /** @param {KeyboardEvent} event */
     keydown(event) {
-        if (event.key === 'Tab') {
-            event.preventDefault();
-            if (event.shiftKey) {
-                unindentListItem(this);
-            } else {
-                indentListItem(this);
-            }
-            return true;
-        }
-        return false;
+        if (event.key !== 'Tab') return false;
+        // Single item, or a selection spanning several items that landed here (see ListExtension's onKeyDown).
+        if (handleTab(this.nabu, event)) return true;
+        // Plain Tab inside the item (modifier combos aside): never let the focus leave the editor.
+        return !(event.ctrlKey || event.altKey || event.metaKey);
     }
 
     /** @param {InputEvent} event */

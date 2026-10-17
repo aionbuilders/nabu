@@ -1,6 +1,7 @@
 import { LoroDoc, UndoManager } from 'loro-crdt';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte.js';
+import { MegaBlock } from './megablock.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf, findLCA } from './container.utils.js';
 import { jsonToPasteBlocks } from '../utils/extensions.js';
@@ -216,7 +217,8 @@ export class Nabu {
                             if (action.parent) {
                                 const parentId = action.parent.toString();
                                 const parentBlock = this.blocks.get(parentId);
-                                if (parentBlock) parentBlock.updateChildren();
+                                // A block retyped into a leaf (no children) in the same transaction has no updateChildren().
+                                if (parentBlock) parentBlock.updateChildren?.();
                             } else {
                                 this.updateRoots();
                             }
@@ -224,7 +226,7 @@ export class Nabu {
                             if (action.oldParent) {
                                 const oldParentId = action.oldParent.toString();
                                 const oldParentBlock = this.blocks.get(oldParentId);
-                                if (oldParentBlock) oldParentBlock.updateChildren();
+                                if (oldParentBlock) oldParentBlock.updateChildren?.();
                             }
                         }
                     })
@@ -388,6 +390,7 @@ export class Nabu {
 
 
     async commit() {
+        this.#evictChildrenOfLeaves();
         this.trigger("onBeforeTransaction", this);
         // Structural operations (split, merge, delete/move of blocks, type change, list indent…)
         // are their own undo step, and so is the typing that follows (see #hasPendingStructuralOps).
@@ -419,6 +422,44 @@ export class Nabu {
             this.undoManager.setMergeInterval(this.#mergeInterval);
         }
         await tick();
+    }
+
+    /**
+     * Generic schema rule: a block whose class cannot hold children (anything that is not a MegaBlock)
+     * never keeps child nodes. When the pending transaction retypes a node into such a block (transform,
+     * markdown shortcut, `data.set('type')`) or moves / creates a node under one, its children are moved
+     * out to right after it, in order, in the same transaction: nothing is lost, and the (type-specific)
+     * `onBeforeTransaction` normalizers then reshape the result. Knows no concrete block type.
+     */
+    #evictChildrenOfLeaves() {
+        const pending = this.doc.getUncommittedOpsAsJson();
+        if (!pending) return;
+        const treeId = this.tree.id;
+        /** @type {Set<string>} */
+        const candidates = new Set();
+        for (const change of pending.changes) {
+            for (const op of change.ops) {
+                const content = /** @type {any} */ (op.content);
+                if (op.container === treeId) {
+                    if ((content.type === 'move' || content.type === 'create') && content.parent) candidates.add(String(content.parent));
+                } else if (content.type === 'insert' && content.key === 'type' && op.container.endsWith(':Map')) {
+                    candidates.add(op.container.slice(4, -4));
+                }
+            }
+        }
+        for (const id of candidates) {
+            if (!this.tree.has(/** @type {any} */ (id))) continue;
+            const node = /** @type {NabuNode | undefined} */ (this.tree.getNodeByID(/** @type {any} */ (id)));
+            if (!node || node.isDeleted()) continue;
+            const BlockClass = this.registry.get(/** @type {any} */ (node.data.get('type')));
+            if (!BlockClass || BlockClass === MegaBlock || BlockClass.prototype instanceof MegaBlock) continue;
+            /** @type {NabuNode} */
+            let anchor = node;
+            for (const child of /** @type {NabuNode[]} */ (node.children() ?? [])) {
+                child.moveAfter(anchor);
+                anchor = child;
+            }
+        }
     }
 
     /**

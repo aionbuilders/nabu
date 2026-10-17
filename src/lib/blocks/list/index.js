@@ -1,39 +1,28 @@
 import { extension } from "../../utils/extensions";
 import { List } from "./list.svelte.js";
 import ListComponent from "./List.svelte";
-import { ListItem, indentListItem, unindentListItem } from "./list-item.svelte.js";
+import { ListItem } from "./list-item.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
-import { ListBehavior } from "./list.behavior.svelte.js";
+import { normalizeLists } from "./normalize.js";
+import { moveItems, selectedItems, handleTab } from "./indent.js";
 import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
-
-/**
- * @import {SvelteSet} from "svelte/reactivity";
- */
 
 const ListExtension = extension("list", {
     block: List,
     component: ListComponent,
     hooks: {
         onBeforeInput,
-        onBeforeTransaction(nabu) {
-            const lists = /** @type {SvelteSet<List>} */ (nabu.blocksByType.get("list"));
-            lists?.forEach(list => {
-                const behavior = list.behaviors.get("list");
-                if (!behavior || !(behavior instanceof ListBehavior)) return;
-                const sibblings = list.getAdjacentSiblings();
-                const previous = sibblings.previous;
-                if (!previous) return;
-                const previousBehavior = previous.behaviors.get("list");
-                if (!previousBehavior || !(previousBehavior instanceof ListBehavior)) return;
-                
-                // Adjacent lists of the same type merge into the first one (which keeps its `start`).
-                // absorbs() refuses a list of another type: it must then stay (typing `1. ` right under
-                // a bullet list used to destroy the new list together with its item).
-                if (previousBehavior.absorbs(list)) list.destroy();
-
-            })
-
-        }
+        // Tab / Shift+Tab with a selection spanning several blocks: the keydown would otherwise resolve to
+        // the lowest common ancestor (a List, a container, the root), which does not know about indenting.
+        // A selection inside one block is handled by ListItem.keydown.
+        onKeyDown: (nabu, event) => {
+            const sel = nabu.selection;
+            if (sel.anchorBlock === sel.focusBlock) return nabu.CONTINUE;
+            return handleTab(nabu, event) ? nabu.BREAK : nabu.CONTINUE;
+        },
+        // Runs before doc.commit(): the fixes belong to the same transaction (same undo step) as the
+        // operation that broke the structure. See normalize.js for the invariants.
+        onBeforeTransaction: normalizeLists,
     }
 });
 
@@ -41,16 +30,9 @@ const ListItemExtension = extension("list-item", {
     block: ListItem,
     component: ListItemComponent,
     actions: {
-        'list:indent': (nabu) => {
-            const block = nabu.selection.anchorBlock;
-            if (block?.type !== 'list-item') return;
-            indentListItem(/** @type {ListItem} */ (block));
-        },
-        'list:unindent': (nabu) => {
-            const block = nabu.selection.anchorBlock;
-            if (block?.type !== 'list-item') return;
-            unindentListItem(/** @type {ListItem} */ (block));
-        },
+        // Every list item the selection touches (the anchor item for a caret).
+        'list:indent': (nabu) => { moveItems(nabu, selectedItems(nabu), false); },
+        'list:unindent': (nabu) => { moveItems(nabu, selectedItems(nabu), true); },
     }
 });
 

@@ -32,6 +32,14 @@
 - Placeholders are displayed again (their CSS was disabled). New `placeholders` editor option: `false` to disable, or `{ show: 'focus' | 'empty', text: { [type]: string | false | (block) => string | false } }`. Default `show: 'focus'` (only the empty block holding the caret). Blocks declare their default text with `static placeholder`; color via `--nb-text-placeholder`. `getPlaceholder()` is deprecated.
 - `createPersistedEditor()` now forwards all editor init options.
 
+### Lists
+- List schema normalizer (`list/normalize.js`, run by the List extension's `onBeforeTransaction`, i.e. inside the transaction/undo step of the operation that broke the structure). Invariants enforced to a fixpoint, with moves only (ids and caret survive): no empty list; no list directly inside a list (unwrapped); only list items inside a list (a foreign block is hoisted out, the list split around it); an item has at most one sublist and only lists as children; adjacent lists of the same type merge.
+- Tab / Shift+Tab keep the caret (or range) at the same offset on the moved item (the item's whole text used to end up selected, so the next keystroke replaced it). Indent / unindent now work on tree nodes in `list/indent.js`.
+- Tab / Shift+Tab with a selection spanning several items indent / unindent every touched item (document order, relative structure kept, items that cannot move stay, selection restored) as ONE undo step, and the key is always claimed when the selection is in list items, so the focus no longer leaves the editor. Routed by the List extension's `onKeyDown` hook (the keydown of a multi-block selection resolves to the lowest common ancestor, not to an item). `list:indent` / `list:unindent` actions act on the whole selection too.
+
+### Blocks
+- Generic schema rule in `Nabu.commit()`: a block whose class cannot hold children (not a `MegaBlock`) never keeps child nodes. Retyping a node into such a block (`block:transform`, markdown shortcuts, `data.set('type')`) or moving a node under one moves its children to right after it, in order, in the same transaction (nothing is lost; e.g. a list item with a sublist transformed to a paragraph no longer hides the sublist). The tree-subscription no longer throws when a retyped block has no `updateChildren()`.
+
 ### Tests
 - E2E harness: dedicated dev-only `/e2e` route (fresh editor per test, `?persist=<docId>`, `?options=<json>`), fixing a startup race that made ~35 tests time out. New specs: `text-marks`, `shortcuts-slash`, `fast-input`, `list-start`. 307/307 e2e, 390/390 unit.
 
