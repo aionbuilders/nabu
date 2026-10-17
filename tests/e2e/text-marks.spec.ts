@@ -44,24 +44,11 @@ async function fullText(page: Page, index = 0): Promise<string> {
   return (await runs(page, index)).map(r => r.text).join('');
 }
 
-/**
- * Collapses the caret at `offset` in the first text block and waits for the model selection to
- * catch up (selectionchange -> model sync is async; racing it makes Enter/Delete act on a stale offset).
- */
-async function placeCursor(page: Page, offset: number) {
-  await press(page, 'Home');
-  for (let i = 0; i < offset; i++) await page.keyboard.press('ArrowRight');
-  await expect.poll(async () => (await getSelection(page))?.focusOffset).toBe(offset);
-}
-
 /** Selects `len` characters starting at `start` in the first text block (keyboard only). */
 async function selectRange(page: Page, start: number, len: number) {
-  await placeCursor(page, start);
+  await press(page, 'Home');
+  for (let i = 0; i < start; i++) await page.keyboard.press('ArrowRight');
   await selectForward(page, len);
-  await expect.poll(async () => {
-    const s = await getSelection(page);
-    return s ? s.focusOffset - s.anchorOffset : null;
-  }).toBe(len);
 }
 
 test.describe('Text editing & marks', () => {
@@ -84,7 +71,8 @@ test.describe('Text editing & marks', () => {
 
   test('P0 · A2 · Enter mid-text splits the block and moves the cursor to start of the 2nd block', async ({ page }) => {
     await typeText(page, 'hello world');
-    await placeCursor(page, 5);
+    await press(page, 'Home');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
     await press(page, 'Enter');
 
     const blocks = await getBlocks(page);
@@ -112,7 +100,7 @@ test.describe('Text editing & marks', () => {
 
   test('P2 · A3b · placeholder is actually rendered on screen for an empty paragraph', async ({ page }) => {
     // The attribute alone is invisible: a CSS rule must render it (e.g. via ::after { content: attr(data-placeholder) }).
-    // Default show is 'focus': wait for the caret (selectionchange, async) to reach the model first.
+    // Default show is 'focus'.
     await expect(getBlock(page, 'paragraph')).toHaveAttribute('data-placeholder', 'Start writing...');
     const content = await page.evaluate(() => {
       const el = document.querySelector('[data-block-type="paragraph"]')!;
@@ -216,7 +204,8 @@ test.describe('Text editing & marks', () => {
 
   test('P1 · A6b · Ctrl+Delete deletes the next word from inside the text', async ({ page }) => {
     await typeText(page, 'one two three');
-    await placeCursor(page, 3); // after "one"
+    await press(page, 'Home');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight'); // after "one"
     await press(page, `${wordMod}+Delete`);
 
     // Chromium/Linux forward word deletion removes " two" (up to end of next word).

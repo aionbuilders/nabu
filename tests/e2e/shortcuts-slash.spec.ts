@@ -9,16 +9,14 @@
  * Assertions are on the MODEL (serialize('json'), getSelection) unless the DOM is the point
  * (menu visibility, items, highlighted item).
  *
- * Timing note (P-08): `nabu.selection` is synced asynchronously from `selectionchange`. The input
- * rules read that model selection when the trigger key (space / Enter / closing delimiter) arrives,
- * so a trigger typed in the same burst as the preceding chars can see a stale offset (e.g. "###### "
- * -> h5, or a dropped first char right after a click). Hence `typeSettled` waits for the model caret
- * before the trigger key — but NOT after the trigger, where the product is expected to be settled.
+ * No settle waits: since P-08 is fixed the model selection is re-synced synchronously at every input
+ * entry point, so keystrokes are typed back to back (see fast-input.spec.ts). The only waits left assert
+ * an OUTCOME on the model/DOM. The one `waitForTimeout` (C4) is the UndoManager merge window.
  */
 
 import { test, expect, type Page, type FileChooser } from '@playwright/test';
 import {
-  gotoEditor, clearAndReset, focusEditor, press, getJson, getBlocks, getSelection, getRootBlockCount,
+  gotoEditor, clearAndReset, focusEditor, press, flushRender, getJson, getBlocks, getRootBlockCount,
 } from './helpers/editor.js';
 import { undo, redo } from './helpers/keyboard.js';
 
@@ -80,33 +78,6 @@ async function focusedBlock(page: Page): Promise<{ type: string; text: string } 
   });
 }
 
-/**
- * Types `text` (plain chars only) and waits until the MODEL caret has caught up with it, so that the
- * next keystroke (the trigger) sees an up-to-date selection. Assumes the caret was settled before.
- */
-async function typeSettled(page: Page, text: string) {
-  const before = (await caretOffset(page)) ?? 0;
-  await page.keyboard.type(text);
-  await expect.poll(() => caretOffset(page)).toBe(before + text.length);
-}
-
-/** Types a block-shortcut trigger: everything but the last key settled, then the last key (` `, or Enter for `\n`). */
-async function typeTrigger(page: Page, trigger: string) {
-  await typeSettled(page, trigger.slice(0, -1));
-  const last = trigger.slice(-1);
-  if (last === '\n') await press(page, 'Enter');
-  else await page.keyboard.type(last);
-}
-
-/** Waits until the model caret is at offset 0 of a block of `type`, then types "hello" (must land there). */
-async function expectCaretInThenType(page: Page, type: string, word = 'hello') {
-  await expect.poll(async () => {
-    const f = await focusedBlock(page);
-    return f ? `${f.type}@${await caretOffset(page)}` : null;
-  }).toBe(`${type}@0`);
-  await page.keyboard.type(word);
-}
-
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
 test.describe('Markdown shortcuts & slash menu', () => {
@@ -114,8 +85,6 @@ test.describe('Markdown shortcuts & slash menu', () => {
     await gotoEditor(page);
     await clearAndReset(page);
     await focusEditor(page);
-    // the click's selectionchange must reach the model before the first keystroke (else the 1st char is lost)
-    await expect.poll(async () => (await getSelection(page))?.focusBlockId).toBeTruthy();
   });
 
   // ══ A. Block shortcuts ═════════════════════════════════════════════════════
@@ -123,16 +92,16 @@ test.describe('Markdown shortcuts & slash menu', () => {
   test.describe('A · block shortcuts at the start of an empty paragraph', () => {
     for (let level = 1; level <= 6; level++) {
       test(`P0 · A1 · "${'#'.repeat(level)} " becomes a level-${level} heading, caret inside`, async ({ page }) => {
-        await typeTrigger(page, '#'.repeat(level) + ' ');
-        await expectCaretInThenType(page, 'heading');
+        await page.keyboard.type('#'.repeat(level) + ' ');
+        await page.keyboard.type('hello');
 
         expect(await tree(page)).toEqual([{ type: 'heading', props: { level }, text: 'hello' }]);
       });
     }
 
     test('P0 · A2 · "- " becomes a bullet list, trigger removed, caret in the item', async ({ page }) => {
-      await typeTrigger(page, '- ');
-      await expectCaretInThenType(page, 'list-item');
+      await page.keyboard.type('- ');
+      await page.keyboard.type('hello');
 
       expect(await tree(page)).toEqual([
         { type: 'list', props: { listType: 'bullet' }, text: '', children: [{ type: 'list-item', text: 'hello' }] },
@@ -140,8 +109,8 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P0 · A3 · "1. " becomes an ordered list', async ({ page }) => {
-      await typeTrigger(page, '1. ');
-      await expectCaretInThenType(page, 'list-item');
+      await page.keyboard.type('1. ');
+      await page.keyboard.type('hello');
 
       expect(await tree(page)).toEqual([
         { type: 'list', props: { listType: 'ordered' }, text: '', children: [{ type: 'list-item', text: 'hello' }] },
@@ -149,8 +118,8 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P2 · A3b · "3. " makes an ordered list that starts at 3 (P-14: the start number is kept)', async ({ page }) => {
-      await typeTrigger(page, '3. ');
-      await expectCaretInThenType(page, 'list-item');
+      await page.keyboard.type('3. ');
+      await page.keyboard.type('hello');
 
       const [list] = await tree(page);
       expect(list.type).toBe('list');
@@ -164,16 +133,16 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P2 · A3c · "1. " has no start prop (1 is the default) and renders a plain <ol>', async ({ page }) => {
-      await typeTrigger(page, '1. ');
-      await expectCaretInThenType(page, 'list-item');
+      await page.keyboard.type('1. ');
+      await page.keyboard.type('hello');
       expect((await tree(page))[0].props).toEqual({ listType: 'ordered' });
       await expect(page.locator('ol[data-block-type="list"]')).not.toHaveAttribute('start', /.*/);
     });
 
     for (const [trigger, checked] of [['[] ', false], ['[ ] ', false], ['[x] ', true], ['[X] ', true]] as const) {
       test(`P0 · A4 · "${trigger}" becomes a ${checked ? 'checked' : 'unchecked'} to-do item`, async ({ page }) => {
-        await typeTrigger(page, trigger);
-        await expectCaretInThenType(page, 'list-item');
+        await page.keyboard.type(trigger);
+        await page.keyboard.type('hello');
 
         expect(await tree(page)).toEqual([
           {
@@ -185,67 +154,66 @@ test.describe('Markdown shortcuts & slash menu', () => {
     }
 
     test('P0 · A5 · "> " becomes a blockquote', async ({ page }) => {
-      await typeTrigger(page, '> ');
-      await expectCaretInThenType(page, 'blockquote');
+      await page.keyboard.type('> ');
+      await page.keyboard.type('hello');
 
       expect(await tree(page)).toEqual([{ type: 'blockquote', text: 'hello' }]);
     });
 
     test('P0 · A6 · "--- " becomes a divider followed by an empty paragraph holding the caret', async ({ page }) => {
-      await typeTrigger(page, '--- ');
-      await expectCaretInThenType(page, 'paragraph');
+      await page.keyboard.type('--- ');
+      await page.keyboard.type('hello');
 
       expect(await tree(page)).toEqual([{ type: 'divider', text: '' }, { type: 'paragraph', text: 'hello' }]);
     });
 
     test('P0 · A7 · "```" + Enter becomes a code block (no language)', async ({ page }) => {
-      await typeTrigger(page, '```\n');
-      await expectCaretInThenType(page, 'code');
+      await page.keyboard.type('```\n');
+      await page.keyboard.type('hello');
 
       expect(await tree(page)).toEqual([{ type: 'code', props: { language: null }, text: 'hello' }]);
     });
 
     test('P0 · A7b · "```js" + Enter becomes a code block with language js', async ({ page }) => {
-      await typeTrigger(page, '```js\n');
-      await expectCaretInThenType(page, 'code');
+      await page.keyboard.type('```js\n');
+      await page.keyboard.type('hello');
 
       expect(await tree(page)).toEqual([{ type: 'code', props: { language: 'js' }, text: 'hello' }]);
     });
 
     test('P1 · A7c · "``` " (space instead of Enter) does not transform: the fence needs Enter', async ({ page }) => {
-      await typeTrigger(page, '``` ');
-      await typeSettled(page, 'x');
+      await page.keyboard.type('``` ');
+      await page.keyboard.type('x');
 
       expect(await tree(page)).toEqual([{ type: 'paragraph', text: '``` x' }]);
     });
 
     test('P0 · A8 · "! " becomes a callout (variant note)', async ({ page }) => {
-      await typeTrigger(page, '! ');
-      await expectCaretInThenType(page, 'callout');
+      await page.keyboard.type('! ');
+      await page.keyboard.type('hello');
 
       expect(await tree(page)).toEqual([{ type: 'callout', props: { variant: 'note' }, text: 'hello' }]);
     });
 
     test('P0 · A9 · "-- " becomes a dialogue block', async ({ page }) => {
-      await typeTrigger(page, '-- ');
-      await expectCaretInThenType(page, 'dialogue');
+      await page.keyboard.type('-- ');
+      await page.keyboard.type('hello');
 
       expect(await tree(page)).toEqual([{ type: 'dialogue', text: 'hello' }]);
     });
 
     test('P2 · A10 · toggle has no markdown shortcut (e.g. "> " is a quote, "▸ " / ">> " are literal)', async ({ page }) => {
-      await typeTrigger(page, '>> ');
-      await typeSettled(page, 'x');
+      await page.keyboard.type('>> ');
+      await page.keyboard.type('x');
 
       expect(await tree(page)).toEqual([{ type: 'paragraph', text: '>> x' }]);
     });
 
     test('P1 · A11 · a trigger typed at the start of a NON-empty paragraph still transforms it and keeps the text', async ({ page }) => {
-      await typeSettled(page, 'abc');
+      await page.keyboard.type('abc');
       await press(page, 'Home');
-      await expect.poll(() => caretOffset(page)).toBe(0);
       await page.keyboard.type('#');
-      await expect.poll(() => caretOffset(page)).toBe(1);
+      expect(await caretOffset(page)).toBe(1);
       await page.keyboard.type(' ');
 
       await expect.poll(async () => (await tree(page))[0].type).toBe('heading');
@@ -258,18 +226,18 @@ test.describe('Markdown shortcuts & slash menu', () => {
   test.describe('A-neg · triggers that must NOT transform', () => {
     for (const trigger of ['# ', '- ', '1. ', '> ', '! ', '[] ', '[x] ']) {
       test(`P0 · A-neg1 · "abc ${trigger}" typed mid-text stays a plain paragraph`, async ({ page }) => {
-        await typeSettled(page, 'abc ');
-        await typeTrigger(page, trigger);
-        await typeSettled(page, 'z');
+        await page.keyboard.type('abc ');
+        await page.keyboard.type(trigger);
+        await page.keyboard.type('z');
 
         expect(await tree(page)).toEqual([{ type: 'paragraph', text: `abc ${trigger}z` }]);
       });
     }
 
     test('P0 · A-neg2 · "abc ---" + space mid-text does not make a divider (stays a paragraph)', async ({ page }) => {
-      await typeSettled(page, 'abc ---');
+      await page.keyboard.type('abc ---');
       await page.keyboard.type(' ');
-      await typeSettled(page, 'z');
+      await page.keyboard.type('z');
 
       const t = await tree(page);
       expect(t.map(b => b.type)).toEqual(['paragraph']);
@@ -278,7 +246,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P0 · A-neg3 · "```" + Enter after other text does not make a code block (just splits)', async ({ page }) => {
-      await typeSettled(page, 'abc ```');
+      await page.keyboard.type('abc ```');
       await press(page, 'Enter');
 
       await expect.poll(() => getRootBlockCount(page)).toBe(2);
@@ -286,20 +254,20 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P0 · A-neg4 · "#hello" (no space) stays literal', async ({ page }) => {
-      await typeSettled(page, '#hello');
+      await page.keyboard.type('#hello');
 
       expect(await tree(page)).toEqual([{ type: 'paragraph', text: '#hello' }]);
     });
 
     test('P0 · A-neg5 · "####### " (7 hashes) does not make a heading', async ({ page }) => {
-      await typeTrigger(page, '####### ');
-      await typeSettled(page, 'x');
+      await page.keyboard.type('####### ');
+      await page.keyboard.type('x');
 
       expect(await tree(page)).toEqual([{ type: 'paragraph', text: '####### x' }]);
     });
 
     test('P1 · A-neg6 · "#" + Enter (no space) just splits, no heading', async ({ page }) => {
-      await typeSettled(page, '#');
+      await page.keyboard.type('#');
       await press(page, 'Enter');
 
       await expect.poll(() => getRootBlockCount(page)).toBe(2);
@@ -311,14 +279,14 @@ test.describe('Markdown shortcuts & slash menu', () => {
 
   test.describe('B · inline shortcuts typed for real', () => {
     /**
-     * Types `lead` + `typed` (all but the closing delimiter, settled), then the closing delimiter, then
+     * Types `lead` + `typed` (all but the closing delimiter), then the closing delimiter, then
      * waits for the caret to land after the converted text and types " after".
      */
     async function typeInline(page: Page, body: string, close: string, innerLen: number) {
-      await typeSettled(page, 'x ' + body);
+      await page.keyboard.type('x ' + body);
       await page.keyboard.type(close);
       // delimiters are removed: the model caret must end right after the inner text
-      await expect.poll(() => caretOffset(page)).toBe(2 + innerLen);
+      expect(await caretOffset(page)).toBe(2 + innerLen);
       await page.keyboard.type(' after');
     }
 
@@ -349,41 +317,41 @@ test.describe('Markdown shortcuts & slash menu', () => {
     }
 
     test('P1 · B2 · inline shortcut at the very start of a block works too', async ({ page }) => {
-      await typeSettled(page, '**hi*');
+      await page.keyboard.type('**hi*');
       await page.keyboard.type('*');
-      await expect.poll(() => caretOffset(page)).toBe(2);
+      expect(await caretOffset(page)).toBe(2);
 
       expect(await fullText(page)).toBe('hi');
       expect(await textWith(page, 'bold')).toBe('hi');
     });
 
     test('P0 · B3 · NEG "2 * 3 * 4" stays literal (a lone spaced asterisk pair is not italic)', async ({ page }) => {
-      await typeSettled(page, '2 * 3 ');
+      await page.keyboard.type('2 * 3 ');
       await page.keyboard.type('*');
-      await typeSettled(page, ' 4');
+      await page.keyboard.type(' 4');
 
       expect(await fullText(page)).toBe('2 * 3 * 4');
       expect(await textWith(page, 'italic')).toBe('');
     });
 
     test('P0 · B4 · NEG "snake_case_name" stays literal (intra-word underscores are not italic)', async ({ page }) => {
-      await typeSettled(page, 'snake_case');
+      await page.keyboard.type('snake_case');
       await page.keyboard.type('_');
-      await typeSettled(page, 'name');
+      await page.keyboard.type('name');
 
       expect(await fullText(page)).toBe('snake_case_name');
       expect(await textWith(page, 'italic')).toBe('');
     });
 
     test('P1 · B5 · NEG an unclosed "**bold" stays literal', async ({ page }) => {
-      await typeSettled(page, '**bold');
+      await page.keyboard.type('**bold');
 
       expect(await fullText(page)).toBe('**bold');
       expect(await textWith(page, 'bold')).toBe('');
     });
 
     test('P1 · B6 · NEG "a * b" with a single asterisk never closes, stays literal', async ({ page }) => {
-      await typeSettled(page, 'a * b');
+      await page.keyboard.type('a * b');
 
       expect(await fullText(page)).toBe('a * b');
       expect(await textWith(page, 'italic')).toBe('');
@@ -392,9 +360,9 @@ test.describe('Markdown shortcuts & slash menu', () => {
 
   test.describe('B2 · inline shortcut flanking rules (P-09 / P-10)', () => {
     test('P0 · B7 · "***both***" typed char by char: bold+italic, all delimiters gone', async ({ page }) => {
-      await typeSettled(page, '***both**');
+      await page.keyboard.type('***both**');
       await page.keyboard.type('*');
-      await expect.poll(() => caretOffset(page)).toBe(4);
+      expect(await caretOffset(page)).toBe(4);
 
       expect(await fullText(page)).toBe('both');
       expect(await textWith(page, 'bold')).toBe('both');
@@ -402,38 +370,38 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P0 · B8 · NEG "* not *" stays literal (opener followed by a space)', async ({ page }) => {
-      await typeSettled(page, '* not ');
+      await page.keyboard.type('* not ');
       await page.keyboard.type('*');
-      await typeSettled(page, ' x');
+      await page.keyboard.type(' x');
 
       expect(await fullText(page)).toBe('* not * x');
       expect(await textWith(page, 'italic')).toBe('');
     });
 
     test('P0 · B9 · "x _it_ y" still makes an italic "it" (underscore opener after a space)', async ({ page }) => {
-      await typeSettled(page, 'x _it');
+      await page.keyboard.type('x _it');
       await page.keyboard.type('_');
-      await expect.poll(() => caretOffset(page)).toBe(4);
-      await typeSettled(page, ' y');
+      expect(await caretOffset(page)).toBe(4);
+      await page.keyboard.type(' y');
 
       expect(await fullText(page)).toBe('x it y');
       expect(await textWith(page, 'italic')).toBe('it');
     });
 
     test('P1 · B10 · "a*b*c": asterisks may be intraword (CommonMark), "b" becomes italic', async ({ page }) => {
-      await typeSettled(page, 'a*b');
+      await page.keyboard.type('a*b');
       await page.keyboard.type('*');
-      await expect.poll(() => caretOffset(page)).toBe(2);
-      await typeSettled(page, 'c');
+      expect(await caretOffset(page)).toBe(2);
+      await page.keyboard.type('c');
 
       expect(await fullText(page)).toBe('abc');
       expect(await textWith(page, 'italic')).toBe('b');
     });
 
     test('P1 · B11 · "`a b`" keeps the inner space inside the code span', async ({ page }) => {
-      await typeSettled(page, '`a b');
+      await page.keyboard.type('`a b');
       await page.keyboard.type('`');
-      await expect.poll(() => caretOffset(page)).toBe(3);
+      expect(await caretOffset(page)).toBe(3);
 
       expect(await fullText(page)).toBe('a b');
       expect(await textWith(page, 'code')).toBe('a b');
@@ -465,7 +433,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
 
     for (const [trigger, left, created] of undoCases) {
       test(`P0 · C1 · "${trigger}" then Ctrl+Z -> a single paragraph "${left}" (no ${created} left)`, async ({ page }) => {
-        await typeTrigger(page, trigger);
+        await page.keyboard.type(trigger);
         await expect.poll(async () => (await tree(page)).some(b => b.type === created)).toBe(true);
 
         await undo(page);
@@ -474,7 +442,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
       });
 
       test(`P0 · C2 · "${trigger}" then Ctrl+Z -> caret is back at the end of "${left}" and typing lands there`, async ({ page }) => {
-        await typeTrigger(page, trigger);
+        await page.keyboard.type(trigger);
         await expect.poll(async () => (await tree(page)).some(b => b.type === created)).toBe(true);
 
         await undo(page);
@@ -487,7 +455,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
     }
 
     test('P1 · C3 · "# " then Ctrl+Z twice -> an empty paragraph, caret at 0', async ({ page }) => {
-      await typeTrigger(page, '# ');
+      await page.keyboard.type('# ');
       await expect.poll(async () => (await tree(page))[0].type).toBe('heading');
 
       await undo(page);
@@ -500,7 +468,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P0 · C5 · "# " Ctrl+Z (-> "# ") Ctrl+Y: the heading is back, caret inside, typing lands there (P-13 redo)', async ({ page }) => {
-      await typeTrigger(page, '# ');
+      await page.keyboard.type('# ');
       await expect.poll(async () => (await tree(page))[0].type).toBe('heading');
 
       await undo(page);
@@ -508,13 +476,13 @@ test.describe('Markdown shortcuts & slash menu', () => {
       await redo(page);
       await expect.poll(async () => (await tree(page))[0].type).toBe('heading');
       expect(await tree(page)).toEqual([{ type: 'heading', props: { level: 1 }, text: '' }]);
-      await expectCaretInThenType(page, 'heading');
+      await page.keyboard.type('hello');
       expect(await tree(page)).toEqual([{ type: 'heading', props: { level: 1 }, text: 'hello' }]);
     });
 
     for (const [trigger, created] of [['- ', 'list'], ['--- ', 'divider']] as const) {
       test(`P0 · C5b · "${trigger}" Ctrl+Z Ctrl+Y: the ${created} is back and the caret is usable`, async ({ page }) => {
-        await typeTrigger(page, trigger);
+        await page.keyboard.type(trigger);
         await expect.poll(async () => (await tree(page)).some(b => b.type === created)).toBe(true);
         const before = await tree(page);
 
@@ -524,14 +492,14 @@ test.describe('Markdown shortcuts & slash menu', () => {
         await expect.poll(async () => (await tree(page)).some(b => b.type === created)).toBe(true);
         expect(await tree(page)).toEqual(before);
 
-        await expectCaretInThenType(page, created === 'list' ? 'list-item' : 'paragraph');
+        await page.keyboard.type('hello');
         const last = (await tree(page)).at(-1)!;
         expect(created === 'list' ? last.children![0].text : last.text).toBe('hello');
       });
     }
 
     test('P0 · C6 · "- " Ctrl+Z, then typing continues the paragraph; a second Ctrl+Z removes what was typed', async ({ page }) => {
-      await typeTrigger(page, '- ');
+      await page.keyboard.type('- ');
       await expect.poll(async () => (await tree(page))[0].type).toBe('list');
       await undo(page);
       await expect.poll(async () => (await tree(page))[0].text).toBe('- ');
@@ -543,7 +511,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P0 · C7 · "```js" + Enter then Ctrl+Z -> a paragraph "```js" (what was typed before the Enter), caret at its end', async ({ page }) => {
-      await typeTrigger(page, '```js\n');
+      await page.keyboard.type('```js\n');
       await expect.poll(async () => (await tree(page))[0].type).toBe('code');
 
       await undo(page);
@@ -562,17 +530,19 @@ test.describe('Markdown shortcuts & slash menu', () => {
         const root = document.querySelector('[data-block-id]')!.parentElement!;
         new MutationObserver(() => seen.push(root.textContent ?? '')).observe(root, { subtree: true, childList: true, characterData: true });
       });
-      await typeTrigger(page, '# ');
+      await page.keyboard.type('# ');
       await expect.poll(async () => (await tree(page))[0].type).toBe('heading');
       const seen: string[] = await page.evaluate(() => (window as any).__seen);
       expect(seen).not.toContain('# ');
     });
 
     test('P1 · C4 · inline "**bold**" then Ctrl+Z (conversion in its own undo step) -> what remains', async ({ page }) => {
-      await typeSettled(page, '**bold*');
-      await page.waitForTimeout(1200); // beyond the UndoManager merge window: the conversion is its own step
+      await page.keyboard.type('**bold*');
+      // KEEP: a real sleep, the feature under test is time-based — it must outlive the UndoManager 1 s merge window
+      // so that the conversion is recorded as its own undo step.
+      await page.waitForTimeout(1200);
       await page.keyboard.type('*');
-      await expect.poll(() => caretOffset(page)).toBe(4);
+      expect(await caretOffset(page)).toBe(4);
       expect(await textWith(page, 'bold')).toBe('bold');
 
       await undo(page);
@@ -597,8 +567,8 @@ test.describe('Markdown shortcuts & slash menu', () => {
 
     /** Types "/" + query one char at a time so the menu is live while filtering. */
     async function slash(page: Page, query = '') {
-      await typeSettled(page, '/');
-      if (query) await typeSettled(page, query);
+      await page.keyboard.type('/');
+      if (query) await page.keyboard.type(query);
     }
 
     // ── open / close triggers ────────────────────────────────────────────────
@@ -613,7 +583,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P0 · D2 · "/" after a space mid-text opens the menu', async ({ page }) => {
-      await typeSettled(page, 'hello ');
+      await page.keyboard.type('hello ');
       await slash(page);
 
       await expect(menu(page)).toBeVisible();
@@ -621,8 +591,8 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P0 · D3 · "a/" (no space before the slash) does not open the menu', async ({ page }) => {
-      await typeSettled(page, 'a/');
-      await page.waitForTimeout(200);
+      await page.keyboard.type('a/');
+      await flushRender(page); // negative check: let any (wrongly) pending menu render before asserting its absence
 
       await expect(menu(page)).toHaveCount(0);
       expect(await fullText(page)).toBe('a/');
@@ -646,7 +616,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
       // replace the query: erase "ul", type "hr"
       await press(page, 'Backspace');
       await press(page, 'Backspace');
-      await typeSettled(page, 'hr');
+      await page.keyboard.type('hr');
       await expect.poll(() => titles(page)).toEqual(['Divider']);
     });
 
@@ -729,7 +699,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
       const moved = await activeTitle(page);
       expect(moved).not.toBe((await titles(page))[0]);
 
-      await typeSettled(page, 'e');
+      await page.keyboard.type('e');
       expect(await activeTitle(page)).toBe((await titles(page))[0]);
     });
 
@@ -748,13 +718,13 @@ test.describe('Markdown shortcuts & slash menu', () => {
       await press(page, 'Escape');
       await expect(menu(page)).toHaveCount(0);
 
-      await typeSettled(page, 'a');
-      await page.waitForTimeout(200);
+      await page.keyboard.type('a');
+      await flushRender(page); // negative check: let any (wrongly) pending menu render before asserting its absence
       await expect(menu(page)).toHaveCount(0);
       expect(await fullText(page)).toBe('/hea');
 
       // …but a NEW slash later in the same block does open it again
-      await typeSettled(page, ' ');
+      await page.keyboard.type(' ');
       await slash(page);
       await expect(menu(page)).toBeVisible();
     });
@@ -782,7 +752,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
       expect(await tree(page)).toEqual([{ type: 'blockquote', text: '' }]);
       await expect(menu(page)).toHaveCount(0);
       // clicking the menu must not have stolen the caret: typing lands in the quote
-      await expectCaretInThenType(page, 'blockquote', 'typed');
+      await page.keyboard.type('typed');
       expect(await tree(page)).toEqual([{ type: 'blockquote', text: 'typed' }]);
     });
 
@@ -828,7 +798,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
         await expect(menu(page)).toBeVisible();
         await press(page, 'Enter');
 
-        await expectCaretInThenType(page, caretType);
+        await page.keyboard.type('hello');
         await expect(menu(page)).toHaveCount(0);
         expect(await tree(page)).toEqual(expected);
       });
@@ -842,18 +812,18 @@ test.describe('Markdown shortcuts & slash menu', () => {
       expect(await tree(page)).toEqual([{ type: 'divider', text: '' }, { type: 'paragraph', text: '' }]);
 
       // the caret is in the paragraph below the divider and typing works
-      await expectCaretInThenType(page, 'paragraph');
+      await page.keyboard.type('hello');
       expect(await tree(page)).toEqual([{ type: 'divider', text: '' }, { type: 'paragraph', text: 'hello' }]);
     });
 
     test('P1 · D14b · "/divider" typed after text keeps the text, adds the divider below it and a caret paragraph under the divider', async ({ page }) => {
-      await typeSettled(page, 'above ');
+      await page.keyboard.type('above ');
       await slash(page, 'hr');
       await press(page, 'Enter');
 
       await expect.poll(async () => (await tree(page)).map(b => b.type)).toEqual(['paragraph', 'divider', 'paragraph']);
       expect((await tree(page))[0].text).toBe('above ');
-      await expectCaretInThenType(page, 'paragraph');
+      await page.keyboard.type('hello');
       expect((await tree(page)).map(b => b.text)).toEqual(['above ', '', 'hello']);
     });
 
@@ -870,7 +840,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P1 · D15 · a command run mid-text only removes "/query": the text before it is kept', async ({ page }) => {
-      await typeSettled(page, 'keep me ');
+      await page.keyboard.type('keep me ');
       await slash(page, 'quote');
       await press(page, 'Enter');
 
@@ -889,9 +859,9 @@ test.describe('Markdown shortcuts & slash menu', () => {
     });
 
     test('P1 · D17 · /Text on a heading turns it back into a paragraph', async ({ page }) => {
-      await typeTrigger(page, '# ');
-      await expectCaretInThenType(page, 'heading', 'title');
-      await typeSettled(page, ' ');
+      await page.keyboard.type('# ');
+      await page.keyboard.type('title');
+      await page.keyboard.type(' ');
       await slash(page, 'text');
       await press(page, 'Enter');
 
@@ -1010,10 +980,10 @@ test.describe('Markdown shortcuts & slash menu', () => {
       await page.locator('[data-block-type="paragraph"]').nth(30).click();
       await press(page, 'End');
       await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-      await expect.poll(() => caretOffset(page)).toBe('line 30'.length);
+      expect(await caretOffset(page)).toBe('line 30'.length);
 
       await page.keyboard.type(' ');
-      await expect.poll(() => caretOffset(page)).toBe('line 30 '.length);
+      expect(await caretOffset(page)).toBe('line 30 '.length);
       await page.keyboard.type('/');
 
       await expect(menu(page)).toBeVisible();
@@ -1031,9 +1001,9 @@ test.describe('Markdown shortcuts & slash menu', () => {
       await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
       await page.locator('[data-block-type="paragraph"]').last().click();
       await press(page, 'End');
-      await expect.poll(() => caretOffset(page)).toBe('line 59'.length);
+      expect(await caretOffset(page)).toBe('line 59'.length);
       await page.keyboard.type(' ');
-      await expect.poll(() => caretOffset(page)).toBe('line 59 '.length);
+      expect(await caretOffset(page)).toBe('line 59 '.length);
       await page.keyboard.type('/');
 
       await expect(menu(page)).toBeVisible();
@@ -1052,9 +1022,9 @@ test.describe('Markdown shortcuts & slash menu', () => {
       await page.evaluate(() => { document.querySelectorAll('[data-block-type="paragraph"]')[30].scrollIntoView({ block: 'center' }); });
       await page.locator('[data-block-type="paragraph"]').nth(30).click();
       await press(page, 'End');
-      await expect.poll(() => caretOffset(page)).toBe('line 30'.length);
+      expect(await caretOffset(page)).toBe('line 30'.length);
       await page.keyboard.type(' ');
-      await expect.poll(() => caretOffset(page)).toBe('line 30 '.length);
+      expect(await caretOffset(page)).toBe('line 30 '.length);
       await page.keyboard.type('/');
       await expect(menu(page)).toBeVisible();
       const y0 = (await menu(page).boundingBox())!.y;

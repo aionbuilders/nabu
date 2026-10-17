@@ -79,9 +79,7 @@ test.describe('Rich Text Marks', () => {
     await press(page, 'Control+a');
     // Exec the action
     await page.evaluate(() => (window as any).nabu.exec('mark:toggle', { mark: 'bold', value: true }));
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toContain('**exec bold**');
+    await expect.poll(() => getMarkdown(page)).toContain('**exec bold**');
   });
 
   test('P1 · mark:toggle exec action toggles bold off', async ({ page }) => {
@@ -91,9 +89,7 @@ test.describe('Rich Text Marks', () => {
     // Now toggle off
     await selectLine(page);
     await page.evaluate(() => (window as any).nabu.exec('mark:toggle', { mark: 'bold', value: true }));
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).not.toContain('**toggle off**');
+    await expect.poll(() => getMarkdown(page)).not.toContain('**toggle off**');
   });
 
   test('P1 · bold and italic can be combined', async ({ page }) => {

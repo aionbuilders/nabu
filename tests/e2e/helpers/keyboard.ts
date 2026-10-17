@@ -50,7 +50,6 @@ export async function selectForward(page: Page, n: number) {
   for (let i = 0; i < n; i++) {
     await page.keyboard.press('Shift+ArrowRight');
   }
-  await page.waitForTimeout(50);
 }
 
 /**

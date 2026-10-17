@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, getRootBlockCount,
-  getEditor, waitForBlockType,
+  getEditor, waitForBlockType, flushRender,
 } from './helpers/editor.js';
 import { indent, unindent } from './helpers/keyboard.js';
 
@@ -23,8 +23,7 @@ test.describe('Lists', () => {
       n.insert('list-item', { text: '' }, list.node.id.toString(), 0);
       await n.commit();
     });
-    await page.waitForTimeout(50);
-    // Click the first list item to focus it
+    // Click the first list item to focus it (the click auto-waits for the item to be rendered)
     await page.locator('[data-block-type="list-item"]').first().click();
   });
 
@@ -127,9 +126,7 @@ test.describe('Lists', () => {
     await press(page, 'Enter');
     await typeText(page, 'second');
     await page.evaluate(() => (window as any).nabu.exec('list:indent'));
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toContain('  - second');
+    await expect.poll(() => getMarkdown(page)).toContain('  - second');
   });
 
   // P2 ─────────────────────────────────────────────────────────────────────
@@ -150,7 +147,7 @@ test.describe('Lists', () => {
     await press(page, 'Enter');
     await typeText(page, 'item2');
     await press(page, 'Control+z');
-    await page.waitForTimeout(100);
+    await flushRender(page);
     await expect(getEditor(page)).toBeVisible();
   });
 });

@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 import {
   gotoEditor, clearAndReset, focusEditor, waitForEditor,
   typeText, press, getMarkdown, getRootBlockCount, getEditor,
-  waitForBlockType,
+  waitForBlockType, flushRender,
 } from '../helpers/editor.js';
 import { readClipboardText, pasteText, pasteHtml } from '../helpers/clipboard.js';
 import { undo, redo, selectLine, selectAll } from '../helpers/keyboard.js';
@@ -26,23 +26,18 @@ test.describe('Clipboard (flaky)', () => {
     await press(page, 'Home');
     await press(page, 'Shift+End');
     await press(page, 'Control+c');
-    await page.waitForTimeout(150);
+    await expect.poll(() => readClipboardText(page)).toContain('copy this text');
     await press(page, 'End');
     await press(page, 'Enter');
     await press(page, 'Control+v');
-    await page.waitForTimeout(200);
 
-    const md = await getMarkdown(page);
-    const occurrences = (md.match(/copy this text/g) || []).length;
-    expect(occurrences).toBe(2);
+    await expect.poll(async () => ((await getMarkdown(page)).match(/copy this text/g) || []).length).toBe(2);
   });
 
   test('paste plain text with multiple newlines creates correct paragraphs', async ({ page }) => {
     await pasteText(page, 'a\nb\nc\nd');
-    await page.waitForTimeout(300);
 
-    const count = await getRootBlockCount(page);
-    expect(count).toBe(4);
+    await expect.poll(() => getRootBlockCount(page)).toBe(4);
   });
 
   test('paste HTML table falls back to plain text', async ({ page }) => {
@@ -51,7 +46,6 @@ test.describe('Clipboard (flaky)', () => {
       '<table><tr><td>cell</td></tr></table>',
       'cell',
     );
-    await page.waitForTimeout(200);
     await expect(getEditor(page)).toContainText('cell');
   });
 
@@ -60,16 +54,14 @@ test.describe('Clipboard (flaky)', () => {
     await typeText(page, 'structured block');
     await selectLine(page);
     await press(page, 'Control+c');
-    await page.waitForTimeout(200);
+    await expect.poll(() => readClipboardText(page)).toContain('structured block');
 
     // New line and paste
     await press(page, 'End');
     await press(page, 'Enter');
     await press(page, 'Control+v');
-    await page.waitForTimeout(300);
 
-    const count = await getRootBlockCount(page);
-    expect(count).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => getRootBlockCount(page)).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -91,10 +83,10 @@ test.describe('Undo CRDT edge cases (flaky)', () => {
     await press(page, 'Home');
     await selectAll(page);
     await press(page, 'Backspace');
-    await page.waitForTimeout(100);
+    await expect.poll(async () => (await getMarkdown(page)).trim()).toBe(''); // the delete has landed
 
     await undo(page);
-    await page.waitForTimeout(200);
+    await flushRender(page);
 
     // At least some content should be restored
     await expect(getEditor(page)).toBeVisible();
@@ -104,15 +96,13 @@ test.describe('Undo CRDT edge cases (flaky)', () => {
     await typeText(page, 'original');
     await press(page, 'End');
     await pasteText(page, ' pasted');
-    await page.waitForTimeout(200);
+    await expect(getEditor(page)).toContainText('original pasted');
 
     await undo(page);
-    await page.waitForTimeout(200);
 
-    const md = await getMarkdown(page);
     // A paste is its own undo step: only the pasted text is removed.
-    expect(md).toContain('original');
-    expect(md).not.toContain('pasted');
+    await expect.poll(() => getMarkdown(page)).not.toContain('pasted');
+    expect(await getMarkdown(page)).toContain('original');
   });
 
   test('redo after multiple undos is stable', async ({ page }) => {
@@ -123,11 +113,10 @@ test.describe('Undo CRDT edge cases (flaky)', () => {
     await undo(page);
     await undo(page);
     await undo(page);
-    await page.waitForTimeout(100);
 
     await redo(page);
     await redo(page);
-    await page.waitForTimeout(100);
+    await flushRender(page);
 
     // Should not crash
     await expect(getEditor(page)).toBeVisible();
@@ -148,18 +137,15 @@ test.describe('Persistence timing (flaky)', () => {
       await n.commit();
     });
 
-    // Minimal wait — debounce might not have fired
-    await page.waitForTimeout(1500);
+    // No wait before saveNow(): it is the explicit flush, awaited, so the debounce state does not matter.
     await page.evaluate(async () => {
       await (window as any).nabu?.saveNow?.();
     });
 
     await page.reload();
     await waitForEditor(page, 12000);
-    await page.waitForTimeout(500);
 
-    const md = await getMarkdown(page);
-    expect(md).toContain('quick save test');
+    await expect.poll(() => getMarkdown(page)).toContain('quick save test');
   });
 });
 
@@ -187,10 +173,8 @@ test.describe('Cross-block selection (flaky)', () => {
 
     // Now delete selection
     await press(page, 'Backspace');
-    await page.waitForTimeout(100);
 
-    const count = await getRootBlockCount(page);
-    expect(count).toBeLessThan(3);
+    await expect.poll(() => getRootBlockCount(page)).toBeLessThan(3);
   });
 
   test('typing over cross-block selection replaces content', async ({ page }) => {
@@ -199,7 +183,6 @@ test.describe('Cross-block selection (flaky)', () => {
     await typeText(page, 'beta');
     await press(page, 'Control+a');
     await typeText(page, 'replaced');
-    await page.waitForTimeout(100);
 
     await expect(getEditor(page)).toContainText('replaced');
     await expect(getEditor(page)).not.toContainText('alpha');
@@ -211,10 +194,8 @@ test.describe('Cross-block selection (flaky)', () => {
     await typeText(page, 'second block');
     await press(page, 'Control+a');
     await press(page, 'Control+b');
-    await page.waitForTimeout(100);
 
-    const md = await getMarkdown(page);
-    expect(md).toContain('**first block**');
-    expect(md).toContain('**second block**');
+    await expect.poll(() => getMarkdown(page)).toContain('**first block**');
+    expect(await getMarkdown(page)).toContain('**second block**');
   });
 });

@@ -364,11 +364,14 @@ export class Nabu {
 
     /**
      * Dispatch an action to all registered handlers for the given topic.
+     * Re-syncs the model selection from the DOM first: `selectionchange` is async, so right after a
+     * keyboard-only selection change (Shift+Arrow, Home/End, Ctrl+A) the model would be stale.
      * @param {string} topic
      * @param {any} [data]
      * @returns {Promise<import('@aionbuilders/pulse').PulseEvent>}
      */
     exec(topic, data) {
+        this.selection.sync();
         return this.#pulse.emit(topic, data);
     }
 
@@ -617,9 +620,16 @@ export class Nabu {
 
 
 
-    /** @param {{from: {offset: number, block: Block}, to: {offset: number, block: Block}, offset?: number}} [options={}]  */
+    /**
+     * Place the DOM + model selection. Asynchronous by nature: it waits for Svelte to flush pending state
+     * (`tick()`), because the target blocks' DOM may not be rendered yet (e.g. right after a commit/insert).
+     * The returned promise resolves once the selection has been set, i.e. once `nabu.selection` reflects it:
+     * `await nabu.focus(...)` before `exec(...)` / typing. Fire-and-forget callers are unaffected.
+     * @param {{from?: {offset?: number, block?: Block}, to?: {offset?: number, block?: Block}, offset?: number}} [options]
+     * @returns {Promise<void>}
+     */
     focus(options) {
-        tick().then(() => {
+        return tick().then(() => {
             const sel = this.selection;
 
             const {offset: fromOffset, block: fromBlock} = options?.from?.block ? 
@@ -638,8 +648,7 @@ export class Nabu {
                 this.warn('Resolved DOM points:', fromPoint, toPoint);
                 if (fromPoint && toPoint) this.selection.setBaseAndExtent(fromPoint.node, fromPoint.offset, toPoint.node, toPoint.offset);
             }
-        })
-
+        });
     }
 
     /**
@@ -973,6 +982,7 @@ export class Nabu {
      * @param {import('../utils/extensions.js').PasteFragment} fragment
      */
     insertFragment(fragment) {
+        this.selection.sync(); // public entry point: may be called outside an input event
         const { blocks } = fragment;
         if (!blocks?.length) return;
 

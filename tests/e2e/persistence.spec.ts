@@ -30,15 +30,13 @@ test.describe('Persistence', () => {
       await n.commit();
       await n.saveNow?.();
     });
-    await page.waitForTimeout(500);
+    // `saveNow()` is awaited above, so the snapshot is already in IndexedDB: no need to wait before reloading.
 
     // Reload page
     await page.reload();
-    await waitForEditor(page, 10000);
-    await page.waitForTimeout(500);
+    await waitForEditor(page, 10000); // the engine is only exposed once the snapshot has been loaded
 
-    const md = await getMarkdown(page);
-    expect(md).toContain('persisted content');
+    await expect.poll(() => getMarkdown(page)).toContain('persisted content');
   });
 
   test('P0 · nabu.saveNow() is callable without error', async ({ page }) => {
@@ -64,7 +62,6 @@ test.describe('Persistence', () => {
       await n.commit();
       await n.saveNow?.();
     });
-    await page.waitForTimeout(300);
 
     await page.reload();
     await waitForEditor(page, 10000);
@@ -82,16 +79,14 @@ test.describe('Persistence', () => {
       await n.commit();
       await n.saveNow?.();
     });
-    await page.waitForTimeout(300);
 
-    // Clear persistence
+    // Clear persistence (awaited: the snapshot is gone before we reload)
     await page.evaluate(async () => {
       await (window as any).nabu?.clearPersistence?.();
     });
 
     await page.reload();
-    await waitForEditor(page, 10000);
-    await page.waitForTimeout(300);
+    await waitForEditor(page, 10000); // `isNew` is decided before the engine is exposed
 
     // After clearing, should get fresh document (isNew should be true)
     const isNew = await page.evaluate(() => (window as any).nabu?.isNew ?? false);
@@ -99,24 +94,36 @@ test.describe('Persistence', () => {
   });
 
   test('P2 · auto-save debounce fires within 2 seconds of typing', async ({ page }) => {
-    await gotoEditor(page, { persist: uniqueDocId() });
+    const docId = uniqueDocId();
+    await gotoEditor(page, { persist: docId });
 
-    await page.evaluate(async () => {
+    const committedAt = await page.evaluate(async () => {
       const n = (window as any).nabu;
       for (const c of [...n.children]) n.delete(c);
       n.insert('paragraph', { text: 'auto-save test' });
       await n.commit();
+      return Date.now();
     });
 
-    // Wait for debounce
-    await page.waitForTimeout(2000);
+    // KEEP (time-based by design): the save only happens once the 2 s auto-save debounce expires, so this
+    // test necessarily lasts >= 2 s. Instead of sleeping a fixed 2 s (which raced the debounce), poll
+    // IndexedDB until a snapshot saved AFTER our commit shows up (no saveNow() here: that is the point).
+    await expect.poll(() => page.evaluate((id) => new Promise<number>((resolve, reject) => {
+      const open = indexedDB.open('nabu');
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        if (!db.objectStoreNames.contains('snapshots')) { db.close(); return resolve(0); }
+        const get = db.transaction('snapshots', 'readonly').objectStore('snapshots').get(id);
+        get.onsuccess = () => { db.close(); resolve(get.result?.savedAt ?? 0); };
+        get.onerror = () => { db.close(); reject(get.error); };
+      };
+    }), docId), { timeout: 8000 }).toBeGreaterThanOrEqual(committedAt);
 
     // Now reload and check
     await page.reload();
     await waitForEditor(page, 10000);
-    await page.waitForTimeout(500);
 
-    const md = await getMarkdown(page);
-    expect(md).toContain('auto-save test');
+    await expect.poll(() => getMarkdown(page)).toContain('auto-save test');
   });
 });

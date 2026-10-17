@@ -152,7 +152,6 @@ test.describe('Dialogue Block', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('block:transform', { type: 'dialogue' })
     );
-    await page.waitForTimeout(100);
     await waitForBlockType(page, 'dialogue');
     const md = await getMarkdown(page);
     expect(md).toContain('—');

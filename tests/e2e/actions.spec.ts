@@ -3,12 +3,12 @@
  * Tests all registered actions via the Pulse-based exec system
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, waitForBlockType,
   getEditor, getRootBlockCount,
-  focus,
+  focus, flushRender,
 } from './helpers/editor.js';
 
 test.describe('Action Bus (nabu.exec)', () => {
@@ -29,17 +29,14 @@ test.describe('Action Bus (nabu.exec)', () => {
   test('P0 · exec("undo") reverts last change', async ({ page }) => {
     await typeText(page, 'before undo');
     await page.evaluate(() => (window as any).nabu.exec('undo'));
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md.trim().length).toBeLessThan('before undo'.length + 1);
+    await expect.poll(async () => (await getMarkdown(page)).trim().length).toBeLessThan('before undo'.length + 1);
   });
 
   test('P0 · exec("redo") restores after undo', async ({ page }) => {
     await typeText(page, 'redo target');
     await page.evaluate(() => (window as any).nabu.exec('undo'));
-    await page.waitForTimeout(100);
+    await expect(getEditor(page)).not.toContainText('redo target'); // the undo has landed before we redo
     await page.evaluate(() => (window as any).nabu.exec('redo'));
-    await page.waitForTimeout(100);
     await expect(getEditor(page)).toContainText('redo target');
   });
 
@@ -50,9 +47,7 @@ test.describe('Action Bus (nabu.exec)', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('mark:toggle', { mark: 'bold', value: true })
     );
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toContain('**bold action**');
+    await expect.poll(() => getMarkdown(page)).toContain('**bold action**');
   });
 
   test('P0 · exec("mark:apply", {mark: "italic"}) applies italic', async ({ page }) => {
@@ -62,9 +57,7 @@ test.describe('Action Bus (nabu.exec)', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('mark:apply', { mark: 'italic', value: true })
     );
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toContain('*italic action*');
+    await expect.poll(() => getMarkdown(page)).toContain('*italic action*');
   });
 
   // P1 ─────────────────────────────────────────────────────────────────────
@@ -79,10 +72,8 @@ test.describe('Action Bus (nabu.exec)', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('mark:remove', { mark: 'bold' })
     );
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).not.toContain('**remove bold**');
-    expect(md).toContain('remove bold');
+    await expect.poll(() => getMarkdown(page)).not.toContain('**remove bold**');
+    expect(await getMarkdown(page)).toContain('remove bold');
   });
 
   test('P1 · exec("bold") shorthand applies bold', async ({ page }) => {
@@ -90,9 +81,7 @@ test.describe('Action Bus (nabu.exec)', () => {
     await press(page, 'Home');
     await press(page, 'Shift+End');
     await page.evaluate(() => (window as any).nabu.exec('bold'));
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toContain('**shorthand bold**');
+    await expect.poll(() => getMarkdown(page)).toContain('**shorthand bold**');
   });
 
   test('P1 · exec("italic") shorthand applies italic', async ({ page }) => {
@@ -100,9 +89,7 @@ test.describe('Action Bus (nabu.exec)', () => {
     await press(page, 'Home');
     await press(page, 'Shift+End');
     await page.evaluate(() => (window as any).nabu.exec('italic'));
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toContain('*shorthand italic*');
+    await expect.poll(() => getMarkdown(page)).toContain('*shorthand italic*');
   });
 
   test('P1 · exec("block:transform") changes block type to heading', async ({ page }) => {
@@ -110,10 +97,8 @@ test.describe('Action Bus (nabu.exec)', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('block:transform', { type: 'heading', props: { level: 1 } })
     );
-    await page.waitForTimeout(100);
     await waitForBlockType(page, 'heading');
-    const md = await getMarkdown(page);
-    expect(md).toContain('# my title');
+    await expect.poll(() => getMarkdown(page)).toContain('# my title');
   });
 
   test('P1 · exec("list:indent") indents list item', async ({ page }) => {
@@ -127,16 +112,13 @@ test.describe('Action Bus (nabu.exec)', () => {
       return n.serialize("markdown");
     }).then(console.log);
     await focus(page, 10);
-    await page.waitForTimeout(200);
     const selection = await page.evaluate(() => (window as any).nabu.selection.startBlock.selection);
     console.log('Current selection start block ID:', selection);
 
     await page.evaluate(() => (window as any).nabu.selection.startBlock.id).then(console.log)
     await page.evaluate(() => (window as any).nabu.exec('list:indent'));
     
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toContain('  - child');
+    await expect.poll(() => getMarkdown(page)).toContain('  - child');
   });
 
   test('P1 · exec("list:unindent") unindents nested item', async ({ page }) => {
@@ -150,13 +132,10 @@ test.describe('Action Bus (nabu.exec)', () => {
       await n.commit();
       return n.serialize("markdown");
     }).then(console.log);
-    await page.waitForTimeout(200);
+    await expect(page.locator('[data-block-type="list-item"]').first()).toBeVisible();
     await focus(page, 10);
-    await page.waitForTimeout(200);
     await page.evaluate(() => (window as any).nabu.exec('list:unindent'));
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toMatch(/^- nested/m);
+    await expect.poll(() => getMarkdown(page)).toMatch(/^- nested/m);
   });
 
   // P2 ─────────────────────────────────────────────────────────────────────
@@ -165,7 +144,7 @@ test.describe('Action Bus (nabu.exec)', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('nonexistent:action', {})
     );
-    await page.waitForTimeout(50);
+    await flushRender(page);
     await expect(getEditor(page)).toBeVisible();
   });
 

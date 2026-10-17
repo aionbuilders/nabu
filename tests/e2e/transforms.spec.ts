@@ -23,7 +23,6 @@ test.describe('Block Transforms', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('block:transform', { type: 'heading', props: { level: 1 } })
     );
-    await page.waitForTimeout(100);
     await waitForBlockType(page, 'heading');
     await expect(page.locator('[data-block-type="heading"]')).toBeVisible();
     const md = await getMarkdown(page);
@@ -41,7 +40,6 @@ test.describe('Block Transforms', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('block:transform', { type: 'paragraph' })
     );
-    await page.waitForTimeout(100);
     await waitForBlockType(page, 'paragraph');
     const md = await getMarkdown(page);
     expect(md).not.toContain('#');
@@ -53,7 +51,6 @@ test.describe('Block Transforms', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('block:transform', { type: 'dialogue' })
     );
-    await page.waitForTimeout(100);
     await waitForBlockType(page, 'dialogue');
     const md = await getMarkdown(page);
     expect(md).toContain('—');
@@ -89,7 +86,7 @@ test.describe('Block Transforms', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('block:transform', { type: 'heading', props: { level: 3 } })
     );
-    await page.waitForTimeout(100);
+    await waitForBlockType(page, 'heading');
     const md = await getMarkdown(page);
     expect(md).toContain('preserve me');
   });
@@ -101,9 +98,7 @@ test.describe('Block Transforms', () => {
       const block = n.children[0];
       block.transformTo('heading', { level: 2 });
     });
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md).toContain('## transform direct');
+    await expect.poll(() => getMarkdown(page)).toContain('## transform direct');
   });
 
   // P2 ─────────────────────────────────────────────────────────────────────
@@ -117,7 +112,7 @@ test.describe('Block Transforms', () => {
     await page.evaluate(() =>
       (window as any).nabu.exec('block:transform', { type: 'heading', props: { level: 1 } })
     );
-    await page.waitForTimeout(100);
+    await waitForBlockType(page, 'heading');
     const md = await getMarkdown(page);
     expect(md).toContain('**bold text**');
   });

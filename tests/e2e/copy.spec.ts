@@ -6,7 +6,7 @@
 import { test, expect } from '@playwright/test';
 import {
   gotoEditor, clearAndReset, focusEditor,
-  typeText, press, getMarkdown, getRootBlockCount, getEditor,
+  typeText, press, getMarkdown, getRootBlockCount, getEditor, flushRender,
 } from './helpers/editor.js';
 import { selectLine, selectAll } from './helpers/keyboard.js';
 import { readClipboardText } from './helpers/clipboard.js';
@@ -24,22 +24,17 @@ test.describe('Copy / Cut', () => {
     await typeText(page, 'copy me');
     await selectLine(page);
     await press(page, 'Control+c');
-    await page.waitForTimeout(100);
-    const text = await readClipboardText(page);
-    expect(text).toContain('copy me');
+    await expect.poll(() => readClipboardText(page)).toContain('copy me');
   });
 
   test('P0 · Ctrl+X cuts selected text and removes it', async ({ page }) => {
     await typeText(page, 'cut me');
     await selectLine(page);
     await press(page, 'Control+x');
-    await page.waitForTimeout(100);
     // Content should be empty or missing
-    const md = await getMarkdown(page);
-    expect(md.trim()).toBe('');
+    await expect.poll(async () => (await getMarkdown(page)).trim()).toBe('');
     // Clipboard should have the text
-    const text = await readClipboardText(page);
-    expect(text).toContain('cut me');
+    await expect.poll(() => readClipboardText(page)).toContain('cut me');
   });
 
   // P1 ─────────────────────────────────────────────────────────────────────
@@ -50,10 +45,8 @@ test.describe('Copy / Cut', () => {
     await typeText(page, 'second');
     await selectAll(page);
     await press(page, 'Control+c');
-    await page.waitForTimeout(100);
-    const text = await readClipboardText(page);
-    expect(text).toContain('first');
-    expect(text).toContain('second');
+    await expect.poll(() => readClipboardText(page)).toContain('first');
+    expect(await readClipboardText(page)).toContain('second');
   });
 
   test('P1 · copy preserves bold marks in clipboard text', async ({ page }) => {
@@ -62,17 +55,14 @@ test.describe('Copy / Cut', () => {
     await press(page, 'Control+b');
     await selectLine(page);
     await press(page, 'Control+c');
-    await page.waitForTimeout(100);
     // Clipboard should have something (exact format depends on implementation)
-    const text = await readClipboardText(page);
-    expect(text).toBeTruthy();
+    await expect.poll(() => readClipboardText(page)).toBeTruthy();
   });
 
   test('P1 · cut leaves nothing selected', async ({ page }) => {
     await typeText(page, 'remove this');
     await selectLine(page);
     await press(page, 'Control+x');
-    await page.waitForTimeout(100);
     await expect(getEditor(page)).not.toContainText('remove this');
   });
 
@@ -83,7 +73,7 @@ test.describe('Copy / Cut', () => {
     // No selection — just cursor
     await press(page, 'End');
     await press(page, 'Control+x');
-    await page.waitForTimeout(100);
+    await flushRender(page); // negative check: let the (no-op) cut settle before asserting nothing changed
     await expect(getEditor(page)).toContainText('intact');
   });
 });

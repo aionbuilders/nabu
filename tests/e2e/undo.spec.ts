@@ -41,9 +41,7 @@ test.describe('Undo / Redo', () => {
   test('P0 · nabu.exec("undo") is equivalent to Ctrl+Z', async ({ page }) => {
     await typeText(page, 'to undo');
     await page.evaluate(() => (window as any).nabu.exec('undo'));
-    await page.waitForTimeout(100);
-    const md = await getMarkdown(page);
-    expect(md.trim().length).toBeLessThan('to undo'.length + 1);
+    await expect.poll(async () => (await getMarkdown(page)).trim().length).toBeLessThan('to undo'.length + 1);
   });
 
   // P1 ─────────────────────────────────────────────────────────────────────
@@ -59,9 +57,8 @@ test.describe('Undo / Redo', () => {
   test('P1 · nabu.exec("redo") redoes last undone change', async ({ page }) => {
     await typeText(page, 'redo me');
     await page.evaluate(() => (window as any).nabu.exec('undo'));
-    await page.waitForTimeout(100);
+    await expect(getEditor(page)).not.toContainText('redo me'); // the undo has landed before we redo
     await page.evaluate(() => (window as any).nabu.exec('redo'));
-    await page.waitForTimeout(100);
     await expect(getEditor(page)).toContainText('redo me');
   });
 

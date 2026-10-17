@@ -11,7 +11,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { gotoEditor, clearAndReset, focusEditor, getEditor, getBlock, getJson } from './helpers/editor.js';
+import { gotoEditor, clearAndReset, focusEditor, getEditor, getBlock, getJson, getMarkdown } from './helpers/editor.js';
 
 type Summary = { type: string; props?: any; text: string; children?: Summary[] };
 
@@ -165,5 +165,25 @@ test.describe('Fast input — model selection is synced before every input', () 
     await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
     await page.keyboard.type('!');
     await expect.poll(async () => (await tree(page)).map(b => b.text)).toEqual(['first!', 'second']);
+  });
+
+  // ── programmatic exec right after a keyboard-only selection change (P-22) ──
+
+  test('P0 · P-22 · Shift+ArrowLeft x3 then immediate exec(mark:toggle) bolds exactly the last 3 chars', async ({ page }) => {
+    await focusEditor(page);
+    await page.keyboard.type('example');
+    await page.keyboard.press('Shift+ArrowLeft');
+    await page.keyboard.press('Shift+ArrowLeft');
+    await page.keyboard.press('Shift+ArrowLeft');
+    await page.evaluate(() => (window as any).nabu.exec('mark:toggle', { mark: 'bold' }));
+    await expect.poll(async () => (await getMarkdown(page)).trim()).toBe('exam**ple**');
+  });
+
+  test('P0 · P-22 · Ctrl+A then immediate exec(mark:toggle) bolds everything', async ({ page }) => {
+    await focusEditor(page);
+    await page.keyboard.type('hello world');
+    await page.keyboard.press('Control+a');
+    await page.evaluate(() => (window as any).nabu.exec('mark:toggle', { mark: 'bold' }));
+    await expect.poll(async () => (await getMarkdown(page)).trim()).toBe('**hello world**');
   });
 });

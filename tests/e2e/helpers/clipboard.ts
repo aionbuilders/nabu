@@ -45,7 +45,6 @@ export async function pasteText(page: Page, text: string) {
   await writeClipboardText(page, text);
   const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
   await page.keyboard.press(`${mod}+v`);
-  await page.waitForTimeout(50);
 }
 
 /**
@@ -55,5 +54,4 @@ export async function pasteHtml(page: Page, html: string, plain = '') {
   await writeClipboardHtml(page, html, plain);
   const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
   await page.keyboard.press(`${mod}+v`);
-  await page.waitForTimeout(50);
 }

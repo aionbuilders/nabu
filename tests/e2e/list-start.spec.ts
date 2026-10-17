@@ -4,30 +4,25 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { gotoEditor, clearAndReset, focusEditor, press, getJson, getSelection } from './helpers/editor.js';
+import { gotoEditor, clearAndReset, focusEditor, press, getJson } from './helpers/editor.js';
 import { pasteText, pasteHtml } from './helpers/clipboard.js';
 import { indent } from './helpers/keyboard.js';
 
 const md = (page: Page) => page.evaluate(() => (window as any).nabu.serialize('markdown'));
 /** Props of the first list in the document (a pasted list lands after the empty paragraph that was focused). */
 const listProps = async (page: Page) => (await getJson(page)).blocks.find((b: any) => b.type === 'list')?.props;
-/** Types char by char with a short pause: the model caret must follow each key (see shortcuts-slash.spec.ts). */
-async function typeSlow(page: Page, text: string) {
-  for (const c of text) { await page.keyboard.type(c); await page.waitForTimeout(40); }
-}
 
 test.describe('List start number', () => {
   test.beforeEach(async ({ page }) => {
     await gotoEditor(page);
     await clearAndReset(page);
     await focusEditor(page);
-    await expect.poll(async () => (await getSelection(page))?.focusBlockId).toBeTruthy();
   });
 
   test('P1 · "3. a" Enter "b" numbers 3, 4 in the DOM start attribute and in markdown', async ({ page }) => {
-    await typeSlow(page, '3. a');
+    await page.keyboard.type('3. a');
     await press(page, 'Enter');
-    await typeSlow(page, 'b');
+    await page.keyboard.type('b');
 
     await expect(page.locator('ol[data-block-type="list"]')).toHaveAttribute('start', '3');
     expect(await md(page)).toBe('3. a\n4. b');
@@ -51,11 +46,11 @@ test.describe('List start number', () => {
   });
 
   test('P1 · a list typed right under another ordered list merges into it and keeps the FIRST start', async ({ page }) => {
-    await typeSlow(page, '3. a');
+    await page.keyboard.type('3. a');
     await press(page, 'Enter');
     await press(page, 'Enter'); // exit the list: an empty paragraph right under it
     await expect.poll(async () => (await getJson(page)).blocks.map((b: any) => b.type)).toEqual(['list', 'paragraph']);
-    await typeSlow(page, '7. b');
+    await page.keyboard.type('7. b');
 
     await expect.poll(async () => (await getJson(page)).blocks.length).toBe(1);
     expect((await getJson(page)).blocks[0].props).toEqual({ listType: 'ordered', start: 3 });
@@ -63,20 +58,20 @@ test.describe('List start number', () => {
   });
 
   test('P1 · an ordered list typed under a BULLET list stays a separate list (it used to be destroyed)', async ({ page }) => {
-    await typeSlow(page, '- a');
+    await page.keyboard.type('- a');
     await press(page, 'Enter');
     await press(page, 'Enter');
     await expect.poll(async () => (await getJson(page)).blocks.map((b: any) => b.type)).toEqual(['list', 'paragraph']);
-    await typeSlow(page, '1. b');
+    await page.keyboard.type('1. b');
 
     await expect.poll(async () => (await getJson(page)).blocks.map((b: any) => b.props?.listType)).toEqual(['bullet', 'ordered']);
     expect(await md(page)).toBe('- a\n\n1. b');
   });
 
   test('P1 · indenting an item under a list that starts at 3 makes a nested list that starts at 1', async ({ page }) => {
-    await typeSlow(page, '3. a');
+    await page.keyboard.type('3. a');
     await press(page, 'Enter');
-    await typeSlow(page, 'b');
+    await page.keyboard.type('b');
     await indent(page);
 
     await expect.poll(async () => md(page)).toBe('3. a\n  1. b');
@@ -84,9 +79,9 @@ test.describe('List start number', () => {
   });
 
   test('P1 · JSON export -> import round-trips the start', async ({ page }) => {
-    await typeSlow(page, '4. a');
+    await page.keyboard.type('4. a');
     await press(page, 'Enter');
-    await typeSlow(page, 'b');
+    await page.keyboard.type('b');
     const json = await getJson(page);
 
     await page.evaluate(async (j) => { await (window as any).nabu.importJSON(j); }, json);

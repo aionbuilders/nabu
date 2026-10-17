@@ -25,6 +25,7 @@
 
 ### Editing
 - The model selection now re-syncs synchronously from the DOM at every input entry point (keydown, beforeinput, compositionstart, copy / cut / paste) via the new idempotent `SvelteSelection.sync()`. `selectionchange` is asynchronous, so a keystroke right after a caret move could act on the previous caret: lost first character after a click, Enter splitting at the old offset, wrong marks range.
+- `nabu.exec()` (and `insertFragment()`) now re-sync the model selection from the DOM too, so a programmatic action fired right after a keyboard-only selection change (Shift+Arrow, Home/End, Ctrl+A) acts on the new selection instead of the previous one. `nabu.focus()` returns a promise that resolves once the selection is set (`await nabu.focus(...)` before `exec` / typing); it is asynchronous because it waits for Svelte to render pending blocks.
 - Word deletion (Ctrl/Alt+Backspace, Ctrl/Alt+Delete) now uses the model-based rule in every browser: the deleted word takes its surrounding whitespace with it, no orphan or doubled space. Previously Chromium's `getTargetRanges()` bypassed the fix for issue #4.
 
 ### Placeholders

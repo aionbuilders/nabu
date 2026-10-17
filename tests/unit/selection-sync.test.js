@@ -129,4 +129,35 @@ describe('P-08 · selection.sync()', () => {
       expect(spy, h).toHaveBeenCalled();
     }
   });
+
+  it('P-22 · exec() acts on the DOM selection, not the stale model one', async () => {
+    let seen = null;
+    const probe = { name: 'probe', actions: { probe: (n) => { seen = { collapsed: n.selection.isCollapsed, from: n.selection.startOffset, to: n.selection.endOffset, block: n.selection.startBlock }; } } };
+    const engine = new Nabu({ extensions: [ParagraphExtension, probe] });
+    engine.insert('paragraph', {});
+    await engine.commit();
+    const [a] = engine.children;
+    const el = document.createElement('div');
+    el.setAttribute('data-block-id', a.id);
+    const ta = document.createTextNode('hello world');
+    el.appendChild(ta);
+    document.body.appendChild(el);
+
+    caret(ta, 5);
+    engine.selection.sync();
+    window.getSelection().setBaseAndExtent(ta, 2, ta, 7); // Shift+Arrow: selectionchange still pending
+    expect(engine.selection.isCollapsed).toBe(true); // stale
+    await engine.exec('probe');
+    expect(seen).toEqual({ collapsed: false, from: 2, to: 7, block: a });
+  });
+
+  it('P-22 · focus() returns a promise that resolves once the model selection is set', async () => {
+    const { engine, b } = await makeEditor();
+    b.getDOMPoint = (offset) => { const t = document.querySelector(`[data-block-id="${b.id}"]`).firstChild; return { node: t, offset }; };
+    const p = engine.focus({ from: { block: b, offset: 3 }, to: { block: b, offset: 3 } });
+    expect(p).toBeInstanceOf(Promise);
+    await p;
+    expect(engine.selection.focusBlock).toBe(b);
+    expect(engine.selection.focusOffset).toBe(3);
+  });
 });

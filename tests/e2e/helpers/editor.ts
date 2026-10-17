@@ -73,8 +73,22 @@ export async function clearAndReset(page: Page) {
     await n.commit();
     n.undoManager.clear();
   });
-  // Let Svelte tick propagate
-  await page.waitForTimeout(50);
+  // `n.commit()` is awaited above; wait for the DOM to show exactly one (empty) block before the test starts.
+  await page.waitForFunction(() => {
+    const c = (window as any).nabu.children;
+    return c.length === 1
+      && document.querySelectorAll('[data-block-id]').length === 1
+      && !!document.querySelector(`[data-block-id="${c[0].id}"]`);
+  });
+}
+
+/**
+ * Wait for the pending render work to flush (two animation frames). Use it before a NEGATIVE assertion
+ * ("X must not appear") so that a wrongly scheduled update has had its chance to land — a condition-based
+ * replacement for a fixed sleep.
+ */
+export async function flushRender(page: Page) {
+  await page.evaluate(() => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
 }
 
 // ── Editor locators ────────────────────────────────────────────────────────
@@ -198,9 +212,9 @@ export async function getSelection(page: Page) {
 
 
 export async function focus(page: Page, offset = 0) {
-  await page.evaluate((offset) => {
+  await page.evaluate(async (offset) => {
     const n = (window as any).nabu;
-    n.focus({ offset });
+    await n.focus({ offset }); // resolves once the model selection is set
   }, offset);
 }
 
@@ -208,7 +222,7 @@ export async function focus(page: Page, offset = 0) {
  * Press a key or key combo, e.g. 'Enter', 'Backspace', 'Control+b'.
  */
 export async function press(page: Page, key: string) {
-  await page.keyboard.press(key, { delay: 50 });
+  await page.keyboard.press(key);
 }
 
 // ── Exec (action bus) ──────────────────────────────────────────────────────
@@ -221,7 +235,7 @@ export async function exec(page: Page, topic: string, data?: any) {
     ([t, d]) => (window as any).nabu.exec(t, d),
     [topic, data] as [string, any],
   );
-  await page.waitForTimeout(50);
+  await flushRender(page);
 }
 
 // ── Insert helpers (programmatic, not keyboard) ────────────────────────────

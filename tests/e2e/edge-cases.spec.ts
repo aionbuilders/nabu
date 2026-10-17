@@ -68,10 +68,8 @@ test.describe('Edge Cases', () => {
     // Select all
     await press(page, 'Control+a');
     await press(page, 'Backspace');
-    await page.waitForTimeout(100);
 
-    const count = await getRootBlockCount(page);
-    expect(count).toBeLessThanOrEqual(2);
+    await expect.poll(() => getRootBlockCount(page)).toBeLessThanOrEqual(2);
   });
 
   // P1 ─────────────────────────────────────────────────────────────────────
@@ -127,8 +125,8 @@ test.describe('Edge Cases', () => {
   test('P1 · typing after undo does not corrupt state', async ({ page }) => {
     await typeText(page, 'hello');
     await press(page, 'Control+z');
+    await expect.poll(async () => (await getMarkdown(page)).trim()).toBe(''); // the undo has landed
     await focus(page, 0);
-    await page.waitForTimeout(300);
     await typeText(page, 'world');
     const md = await getMarkdown(page);
     expect(md.trim()).toBe('world');
@@ -145,9 +143,7 @@ test.describe('Edge Cases', () => {
       }
       await n.commit();
     });
-    await page.waitForTimeout(500);
-    const count = await getRootBlockCount(page);
-    expect(count).toBe(50);
+    await expect.poll(() => getRootBlockCount(page)).toBe(50);
     await expect(getEditor(page)).toBeVisible();
   });
 
@@ -158,7 +154,6 @@ test.describe('Edge Cases', () => {
     }
     for (let i = 0; i < 5; i++) {
       await press(page, 'Control+z');
-      await page.waitForTimeout(30);
     }
     await typeText(page, 'final');
     await expect(getEditor(page)).toContainText('final');
