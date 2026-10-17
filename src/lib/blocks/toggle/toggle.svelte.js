@@ -61,6 +61,9 @@ export class ToggleBlock extends MegaBlock {
     /** @type {boolean} */
     collapsed = $state(false);
 
+    /** A collapsed toggle does not render its body: navigation must never put the caret in it. */
+    get hidesChildren() { return this.collapsed; }
+
     static placeholder = 'Toggle…';
 
     component = $derived(this.nabu.components.get("toggle") || ToggleComponent);

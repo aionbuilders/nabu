@@ -19,6 +19,7 @@
     data-nabu-root="true"
     onbeforeinput={(e) => engine.handleBeforeinput(e)}
     onkeydown={(e) => engine.handleKeydown(e)}
+    onmousedown={(e) => engine.handleMousedown(e)}
     oncopy={(e) => engine.handleCopy(e)}
     oncut={(e) => engine.handleCut(e)}
     onpaste={(e) => engine.handlePaste(e)}

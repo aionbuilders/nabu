@@ -82,6 +82,13 @@ export class Block {
     transformsEnabled = true;
     /** When false, inline marks (bold/italic/...) are never applied to this block. @type {boolean} */
     marksEnabled = true;
+    /**
+     * True when the block currently hides its children (they are not rendered, e.g. a collapsed
+     * foldable block): navigation (`findForward` / `findBackward` / `findLastDescendant`, caret
+     * normalisation) never enters them. Override with a getter in a subclass.
+     * @type {boolean}
+     */
+    get hidesChildren() { return false; }
     /** When true, pasting inside this block inserts the clipboard's text/plain verbatim (replacing the selection), skipping every paste interpreter: no blocks created, no markdown/HTML interpretation. @type {boolean} */
     pastesAsPlainText = false;
 
@@ -147,7 +154,7 @@ export class Block {
     findForward(predicate) {
         // 1. Chercher dans les enfants (descendre)
         // @ts-ignore
-        if (this.children?.length) {
+        if (this.children?.length && !this.hidesChildren) {
             // @ts-ignore
             for (const child of this.children) {
                 if (predicate(child)) return child;
@@ -188,7 +195,7 @@ export class Block {
                     
                     // Si le frère a des enfants, le "précédent" est le DERNIER de ses descendants
                     // @ts-ignore
-                    if (sibling.children?.length) {
+                    if (sibling.children?.length && !sibling.hidesChildren) {
                         // @ts-ignore
                         const lastDescendant = sibling.findLastDescendant(predicate);
                         if (lastDescendant) return lastDescendant;
@@ -240,7 +247,7 @@ export class Block {
      */
     findLastDescendant(predicate) {
         // @ts-ignore
-        const children = this.children || [];
+        const children = this.hidesChildren ? [] : (this.children || []);
         for (let i = children.length - 1; i >= 0; i--) {
             const child = children[i];
             const found = child.findLastDescendant(predicate);

@@ -93,6 +93,8 @@ export class Nabu {
     // for the duration of the composition and sync the result into Loro at
     // compositionend. See issue #6.
     #composing = false;
+    /** True during an IME composition: the browser owns the DOM, the caret must not be touched. */
+    get composing() { return this.#composing; }
     /** @type {number | null} offset modèle au début de la composition */
     #compositionStartOffset = null;
     /** @type {Block | null} bloc cible au début de la composition */
@@ -160,6 +162,7 @@ export class Nabu {
         if (this.extensions?.length) {
             for (const ext of this.extensions) {
                 if (ext.block) this.registry.set(ext.name, ext.block);
+                if (ext.block && ext.defaultBlock) this.defaultBlockType = ext.name;
                 if (ext.component) this.components.set(ext.name, ext.component);
                 if (ext.hooks) {
                     for (const [hookName, hookFn] of Object.entries(ext.hooks)) {
@@ -269,6 +272,13 @@ export class Nabu {
     doc;
     /** @type {SvelteMap<string, typeof Block>} */
     registry = new SvelteMap();
+
+    /**
+     * Type of the default text block (declared by an extension with `defaultBlock: true`): created by the
+     * engine when it needs an empty text block of its own, e.g. a caret after a trailing void block.
+     * @type {string | null}
+     */
+    defaultBlockType = null;
     /** @type {SvelteMap<string, Component>} */
     components = new SvelteMap();
     /** @type {SvelteMap<string, Block>} */
@@ -716,6 +726,74 @@ export class Nabu {
     }
 
     /**
+     * The deepest last block of the document that can hold a caret in the rendered document: follows
+     * the last child at each level, but never enters a block that hides its children.
+     * @returns {Block | null}
+     */
+    get lastVisibleBlock() {
+        /** @type {any} */
+        let block = this.children[this.children.length - 1] ?? null;
+        while (block) {
+            /** @type {Block[] | undefined} */
+            const kids = block.children;
+            if (!kids?.length || block.hidesChildren) break;
+            block = kids[kids.length - 1];
+        }
+        return block;
+    }
+
+    #openingTrailingCaret = false;
+
+    /**
+     * The document must always offer a caret after its last block. Call it on user intent (ArrowDown /
+     * ArrowRight leaving the document, a click below the last block): when the last block holds text, the
+     * caret goes to its end; when it does not (a void block such as a divider / image, or a container
+     * whose end is not a text position), an empty default text block is appended at the root, in one
+     * undo step, and takes the caret. Never called eagerly on load.
+     * @returns {Promise<Block | null>} The block now holding the caret
+     */
+    async openTrailingCaret() {
+        if (this.#openingTrailingCaret) return null;
+        const last = this.lastVisibleBlock;
+        if (!last) return null;
+        this.#openingTrailingCaret = true;
+        try {
+            /** @type {Block | null | undefined} */
+            let target = last;
+            let offset = last.behaviors?.get('text')?.text?.length ?? 0;
+            if (!last.behaviors?.has('text')) {
+                const type = this.defaultBlockType;
+                if (!type || !this.registry.has(type)) return null;
+                const created = this.insert(type, {}, null, this.children.length);
+                await this.commit();
+                target = this.blocks.get(created.id);
+                offset = 0;
+            }
+            if (!target) return null;
+            await tick();
+            this.selection.setCursor(target, offset);
+            return target;
+        } finally {
+            this.#openingTrailingCaret = false;
+        }
+    }
+
+    /**
+     * Mouse down on the editor itself (not on a block): below the last block, that block is a void →
+     * put a caret after it (see `openTrailingCaret`).
+     * @param {MouseEvent} e
+     */
+    handleMousedown(e) {
+        if (e.button !== 0 || e.defaultPrevented || e.target !== e.currentTarget) return;
+        const last = this.lastVisibleBlock;
+        const lastEl = /** @type {HTMLElement | null} */ (last?.element);
+        if (!last || last.behaviors?.has('text') || !lastEl?.isConnected) return;
+        if (e.clientY <= lastEl.getBoundingClientRect().bottom) return;
+        this.openTrailingCaret(); // overrides the native caret the click leaves on the root
+
+    }
+
+    /**
     * Insère un nouveau bloc dans le document
     * @param {string} type - Le type du bloc (ex: 'paragraph')
     * @param {Object} [props={}] - Les propriétés initiales
@@ -812,6 +890,7 @@ export class Nabu {
         if (this.#composing && (e.inputType === 'insertCompositionText' || e.inputType === 'deleteCompositionText')) {
             return;
         }
+        this.selection.normalize(); // a caret on a dead position (void block, wrapper…) must not swallow the keystroke
         e.preventDefault(); // Toujours bloquer les mutations natives
         this.dispatchEventToSelection('beforeinput', e, 'onBeforeInput');
     }
@@ -852,6 +931,12 @@ export class Nabu {
      */
     handleCompositionEnd(e) {
         this.#composing = false;
+        this.#syncComposition(e);
+        this.selection.normalize(); // a dead caret must not survive the composition
+    }
+
+    /** @param {CompositionEvent} e */
+    #syncComposition(e) {
         const block = this.#compositionStartBlock;
         const startOffset = this.#compositionStartOffset;
         this.#compositionStartBlock = null;
@@ -882,6 +967,7 @@ export class Nabu {
     /** @param {KeyboardEvent} e */
     handleKeydown(e) {
         this.selection.sync(); // no-op when the document capture listener already synced
+        this.selection.normalize();
         // Undo: Ctrl+Z or Cmd+Z (without Shift)
         if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
             e.preventDefault();

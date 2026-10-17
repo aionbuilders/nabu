@@ -15,7 +15,7 @@ async function makeEditor() {
   const block = engine.children[0];
   // Composition handlers read the anchor block from the selection; in unit
   // tests there is no DOM selection, so stub the minimal surface used.
-  engine.selection = { anchorBlock: block, focusBlock: block, sync: vi.fn(), setCursor: vi.fn() };
+  engine.selection = { anchorBlock: block, focusBlock: block, sync: vi.fn(), normalize: vi.fn(), setCursor: vi.fn() };
   return { engine, block };
 }
 
@@ -75,3 +75,54 @@ describe('IME composition', () => {
     expect(() => engine.handleCompositionEnd({ data: 'X' })).not.toThrow();
   });
 });
+
+describe('IME composition · caret normalisation', () => {
+  it('exposes a read-only `composing` flag', async () => {
+    const { engine } = await makeEditor();
+    expect(engine.composing).toBe(false);
+    engine.handleCompositionStart({});
+    expect(engine.composing).toBe(true);
+    engine.handleCompositionEnd({ data: '' });
+    expect(engine.composing).toBe(false);
+  });
+
+  it('does not normalize on the composition beforeinputs, but does on a regular one', async () => {
+    const { engine } = await makeEditor();
+    engine.handleCompositionStart({});
+    engine.handleBeforeinput({ inputType: 'insertCompositionText', preventDefault: vi.fn() });
+    expect(engine.selection.normalize).not.toHaveBeenCalled();
+    engine.handleCompositionEnd({ data: '' });
+    engine.selection.normalize.mockClear();
+    engine.handleBeforeinput({ inputType: 'insertText', preventDefault: vi.fn() });
+    expect(engine.selection.normalize).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes once at compositionend, after the composed text reached the model', async () => {
+    const { engine, block } = await makeEditor();
+    engine.handleCompositionStart({});
+    let textAtNormalize = null;
+    engine.selection.normalize.mockImplementation(() => { textAtNormalize = block.behaviors.get('text').text; });
+    engine.handleCompositionEnd({ data: 'あ' });
+    expect(engine.selection.normalize).toHaveBeenCalledTimes(1);
+    expect(textAtNormalize).toBe('あ');
+  });
+
+  it('the real normalizer never moves the caret while composing', async () => {
+    const engine = new Nabu({ extensions: [ParagraphExtension] });
+    await engine.commit();
+    const root = document.createElement('div');
+    root.setAttribute('data-nabu-root', 'true');
+    const el = document.createElement('div');
+    el.setAttribute('data-block-id', engine.children[0].id);
+    el.appendChild(document.createTextNode('abc'));
+    root.appendChild(el);
+    document.body.appendChild(root);
+    window.getSelection().setBaseAndExtent(root, 1, root, 1); // a "dead" element caret on the root
+    engine.selection.sync();
+    engine.handleCompositionStart({});
+    expect(engine.selection.normalize()).toBe(false);
+    expect(window.getSelection().anchorNode).toBe(root);
+    document.body.innerHTML = '';
+  });
+});
+

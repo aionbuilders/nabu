@@ -1,4 +1,5 @@
 
+import { untrack } from "svelte";
 import { SvelteSelection } from "../utils/selection.svelte.js";
 
 /**
@@ -39,8 +40,17 @@ export class NabuSelection extends SvelteSelection {
                     // (root handler, slash menu…): make sure they read the CURRENT caret,
                     // not the one from a not-yet-delivered `selectionchange`.
                     this.sync();
+                    if (e.isComposing || e.keyCode === 229) return; // IME composition: hands off the caret
+                    // A caret left on a dead position by the PREVIOUS key is fixed (with that key's direction)
+                    // before this one acts on it.
+                    this.normalize();
+                    this.#arrowStart = null;
                     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                         this.#pendingDirection = 'forward';
+                        const live = window.getSelection();
+                        if (live?.isCollapsed && live.anchorNode && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                            this.#arrowStart = { key: e.key, node: live.anchorNode, offset: live.anchorOffset };
+                        }
                         this.nabu.storedMarks = null;
                     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                         this.#pendingDirection = 'backward';
@@ -52,77 +62,166 @@ export class NabuSelection extends SvelteSelection {
                         }
                     }
                 };
-                const onMousedown = () => { this.nabu.storedMarks = null; };
+                // The browser applies an arrow key's caret move right after `keydown`, but delivers `selectionchange`
+                // later (a task of its own): fix a dead landing as soon as the key is released, not a task later.
+                const onKeyup = (/** @type {KeyboardEvent} */ e) => {
+                    this.sync();
+                    if (e.isComposing || e.keyCode === 229) return;
+                    this.normalize();
+                    const start = this.#arrowStart;
+                    this.#arrowStart = null;
+                    if (start && start.key === e.key) this.#openTrailingIfStuck(start);
+                };
+                const onMousedown = () => { this.nabu.storedMarks = null; this.#pendingDirection = null; };
                 document.addEventListener('keydown', onKeydown, true);
+                document.addEventListener('keyup', onKeyup, true);
                 document.addEventListener('mousedown', onMousedown, true);
                 return () => {
+                    document.removeEventListener('keyup', onKeyup, true);
                     document.removeEventListener('keydown', onKeydown, true);
                     document.removeEventListener('mousedown', onMousedown, true);
                 };
             });
 
-            // Normalize invalid caret/focus positions: inert elements and element-node
-            // cursors (which happen in container padding / between block children).
-            // Works for both collapsed cursors and non-collapsed selections (shift+arrow):
-            //   - anchor invalid → collapse to corrected anchor
-            //   - only focus invalid → keep anchor, correct only focus (preserves the selection)
+            // Normalize invalid caret/focus positions (see `normalize()`). The effect only re-runs it when the
+            // DOM selection changed; input entry points (keydown / beforeinput…) call `normalize()` themselves,
+            // synchronously, so a keystroke never acts on a not-yet-corrected caret.
             $effect(() => {
-                const activeEl = document.activeElement;
-                if (activeEl && activeEl.closest?.('[data-nabu-ui], input, textarea, select, button')) {
+                this.anchorNode; this.anchorOffset; this.focusNode; this.focusOffset;
+                untrack(() => {
+                    this.normalize();
+                    // The pending arrow direction only describes the move that just produced this selection.
                     this.#pendingDirection = null;
-                    return;
-                }
-
-                const anchor = this.anchorNode;
-                const anchorOffset = this.anchorOffset;
-                const focus = this.focusNode;
-                const focusOffset = this.focusOffset;
-                if (!anchor) return;
-
-                const anchorEl = /** @type {Element | null} */ (anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentElement);
-                const focusEl = /** @type {Element | null} */ (focus?.nodeType === Node.ELEMENT_NODE ? focus : focus?.parentElement);
-
-                // Skip normalization when the selection touches a UI element (e.g. zone title input).
-                if (anchorEl?.closest('[data-nabu-ui]') || focusEl?.closest('[data-nabu-ui]')) {
-                    this.#pendingDirection = null;
-                    return;
-                }
-
-                const anchorInvalid = isInInert(anchor) || (
-                    anchor.nodeType !== Node.TEXT_NODE &&
-                    !!/** @type {Element} */ (anchor).closest?.('[data-block-id]')
-                );
-                const focusInvalid = !!focus && (isInInert(focus) || (
-                    focus.nodeType !== Node.TEXT_NODE &&
-                    !!/** @type {Element} */ (focus).closest?.('[data-block-id]')
-                ));
-
-                if (!anchorInvalid && !focusInvalid) {
-                    this.#pendingDirection = null;
-                    return;
-                }
-
-                if (anchorInvalid) {
-                    const dir = this.#pendingDirection ?? offsetHeuristic(anchor, anchorOffset);
-                    this.#pendingDirection = null;
-                    const target = findNearestTextNode(anchor, anchorOffset, dir);
-                    if (!target) return;
-                    const offset = dir === 'forward' ? 0 : (target.textContent?.length ?? 0);
-                    this.setBaseAndExtent(target, offset, target, offset);
-                } else if (focusInvalid && focus) {
-                    const dir = this.#pendingDirection ?? offsetHeuristic(focus, focusOffset);
-                    this.#pendingDirection = null;
-                    const target = findNearestTextNode(focus, focusOffset, dir);
-                    if (!target) return;
-                    const offset = dir === 'forward' ? 0 : (target.textContent?.length ?? 0);
-                    this.setBaseAndExtent(anchor, anchorOffset, target, offset);
-                }
+                });
             });
         });
     }
 
+    /**
+     * Move a caret / focus that sits on a NON-TEXT position to the nearest valid text position, in the
+     * direction of travel (arrow keys; a heuristic otherwise): inert blocks (dividers, images…), element
+     * carets (container padding, between blocks, the editor root) and stray text nodes outside any text
+     * block (whitespace around a toggle's arrow…) are all "dead" positions where typing would be swallowed.
+     * Hidden content is never a target (it is not rendered). Works for collapsed carets and for ranges
+     * (shift+arrow): invalid anchor → collapse to the corrected anchor; only the focus invalid → keep the
+     * anchor, correct the focus.
+     *
+     * Synchronous and idempotent (reads the live DOM selection): call it right after `sync()`.
+     * When ArrowDown / ArrowRight leaves the document with no text position after the caret, the nabu
+     * "opens" a trailing caret (see `Nabu.openTrailingCaret`).
+     * @returns {boolean} True if the selection was moved
+     */
+    normalize() {
+        if (typeof window === 'undefined' || !window.getSelection) return false;
+        if (this.nabu.composing) return false; // IME composition: the browser owns the DOM and the caret
+        const live = window.getSelection();
+        if (!live || live.rangeCount === 0) return false;
+
+        const activeEl = document.activeElement;
+        if (activeEl && activeEl.closest?.('[data-nabu-ui], input, textarea, select, button')) {
+            this.#pendingDirection = null;
+            return false;
+        }
+
+        const anchor = live.anchorNode;
+        const anchorOffset = live.anchorOffset;
+        const focus = live.focusNode;
+        const focusOffset = live.focusOffset;
+        if (!anchor) return false;
+
+        const anchorEl = /** @type {Element | null} */ (anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentElement);
+        const focusEl = /** @type {Element | null} */ (focus?.nodeType === Node.ELEMENT_NODE ? focus : focus?.parentElement);
+
+        // Skip normalization when the selection touches a UI element (e.g. zone title input).
+        if (anchorEl?.closest('[data-nabu-ui]') || focusEl?.closest('[data-nabu-ui]')) {
+            this.#pendingDirection = null;
+            return false;
+        }
+
+        const anchorInvalid = this.#isDead(anchor);
+        const focusInvalid = !!focus && this.#isDead(focus);
+
+        if (!anchorInvalid && !focusInvalid) return false;
+
+        /** @type {NodeFilter} */
+        const filter = { acceptNode: (node) => this.#isValidTextNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT };
+        const explicit = this.#pendingDirection;
+        this.#pendingDirection = null;
+
+        if (anchorInvalid) {
+            const dir = explicit ?? offsetHeuristic(anchor, anchorOffset);
+            const target = findNearestTextNode(anchor, anchorOffset, dir, filter);
+            if (!target) {
+                // Leaving the document by keyboard with nothing to land on: the document must offer a caret there.
+                if (explicit === 'forward') this.nabu.openTrailingCaret();
+                return false;
+            }
+            const offset = dir === 'forward' ? 0 : (target.textContent?.length ?? 0);
+            this.setBaseAndExtent(target, offset, target, offset);
+            return true;
+        }
+        if (focusInvalid && focus) {
+            const dir = explicit ?? offsetHeuristic(focus, focusOffset);
+            const target = findNearestTextNode(focus, focusOffset, dir, filter);
+            if (!target) return false;
+            const offset = dir === 'forward' ? 0 : (target.textContent?.length ?? 0);
+            this.setBaseAndExtent(anchor, anchorOffset, target, offset);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * A selection endpoint where nothing can be typed: inside an inert block, an element caret anywhere
+     * in an editor, or a text node that is not part of a text block's own text. Endpoints outside any
+     * editor are none of our business.
+     * @param {Node} node
+     */
+    #isDead(node) {
+        const el = /** @type {Element | null} */ (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+        if (!el?.closest('[data-nabu-root]')) return false;
+        if (isInInert(node)) return true;
+        if (node.nodeType !== Node.TEXT_NODE) return true;
+        return !this.#isValidTextNode(node);
+    }
+
+    /**
+     * True for a text node that belongs to the text of a text block (not inert, not whitespace
+     * between a container's children / around its UI).
+     * @param {Node} node
+     */
+    #isValidTextNode(node) {
+        if (isInInert(node)) return false;
+        const id = node.parentElement?.closest('[data-block-id]')?.getAttribute('data-block-id');
+        const block = id ? this.nabu.blocks.get(id) : null;
+        if (!block || !block.behaviors?.has('text')) return false;
+        return !block.element || block.element.contains(node);
+    }
+
     /** @type {'forward' | 'backward' | null} */
     #pendingDirection = null;
+
+    /**
+     * Caret at the keydown of an unmodified ArrowRight / ArrowDown, to tell at keyup whether the key moved it.
+     * @type {{ key: string, node: Node, offset: number } | null}
+     */
+    #arrowStart = null;
+
+    /**
+     * ArrowRight / ArrowDown that could not move the caret (browsers do not step onto a non-editable block such
+     * as an image), pressed in the last text block of a document that ends with a non-text block: the document
+     * must offer a caret after it.
+     * @param {{ node: Node, offset: number }} start
+     */
+    #openTrailingIfStuck(start) {
+        const live = window.getSelection();
+        if (!live?.isCollapsed || live.anchorNode !== start.node || live.anchorOffset !== start.offset) return;
+        const block = this.anchorBlock;
+        if (!block?.behaviors?.has('text') || block.findForward((b) => !!b.behaviors?.has('text'))) return;
+        const last = this.nabu.lastVisibleBlock;
+        if (!last || last.behaviors?.has('text')) return;
+        this.nabu.openTrailingCaret();
+    }
 
     anchorBlock = $derived.by(() => {
         this.anchorNode;
@@ -209,15 +308,6 @@ function offsetHeuristic(anchor, anchorOffset) {
     return 'backward';
 }
 
-/** @type {NodeFilter} */
-const TEXT_FILTER = {
-    acceptNode(/** @type {Node} */ node) {
-        if (isInInert(node)) return NodeFilter.FILTER_REJECT;
-        if (!/** @type {Text} */ (node).parentElement?.closest('[data-block-id]')) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-    }
-};
-
 /**
  * Returns the deepest last descendant of a node (for positioning a TreeWalker
  * so that nextNode() starts at the node immediately after the subtree).
@@ -241,11 +331,12 @@ function getLastDescendant(node) {
  * @param {Node} fromNode
  * @param {number} fromOffset
  * @param {'forward' | 'backward'} direction
+ * @param {NodeFilter} filter  Accepts the valid text nodes
  * @returns {Text | null}
  */
-function findNearestTextNode(fromNode, fromOffset, direction) {
+function findNearestTextNode(fromNode, fromOffset, direction, filter) {
     // @ts-ignore — TreeWalker filter shape is correct, TS typedef is overly strict
-    const bodyWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, TEXT_FILTER);
+    const bodyWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, filter);
 
     if (fromNode.nodeType === Node.TEXT_NODE) {
         bodyWalker.currentNode = fromNode;
@@ -271,7 +362,7 @@ function findNearestTextNode(fromNode, fromOffset, direction) {
         }
         // Past last child → last valid text inside the element (sub-walker), or before it
         // @ts-ignore
-        const sub = document.createTreeWalker(fromNode, NodeFilter.SHOW_TEXT, TEXT_FILTER);
+        const sub = document.createTreeWalker(fromNode, NodeFilter.SHOW_TEXT, filter);
         let last = null, n;
         while ((n = sub.nextNode())) last = n;
         if (last) return /** @type {Text} */ (last);

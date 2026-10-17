@@ -58,6 +58,9 @@
  * @property {string} [name]
  * @property {import('svelte').Component} [component]
  * @property {typeof Block} [block]
+ * @property {boolean} [defaultBlock]
+ *   Marks `block` as the editor's DEFAULT text block (the one created when the engine needs an
+ *   empty text block of its own: a caret below a trailing void block, …). Last one wins.
  * @property {Partial<ExtensionHooks>} [hooks]
  * @property {Record<string, (nabu: Nabu) => any>} [serializers]
  * @property {Record<string, (nabu: Nabu, data: any, topic: string) => any>} [actions]
@@ -77,6 +80,7 @@ export class Extension {
         this.name = name;
         this.component = init.component;
         this.block = init.block;
+        this.defaultBlock = !!init.defaultBlock;
         /** @type {Partial<ExtensionHooks>} */
         this.hooks = init.hooks || {};
         /** @type {Record<string, (nabu: Nabu) => any>} */
