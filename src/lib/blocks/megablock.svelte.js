@@ -77,22 +77,31 @@ export class MegaBlock extends Block {
 
     /**
      * Props to include in the clipboard representation of this container block.
-     * Override in subclasses that carry structural props (e.g. List → { listType }).
+     * Override in subclasses that carry structural props (e.g. List -> { listType }, ListItem -> { checked },
+     * Toggle -> { collapsed }).
      * @returns {Record<string, any>}
      */
     get clipboardProps() { return {}; }
 
     /**
-     * Serializes the portion of this MegaBlock that falls within the given
-     * selection boundaries, recursively.
+     * Clipboard props when the copied slice starts at `firstChildIndex` (the children before it are NOT copied).
+     * Containers whose props depend on their first copied child (an ordered list's `start`) override this.
+     * @param {number} firstChildIndex
+     * @returns {Record<string, any>}
+     */
+    clipboardPropsFrom(firstChildIndex) { return this.clipboardProps; }
+
+    /**
+     * Serializes the portion of this MegaBlock that falls within the given selection boundaries, recursively.
      *
-     * For hybrid blocks (MegaBlock + text behavior, like ListItem):
-     *   if startBlock or endBlock IS this block, serialize text directly.
-     *   if neither boundary is set, this block is fully selected — serialize all text.
-     *
-     * For pure containers (like List):
-     *   find direct children that contain/are the boundaries, slice children in range,
-     *   recurse into each with propagated context.
+     * The context carries the selection boundary blocks that belong to THIS subtree (`startBlock` / `endBlock`, null =
+     * the selection extends past this block on that side, i.e. it is fully selected on that side). Document order of a
+     * block is: own text (hybrid blocks only), then its children. So:
+     *   - own text is copied unless the selection starts inside a child; it is clipped to `startFrom` when this block IS
+     *     the start boundary, and to `endTo` when it IS the end boundary;
+     *   - children are copied unless the selection ends in the own text; only those between the child holding the start
+     *     boundary and the child holding the end boundary (inclusive) are kept, each one recursively clipped.
+     * A pure container (no text) simply has no own-text part. Nothing here depends on a concrete block type.
      *
      * @param {{ startBlock?: Block|null, startFrom?: number, endBlock?: Block|null, endTo?: number|null }} [ctx]
      * @returns {import('../utils/extensions.js').PasteBlock | null}
@@ -101,61 +110,58 @@ export class MegaBlock extends Block {
         const tb = this.behaviors?.get('text');
         const imStart = startBlock === this;
         const imEnd   = endBlock   === this;
+        const childOfThis = (/** @type {Block|null} */ block) => {
+            for (let cur = block; cur; cur = cur.parent ?? null) if (cur.parent === this) return cur;
+            return null;
+        };
+        const startChild = startBlock && !imStart ? childOfThis(startBlock) : null;
+        const endChild   = endBlock   && !imEnd   ? childOfThis(endBlock)   : null;
 
-        // ── Hybrid block (has text): this block IS a selection boundary or fully selected ──
-        if (tb && (imStart || imEnd || (!startBlock && !endBlock))) {
+        const textIncluded     = !!tb && !startChild;
+        const childrenIncluded = !imEnd && !!this.children?.length;
+        if (!textIncluded && imEnd) return null;
+
+        // ── Own text ──
+        /** @type {import('../utils/extensions.js').PasteBlock | null} */
+        let result = null;
+        if (tb && textIncluded) {
+            const length  = tb.container.length;
             const from    = imStart ? startFrom : 0;
-            const to      = imEnd   ? endTo     : tb.container.length;
+            const to      = imEnd   ? (endTo ?? length) : length;
             const partial = imStart && imEnd ? 'both' : imStart ? 'start' : imEnd ? 'end' : false;
-            const delta   = tb.container.sliceDelta(from, to ?? tb.container.length);
-            const result  = /** @type {import('../utils/extensions.js').PasteBlock} */ (
-                { type: this.type, props: this.clipboardProps, partial, delta }
+            result = /** @type {import('../utils/extensions.js').PasteBlock} */ (
+                { type: this.type, props: this.clipboardProps, partial, delta: tb.container.sliceDelta(from, to) }
             );
-            // If fully selected and has children (e.g. ListItem with sublist), include them too
-            if (!imStart && !imEnd && this.children?.length) {
-                const childrenSerialized = this.children.map(child =>
-                    typeof child.serializeForClipboard === 'function'
-                        ? child.serializeForClipboard({})
-                        : child.serialize('application/x-nabu+json', { partial: false })
-                ).filter(Boolean);
-                if (childrenSerialized.length) result.children = childrenSerialized;
-            }
-            return result;
         }
 
-        // ── Pure container: find relevant children by walking up from boundaries ──
-        if (!this.children?.length) return null;
+        // ── Children inside the selection ──
+        let kids = [];
+        let firstIndex = 0;
+        if (childrenIncluded) {
+            const si = startChild ? this.children.indexOf(/** @type {Block} */ (startChild)) : 0;
+            const ei = endChild   ? this.children.indexOf(/** @type {Block} */ (endChild))   : this.children.length - 1;
+            if (si === -1 || ei === -1 || si > ei) return result;
+            firstIndex = si;
+            const relevant = this.children.slice(si, ei + 1);
+            const lastI = relevant.length - 1;
+            kids = relevant.map((child, i) => {
+                const cs = i === 0     && startChild ? startBlock : null;
+                const ce = i === lastI && endChild   ? endBlock   : null;
+                if (typeof child.serializeForClipboard === 'function') {
+                    return child.serializeForClipboard({ startBlock: cs, startFrom: cs ? startFrom : 0, endBlock: ce, endTo: ce ? endTo : null });
+                }
+                return child.serialize('application/x-nabu+json', {
+                    from:    cs ? startFrom : 0,
+                    to:      ce ? endTo     : null,
+                    partial: cs && ce ? 'both' : cs ? 'start' : ce ? 'end' : false,
+                });
+            }).filter(Boolean);
+        }
 
-        const sc = (startBlock ? findDirectChildOf(startBlock, this) : null) ?? this.children[0];
-        const ec = (endBlock   ? findDirectChildOf(endBlock,   this) : null) ?? this.children.at(-1);
-        if (!sc || !ec) return null;
-
-        const si = this.children.indexOf(sc);
-        const ei = this.children.indexOf(ec);
-        if (si === -1 || ei === -1) return null;
-
-        const relevant = this.children.slice(si, ei + 1);
-        const lastI = relevant.length - 1;
-
-        const children = relevant.map((child, i) => {
-            const isFirst = i === 0;
-            const isLast  = i === lastI;
-            const childCtx = {
-                startBlock: isFirst ? startBlock : null,
-                startFrom:  isFirst ? startFrom  : 0,
-                endBlock:   isLast  ? endBlock   : null,
-                endTo:      isLast  ? endTo      : null,
-            };
-            if (typeof child.serializeForClipboard === 'function') {
-                return child.serializeForClipboard(childCtx);
-            }
-            return child.serialize('application/x-nabu+json', {
-                from:    isFirst && startBlock ? startFrom : 0,
-                to:      isLast  && endBlock   ? endTo     : null,
-                partial: isFirst && isLast ? 'both' : isFirst ? 'start' : isLast ? 'end' : false,
-            });
-        }).filter(Boolean);
-
-        return children.length ? { type: this.type, props: this.clipboardProps, children } : null;
+        if (result) {
+            if (kids.length) result.children = kids;
+            return result;
+        }
+        return kids.length ? { type: this.type, props: this.clipboardPropsFrom(firstIndex), children: kids } : null;
     }
 }

@@ -99,6 +99,11 @@ export class ListItem extends MegaBlock {
 
     isTodo = $derived(/** @type {any} */ (this.parent)?.listType === 'todo');
 
+    /** A to-do item carries its `checked` state onto the clipboard. */
+    get clipboardProps() {
+        return this.isTodo ? { checked: this.checked } : {};
+    }
+
     /**
      * Set the checked state and persist to Loro.
      * @param {boolean} v

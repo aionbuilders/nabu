@@ -1094,7 +1094,14 @@ export class Nabu {
             return text ? `<p>${escapeHtml(text)}</p>` : ''; // unknown block type: escaped, never raw
         };
 
-        e.clipboardData.setData('text/plain', pasteBlocks.map(pb => pbToMarkdown(pb)).join('\n\n'));
+        // text/plain: a selection inside ONE text block is its raw selected text (no markdown syntax: no `**`, fences,
+        // `# `, `- `); several blocks -> markdown.
+        const single = pasteBlocks.length === 1 && startBlock === endBlock && !pasteBlocks[0].children?.length && Array.isArray(pasteBlocks[0].delta)
+            ? pasteBlocks[0] : null;
+        const plain = single
+            ? /** @type {any[]} */ (single.delta).map(op => typeof op.insert === 'string' ? op.insert : '').join('')
+            : pasteBlocks.map(pb => pbToMarkdown(pb)).join('\n\n');
+        e.clipboardData.setData('text/plain', plain);
         e.clipboardData.setData('text/html',  pasteBlocks.map(pb => pbToHtml(pb)).join('\n'));
 
     }
@@ -1324,10 +1331,14 @@ export class Nabu {
             if (!ContainerClass) return afterNode;
             const container = ContainerClass.create(this, pb.type, pb.props || {});
             container.node.moveAfter(afterNode);
+            // A container with its own text (list item, toggle…) keeps it.
+            const ctb = container.behaviors?.get('text');
+            if (ctb && pb.delta?.length) ctb.applyDelta(pb.delta);
             for (const child of pb.children) {
                 this.#createInContainer(child, container.node.id.toString());
             }
-            return container.node;
+            const wrapper = wrapOrphan(this, container);
+            return wrapper ? wrapper.node : container.node;
         }
 
         const BlockClass = this.registry.get(pb.type) || this.registry.get('paragraph');

@@ -10,6 +10,13 @@
 - Paste: the HTML interpreter drops `javascript:` / `data:` hrefs (text kept as plain text), never reads text from `<object>`, `<embed>`, `<svg>`, `<math>`, `<template>`…, and `<img>` / `<video>` / `<a download>` with an unsafe source no longer become media / file blocks; markdown `![alt](javascript:…)` stays plain text.
 - Render: `RichText` never renders an unsafe link mark as a live `<a>` (documents loaded from a snapshot or a remote peer are covered; safe links also get `rel="noopener noreferrer"`); `MediaBlock.displaySrc` only returns a media-safe URL, so Image / Video / File never put `javascript:` in a `src` / `href`.
 
+### Clipboard
+- Fix (P-43, P-29): copying a block that has BOTH text and children (list item, toggle) lost content. A boundary hybrid block now serializes its own text slice (clipped to the selection) AND the children inside the selection, recursively clipped; a hybrid that is neither boundary nor fully selected keeps its own text (an item "a" between two selected items was emitted empty). Generic rule in `MegaBlock.serializeForClipboard`: own text first (unless the selection starts inside a child), then the children between the ones holding the selection start and end.
+- Fix: structural props now travel with the copy: a to-do item keeps `checked` (it was copied unchecked), a toggle keeps `collapsed` (a collapsed toggle was copied open). New overridable `MegaBlock#clipboardProps` on `ListItem` and `ToggleBlock`.
+- Fix (P-45): copying items 2-3 of an ordered list that starts at 3 now yields a list starting at 4 (the first copied item's number) instead of 3. New overridable `MegaBlock#clipboardPropsFrom(firstChildIndex)` (implemented by `List`).
+- `text/plain` on copy (P-46): a selection inside ONE text block (paragraph, heading, list item, code…) is now its raw selected text, no markdown syntax (`**`, fences, `# `, `- `); a selection over several blocks is still markdown. `text/html` and `application/x-nabu+json` are unchanged by this rule.
+- Paste: a container pasted with its own text (list item, toggle) keeps that text, and a container that needs a parent (a list item pasted at root level) is wrapped like leaf blocks already were.
+
 ### Paste
 - Pasting a whole block (e.g. `# Title`) into an **empty root-level block** now adopts its type. Pasting into existing text, or into a nested block (list item…), never changes the block type.
 - Plain-text paste: **one non-blank line = one block** (runs of blank lines are separators). `importMarkdown()` keeps CommonMark semantics (consecutive lines = one paragraph) via the new optional `interpret(raw, nabu, { joinLines })` argument of paste interpreters.

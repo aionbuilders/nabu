@@ -18,7 +18,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { gotoEditor, clearAndReset, press } from './helpers/editor.js';
 import { undo, redo, selectAll } from './helpers/keyboard.js';
 import {
-  buildDoc, I, UL, TODO, outline, caret, violations, allText, focusAt, selectRange, collectErrors,
+  buildDoc, I, UL, P, TODO, outline, caret, violations, allText, focusAt, focusEmpty, selectRange, collectErrors,
 } from './helpers/model.js';
 import { buildBlocks, buildTree, tree, flat, H, Q, C, D, Para, Code, Tog, Hr, Pp, type TreeSpec } from './helpers/blocks.js';
 import { copy, cut, fragStr, fragTexts, type ClipEvent } from './helpers/clip-capture.js';
@@ -102,8 +102,9 @@ test.describe('A · copy payloads', () => {
     }]);
     // html: semantic marks, the href is attribute-escaped
     expect(ev.html).toBe('<p><strong>llo</strong> <a href="https://x.com/a?b=1&amp;c=2">wor</a></p>');
-    // CURRENT: text/plain is MARKDOWN (not the visible text): **bold**, [label](href), blocks joined by a blank line
-    expect(ev.text).toBe('**llo** [wor](https://x.com/a?b=1&c=2)');
+    // DECIDED (P-46): a selection inside ONE text block puts its RAW text on text/plain (no markdown syntax); the marks
+    // live in text/html and in the fragment
+    expect(ev.text).toBe('llo wor');
     // copy never touches the document
     expect(await flat(page)).toBe('p(hello world)');
   });
@@ -153,9 +154,8 @@ test.describe('A · copy payloads', () => {
     await selectRange(page, 'alpha', 2, 'two', 1); // "pha", "one", "t"
     const ev = await copy(page);
 
-    // BROKEN: only `list-item(start)"pha"` is emitted — the sublist items "one" and "t" are dropped, because the LCA of the
-    // two boundary blocks is "alpha" itself, and MegaBlock.serializeForClipboard serializes a boundary hybrid block
-    // as text only, ignoring the children that lie inside the selection (megablock.svelte.js:107-121).
+    // P-43: the LCA of the two boundary blocks is "alpha" itself (a hybrid: text + children); it serializes its text tail
+    // AND the children that lie inside the selection.
     expect(fragTexts(ev.nabu!.blocks)).toEqual(['pha', 'one', 't']);
     expectTextInAllPayloads(ev, ['pha', 'one', 't']);
     expect(ev.html).toContain('<ul>');
@@ -167,9 +167,8 @@ test.describe('A · copy payloads', () => {
     await selectRange(page, 'x1', 1, 'S3', 1); // "1", whole a, s1, s2, "S"
     const ev = await copy(page);
 
-    // BROKEN (P-29): the item "a" is emitted as `list-item{children:[list]}` with NO delta -> an EMPTY item ("- " in
-    // markdown, `<li><ul>` in html). MegaBlock.serializeForClipboard "pure container" branch (megablock.svelte.js:123-159)
-    // returns `{type, props, children}` for a hybrid block (list-item) that is neither a boundary nor fully selected.
+    // P-29: the item "a" (a hybrid that is neither boundary nor fully selected as a whole) keeps its OWN text, followed by
+    // its children inside the selection.
     expect(frag(ev)).toHaveLength(1);
     expect(fragTexts(ev.nabu!.blocks)).toEqual(['1', 'a', 's1', 's2', 'S']);
     expectTextInAllPayloads(ev, ['1', 'a', 's1', 's2', 'S']);
@@ -213,7 +212,7 @@ test.describe('A · copy payloads', () => {
     await selectRange(page, 'Head', 2, 'body2', 2);
     const ev = await copy(page);
 
-    // header tail + both body paragraphs (second one partial) must all be there
+    // P-43: header tail + both body paragraphs (second one partial) must all be there
     expectTextInAllPayloads(ev, ['ad', 'body1', 'bo']);
     expect(fragTexts(ev.nabu!.blocks)).toEqual(['ad', 'body1', 'bo']);
     expect(await tree(page)).toBe('p(before) ; toggle▾(Head){p(body1) p(body2)} ; p(after)');
@@ -227,9 +226,10 @@ test.describe('A · copy payloads', () => {
     // CURRENT: a toggle fully inside the selection is copied with its whole body, collapsed or not (nothing lost)
     expect(fragTexts(ev.nabu!.blocks)).toEqual(['fore', 'Head', 'body1', 'body2', 'af']);
     expectTextInAllPayloads(ev, ['Head', 'body1', 'body2']);
-    // CURRENT: the `collapsed` flag is not part of the fragment props, so the copy re-opens as an expanded <details open>
-    expect(ev.nabu!.blocks[1].props).toEqual({});
-    expect(ev.html).toContain('<details open><summary>Head</summary>');
+    // P-43: the `collapsed` flag is part of the fragment props: a collapsed toggle is copied collapsed (no `open`)
+    expect(ev.nabu!.blocks[1].props).toEqual({ collapsed: true });
+    expect(ev.html).toContain('<details><summary>Head</summary>');
+    expect(ev.html).not.toContain('<details open>');
     expect(await tree(page)).toBe('p(before) ; toggle▸(Head){p(body1) p(body2)} ; p(after)');
   });
 
@@ -241,9 +241,7 @@ test.describe('A · copy payloads', () => {
 
     expect(ev.nabu!.blocks[0].type).toBe('list');
     expect(ev.nabu!.blocks[0].props).toEqual({ listType: 'todo' });
-    // BROKEN: every item is emitted with `props: {}` -> all items come out UNCHECKED. ListItem does not override
-    // `clipboardProps` (megablock.svelte.js:83 returns {}), so `checked` is never serialized; the markdown is
-    // "- [ ] t1 / - [ ] t2 / - [ ] t3" and the html has no `checked` attribute.
+    // P-43: ListItem.clipboardProps carries `checked` when the item is a to-do.
     expect(ev.nabu!.blocks[0].children.map((c: any) => c.props?.checked)).toEqual([true, false, true]);
     expect(ev.text).toBe('- [x] t1\n- [ ] t2\n- [x] t3');
     expect(ev.html).toBe(
@@ -268,14 +266,13 @@ test.describe('A · copy payloads', () => {
     expect(ev.nabu!.blocks).toHaveLength(1);
     expect(ev.nabu!.blocks[0].type).toBe('list');
     expect(fragTexts(ev.nabu!.blocks)).toEqual(['i2', 'i3']);
-    // CURRENT: the list's own `start` (3) is copied as is, NOT shifted by the dropped first item: the copied items are
-    // numbered 3, 4 although they were items 4, 5 of the source. No text is lost; only the numbering restarts at 3.
-    expect(ev.nabu!.blocks[0].props).toEqual({ listType: 'ordered', start: 3 });
-    expect(ev.text).toBe('3. i2\n4. i3');
-    expect(ev.html).toBe('<ol start="3"><li>i2</li><li>i3</li></ol>');
+    // P-45: the copy is numbered from the first copied item's visual number (3 + 1 = 4), not from the original list start
+    expect(ev.nabu!.blocks[0].props).toEqual({ listType: 'ordered', start: 4 });
+    expect(ev.text).toBe('4. i2\n5. i3');
+    expect(ev.html).toBe('<ol start="4"><li>i2</li><li>i3</li></ol>');
   });
 
-  test('15 · partial lines inside a code block: text/plain is the code wrapped in a markdown fence', async ({ page }) => {
+  test('15 · partial lines inside a code block: text/plain is the RAW code (no fence)', async ({ page }) => {
     const src = 'const a = 1;\nif (a < b && c > d) {\n  run();\n}';
     await buildTree(page, [Code(src, 'js')]);
     await selectRange(page, src, 6, src, src.indexOf('run') + 1); // "a = 1;\nif (...) {\n  r"
@@ -283,12 +280,63 @@ test.describe('A · copy payloads', () => {
 
     const picked = src.slice(6, src.indexOf('run') + 1);
     expect(ev.nabu!.blocks).toEqual([{ type: 'code', partial: 'both', props: { language: 'js' }, delta: [{ insert: picked }] }]);
-    // CURRENT: text/plain is MARKDOWN: the code is wrapped in a ```js fence (not the raw code). Pasting into a plain-text
-    // field gives the fence lines too.
-    expect(ev.text).toBe('```js\n' + picked + '\n```');
+    // DECIDED (P-46): inside ONE text block (code included) text/plain is the raw selected text, no ```js fence
+    expect(ev.text).toBe(picked);
     // html: <pre><code>, and the code's `<`, `>`, `&` are escaped
     expect(ev.html).toBe('<pre><code>' + picked.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code></pre>');
     expect(await tree(page)).toBe(`code:js(${src.replace(/\n/g, '\\n')})`);
+  });
+
+  test('16 · P-46: partial selection inside a heading -> raw text (no `# `)', async ({ page }) => {
+    await buildTree(page, [H('Big title', 2)] as TreeSpec[]);
+    await selectRange(page, 'Big title', 4, 'Big title', 9);
+    const ev = await copy(page);
+    expect(ev.text).toBe('title');
+    expect(ev.html).toBe('<h2>title</h2>');
+  });
+
+  test('17 · P-46: partial selection inside a list item -> raw text (no `- `)', async ({ page }) => {
+    await buildDoc(page, [UL(I('alpha'), I('beta'))]);
+    await selectRange(page, 'alpha', 1, 'alpha', 4);
+    const ev = await copy(page);
+    expect(ev.text).toBe('lph');
+    expect(fragTexts(ev.nabu!.blocks)).toEqual(['lph']);
+  });
+
+  test('18 · P-46: two paragraphs -> markdown, joined by a blank line (unchanged)', async ({ page }) => {
+    await buildBlocks(page, [H('Title'), Para('para')]);
+    await selectRange(page, 'Title', 0, 'para', -1);
+    const ev = await copy(page);
+    expect(ev.text).toBe('# Title\n\npara');
+  });
+
+  test('19 · P-43: a collapsed toggle keeps `collapsed:true` in the fragment, an open one `collapsed:false`', async ({ page }) => {
+    await buildTree(page, [Pp('before'), Tog('Shut', [Pp('hidden')], true), Tog('Open', [Pp('shown')], false), Pp('after')]);
+    await selectRange(page, 'before', 0, 'after', -1);
+    const ev = await copy(page);
+    expect(ev.nabu!.blocks[1].props).toEqual({ collapsed: true });
+    expect(ev.nabu!.blocks[2].props).toEqual({ collapsed: false });
+    expect(ev.html).toContain('<details><summary>Shut</summary>');
+    expect(ev.html).toContain('<details open><summary>Open</summary>');
+  });
+
+  test('20 · P-29 round-trip: copy then paste back (internal fragment) reproduces the selected structure and texts', async ({ page }) => {
+    await buildDoc(page, [UL(I('x1'), I('a', UL(I('s1'), I('s2'), I('S3')))), P('')]);
+    await selectRange(page, 'x1', 1, 'S3', 1); // "1", whole a, s1, s2, "S"
+    const ev = await copy(page);
+    expect(ev.nabuRaw).not.toBe('');
+
+    // paste the copied internal fragment into the empty paragraph at the end of the document
+    await focusEmpty(page);
+    await page.evaluate((raw) => {
+      const dt = new DataTransfer();
+      dt.setData('application/x-nabu+json', raw);
+      (document.activeElement ?? document.body).dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, ev.nabuRaw);
+
+    // the source list is untouched; the (still empty) anchor paragraph is followed by the pasted structure
+    await expect.poll(() => outline(page)).toBe('ul[x1, a > ul[s1, s2, S3]] ; p(∅) ; ul[1, a > ul[s1, s2, S]]');
+    expect(await violations(page)).toEqual([]);
   });
 });
 

@@ -57,6 +57,17 @@ export class List extends MegaBlock {
         return this.start === null ? { listType: this.listType } : { listType: this.listType, start: this.start };
     }
 
+    /**
+     * Copying a slice that starts at item `firstChildIndex` of an ORDERED list: the copy is numbered from that item's
+     * visual number (`start + index`), not from the original list start.
+     * @param {number} firstChildIndex
+     */
+    clipboardPropsFrom(firstChildIndex) {
+        if (this.listType !== 'ordered' || !firstChildIndex) return this.clipboardProps;
+        const start = listStart('ordered', (this.start ?? 1) + firstChildIndex);
+        return start === null ? { listType: this.listType } : { listType: this.listType, start };
+    }
+
     component = $derived(this.nabu.components.get("list") || ListComponent);
 
     root = $derived(!this.parent);

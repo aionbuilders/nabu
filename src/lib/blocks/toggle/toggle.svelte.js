@@ -64,6 +64,9 @@ export class ToggleBlock extends MegaBlock {
     /** A collapsed toggle does not render its body: navigation must never put the caret in it. */
     get hidesChildren() { return this.collapsed; }
 
+    /** A collapsed toggle stays collapsed on the clipboard. */
+    get clipboardProps() { return { collapsed: this.collapsed }; }
+
     static placeholder = 'Toggle…';
 
     component = $derived(this.nabu.components.get("toggle") || ToggleComponent);
