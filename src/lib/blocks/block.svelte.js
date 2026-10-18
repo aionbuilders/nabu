@@ -398,8 +398,11 @@ export class Block {
     ascend(eventName, event, data = {}) {
         //@ts-ignore
         if (this.parent && typeof this.parent[eventName] === "function") {
+            // A container handles the event for its children; a falsy result DECLINES it (e.g. a toggle only
+            // takes the Enter that exits its body), and the registered hooks below get their turn.
             //@ts-ignore
-            return this.parent[eventName](event, { ...data, from: this });
+            const handled = this.parent[eventName](event, { ...data, from: this });
+            if (handled) return handled;
         }
 
         // 2. On essaye les hooks d'extensions enregistrés dans Nabu

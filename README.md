@@ -206,7 +206,7 @@ Provided by `TypographyExtension` (included in TextPreset, DocumentPreset, and F
 
 ### Dialogue marker
 
-A dialogue line is displayed and exported with a dash, an EN dash `–` by default. `DialogueExtension` is the default instance; use the factory to pick another marker:
+A dialogue line is **displayed** with a dash, an EN dash `–` by default. `DialogueExtension` is the default instance; use the factory to pick another one:
 
 ```js
 import { createDialogueExtension } from '@aionbuilders/nabu';
@@ -214,7 +214,7 @@ import { createDialogueExtension } from '@aionbuilders/nabu';
 new Nabu({ extensions: [/* … */, createDialogueExtension({ dash: '—' })] });
 ```
 
-The dash is shown through the CSS custom property `--nb-dialogue-dash` (set it on any ancestor or rule to override the configured dash, e.g. `--nb-dialogue-dash: "—"`) and written by the markdown export (`– Tu viens ?`). Markdown import and paste recognize both `–` and `—` as dialogue markers.
+The dash is shown through the CSS custom property `--nb-dialogue-dash` (set it on any ancestor or rule to override the configured dash, e.g. `--nb-dialogue-dash: "—"`). It is purely visual: the **markdown syntax** of a dialogue line is always `-- ` (two hyphens + space, e.g. `-- Tu viens ?`), for export, import and paste, whatever the display dash. Lines starting with `–` or `—` are plain text, not dialogue (they are common list bullets in some languages).
 
 ### Inline markdown shortcuts
 
@@ -247,7 +247,7 @@ engine.redo();
 
 // Serialize
 const markdown = engine.serialize('markdown');
-// dialogue blocks serialize as: – Tu viens ce soir ?
+// dialogue blocks serialize as: -- Tu viens ce soir ?
 
 const json = engine.serialize('json');
 

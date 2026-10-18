@@ -32,17 +32,17 @@ describe('Paragraph markdown serialization', () => {
 // ── Dialogue markdown serializer ───────────────────────────────────────────
 
 describe('Dialogue markdown serialization', () => {
-  it('prepends the dash (en dash by default) to the text content', () => {
+  it('prepends the `-- ` marker (never the display dash) to the text content', () => {
     const text = 'Hello said the fox';
-    // The dialogue serializer does: `${dash} ${behavior.toMarkdown()}`
-    const markdown = `– ${deltaToMarkdown([{ insert: text }])}`;
-    expect(markdown).toBe(`– ${text}`);
+    // The dialogue serializer does: `-- ${behavior.toMarkdown()}`
+    const markdown = `-- ${deltaToMarkdown([{ insert: text }])}`;
+    expect(markdown).toBe(`-- ${text}`);
   });
 
   it('handles bold inside dialogue', () => {
     const delta = [{ insert: 'bold', attributes: { bold: true } }];
-    const markdown = `– ${deltaToMarkdown(delta)}`;
-    expect(markdown).toBe('– **bold**');
+    const markdown = `-- ${deltaToMarkdown(delta)}`;
+    expect(markdown).toBe('-- **bold**');
   });
 });
 

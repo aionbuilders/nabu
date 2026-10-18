@@ -462,22 +462,22 @@ test.describe('D · Dialogue', () => {
     await expectValid(page);
   });
 
-  test('13 · marks inside a dialogue + the dash is a CSS prefix (not part of the text); markdown uses an en-dash', async ({ page }) => {
+  test('13 · marks inside a dialogue + the dash is a CSS prefix (not part of the text); markdown uses `-- `', async ({ page }) => {
     await buildBlocks(page, [D('')]);
     await focusEmpty(page);
     await page.keyboard.type('hi there');
-    await expectMd(page, '– hi there');
+    await expectMd(page, '-- hi there');
     await press(page, 'Home');
     await press(page, 'Shift+End');
     await bold(page);
-    await expectMd(page, '– **hi there**');
+    await expectMd(page, '-- **hi there**');
     await expectFlat(page, 'dialogue(hi there)');
     await press(page, 'ArrowRight');
     await page.keyboard.type('!');
     await expectFlat(page, 'dialogue(hi there!)');
     // The dash only exists as the ::before pseudo-element of the block: the model text stays dash-free.
     const dash = await page.evaluate(() => getComputedStyle(document.querySelector('[data-block-type="dialogue"]')!, '::before').content);
-    // DECIDED (P-37): one configurable dash (createDialogueExtension({ dash }), default EN dash "–") for display and export.
+    // DECIDED (P-37): the configurable dash (createDialogueExtension({ dash }), default EN dash "–") is display only; the markdown is always `-- `.
     expect(dash).toBe('"–"');
     expect(await page.locator('[data-block-type="dialogue"]').innerText()).not.toMatch(/[–—]/);
     expect((await getJson(page)).blocks[0].type).toBe('dialogue');

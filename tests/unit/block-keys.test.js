@@ -3,7 +3,7 @@
  * Unit tests for P-36 .. P-39 — Enter / Backspace / Delete behaviours of Heading, Dialogue, Callout, Code, Divider.
  *  - P-36 Heading split: middle -> two headings, end -> paragraph below, start -> empty paragraph above.
  *  - P-37 Dialogue: the block-type-specific onSplit wins over the generic Paragraph one (Block#ascend owner priority);
- *    configurable dash (`createDialogueExtension`), markdown export / import.
+ *    configurable display dash (`createDialogueExtension`), markdown syntax fixed to `-- `, export / import / paste.
  *  - P-38 Callout: Backspace at offset 0 of a non-empty callout is a no-op.
  *  - P-39 Code: Backspace at 0 -> paragraph; Divider: Delete at the end of the block before it deletes it.
  * Real Nabu with a stubbed selection (there is no DOM selection in unit tests).
@@ -20,6 +20,8 @@ import { CodeExtension } from '$lib/blocks/code/index.js';
 import { DividerExtension } from '$lib/blocks/divider/index.js';
 import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
 import { BlockExtension } from '$lib/blocks/block.extension.js';
+import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
+import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
 
 async function makeEditor(extra = [DialogueExtension]) {
   const engine = new Nabu({
@@ -87,6 +89,18 @@ describe('Block#ascend — the hooks of the extension owning the block type run 
     const own = vi.fn().mockReturnValue(false);
     const owners = new WeakMap([[generic, 'paragraph'], [own, 'dialogue']]);
     expect(mk([generic, own], owners).ascend('onSplit', null, {})).toBe('generic');
+  });
+
+  it('a container handler that DECLINES (falsy) lets the registered hooks run; a truthy one wins', () => {
+    const generic = vi.fn().mockReturnValue('generic');
+    const b = mk([generic], undefined);
+    const decline = vi.fn().mockReturnValue(false);
+    b.parent = { onSplit: decline };
+    expect(b.ascend('onSplit', null, { offset: 0 })).toBe('generic');
+    expect(decline).toHaveBeenCalledOnce();
+    b.parent = { onSplit: vi.fn().mockReturnValue('container') };
+    expect(b.ascend('onSplit', null, {})).toBe('container');
+    expect(generic).toHaveBeenCalledTimes(1);
   });
 
   it('keeps registration order without owners (mock nabu)', () => {
@@ -167,39 +181,66 @@ describe('P-37 Dialogue split dispatch', () => {
 });
 
 describe('P-37 Dialogue dash', () => {
-  it('default instance: en dash, exported as markdown with it', async () => {
+  it('default instance: en dash displayed, markdown syntax is always `-- `', async () => {
     const engine = await makeEditor();
     const [d] = await build(engine, [['dialogue', 'hello']]);
     expect(Dialogue.dash).toBe('–');
     expect(d.dash).toBe('–');
-    expect(d.serialize('markdown')).toBe('– hello');
-    expect(engine.registry.get('dialogue').toMarkdown({ delta: [{ insert: 'hello' }] })).toBe('– hello');
+    expect(d.serialize('markdown')).toBe('-- hello');
+    expect(engine.registry.get('dialogue').toMarkdown({ delta: [{ insert: 'hello' }] })).toBe('-- hello');
   });
 
-  it('createDialogueExtension({ dash }) configures display and export; blocks stay Dialogue instances', async () => {
+  it('createDialogueExtension({ dash }) configures the display only; the markdown does not change', async () => {
     const engine = await makeEditor([createDialogueExtension({ dash: '—' })]);
     const [d] = await build(engine, [['dialogue', 'hello']]);
     expect(d).toBeInstanceOf(Dialogue);
     expect(d.dash).toBe('—');
-    expect(d.serialize('markdown')).toBe('— hello');
+    expect(d.serialize('markdown')).toBe('-- hello');
+    expect(engine.registry.get('dialogue').toMarkdown({ delta: [{ insert: 'hello' }] })).toBe('-- hello');
     // a block created by the registered class (Dialogue.create) and a block loaded back share the configured dash
     const created = engine.insert('dialogue', { text: 'x' });
     expect(created.dash).toBe('—');
+    expect(created.serialize('markdown')).toBe('-- x');
     // the default instance is not affected
     expect(DialogueExtension.block).toBe(Dialogue);
     expect(createDialogueExtension().block).toBe(Dialogue);
   });
 
-  it('markdown import recognizes both – and —', () => {
+  it('markdown import recognizes `-- ` only; `–` / `—` / `- ` / `--- ` are not dialogue', () => {
     const [rule] = Dialogue.markdownRules;
     const helpers = { parseInline: (t) => [{ insert: t }] };
-    for (const mark of ['–', '—']) {
-      const line = `${mark} Tu viens ?`;
-      expect(rule.detect.test(line)).toBe(true);
-      expect(Dialogue.fromMarkdown([line], helpers)).toEqual({ type: 'dialogue', delta: [{ insert: 'Tu viens ?' }], partial: false });
+    const line = '-- Tu viens ?';
+    expect(rule.detect.test(line)).toBe(true);
+    expect(Dialogue.fromMarkdown([line], helpers)).toEqual({ type: 'dialogue', delta: [{ insert: 'Tu viens ?' }], partial: false });
+    for (const no of ['– Tu viens ?', '— Tu viens ?', '- item', '--- x', '--x', '--']) {
+      expect(rule.detect.test(no)).toBe(false);
     }
-    expect(rule.detect.test('- item')).toBe(false);
-    expect(rule.detect.test('-- x')).toBe(false);
+    expect(Dialogue.fromMarkdown(['– Tu viens ?'], helpers)).toBeNull();
+    expect(Dialogue.fromMarkdown(['— Tu viens ?'], helpers)).toBeNull();
+  });
+
+  it('paste: `-- hi` is a dialogue, `– hi` / `— hi` are paragraphs, `- hi` is a list, `-- ` never a list item', async () => {
+    const engine = await makeEditor([DialogueExtension, ListExtension, ListItemExtension]);
+    const pi = MarkdownPasteExtension.pasteInterpreters.find((i) => i.format === 'text/plain');
+    const interp = (raw) => pi.interpret(raw, engine)?.blocks;
+    expect(interp('-- hi')).toMatchObject([{ type: 'dialogue', delta: [{ insert: 'hi' }] }]);
+    expect(interp('– hi')).toMatchObject([{ type: 'paragraph', delta: [{ insert: '– hi' }] }]);
+    expect(interp('— hi')).toMatchObject([{ type: 'paragraph', delta: [{ insert: '— hi' }] }]);
+    expect(interp('- hi')[0].type).toBe('list');
+    expect(interp('-- a\n- b\n-- c').map((b) => b.type)).toEqual(['dialogue', 'list', 'dialogue']);
+  });
+
+  it('round trip: export -> paste gives back the dialogue lines, whatever the display dash', async () => {
+    for (const ext of [[DialogueExtension], [createDialogueExtension({ dash: '—' })]]) {
+      const engine = await makeEditor(ext);
+      await build(engine, [['dialogue', 'Tu viens ?'], ['paragraph', '– not a dialogue'], ['dialogue', 'Oui.']]);
+      const md = engine.children.map((b) => b.serialize('markdown')).join('\n\n');
+      expect(md).toBe('-- Tu viens ?\n\n– not a dialogue\n\n-- Oui.');
+      const pi = MarkdownPasteExtension.pasteInterpreters.find((i) => i.format === 'text/plain');
+      const blocks = pi.interpret(md, engine).blocks;
+      expect(blocks.map((b) => b.type)).toEqual(['dialogue', 'paragraph', 'dialogue']);
+      expect(blocks[1].delta).toEqual([{ insert: '– not a dialogue' }]);
+    }
   });
 });
 

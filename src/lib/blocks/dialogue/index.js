@@ -11,9 +11,9 @@ import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
 /**
  * Dialogue extension factory.
  * @param {{ dash?: string }} [options]
- *   `dash` (default `–`, EN dash): the marker displayed in front of a dialogue line (CSS custom property
- *   `--nb-dialogue-dash`, which a host can also override in CSS) and written by the markdown export. Markdown
- *   import / paste recognizes both `–` and `—` regardless.
+ *   `dash` (default `–`, EN dash): the marker DISPLAYED in front of a dialogue line (CSS custom property
+ *   `--nb-dialogue-dash`, which a host can also override in CSS). Display only: the markdown syntax of a
+ *   dialogue line is always `-- text`, whatever the dash.
  */
 export function createDialogueExtension({ dash = '–' } = {}) {
     const BlockClass = dash === Dialogue.dash

@@ -53,8 +53,7 @@ test.describe('Block Transforms', () => {
     );
     await waitForBlockType(page, 'dialogue');
     const md = await getMarkdown(page);
-    expect(md).toContain('–');
-    expect(md).toContain('spoken words');
+    expect(md).toContain('-- spoken words');
   });
 
   // P1 ─────────────────────────────────────────────────────────────────────

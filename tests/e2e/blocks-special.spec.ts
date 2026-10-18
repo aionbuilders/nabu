@@ -8,7 +8,7 @@
  * Docs differ), "DECIDED:" = product decision, "BROKEN:" = clearly broken (lost / stuck caret, swallowed keystroke,
  * text or children lost, no keyboard way out…) and the test is left FAILING.
  *
- *  A. Code (1-7)     B. Toggle (8-12)     C. Divider (13-15)     D. Cross-block selection (16)
+ *  A. Code (1-7)     B. Toggle (8-12d)     C. Divider (13-15)     D. Cross-block selection (16)
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -386,16 +386,29 @@ test.describe('B · Toggle', () => {
     await expectValid(page);
   });
 
-  test('9b · Enter at the end of a COLLAPSED header: the toggle EXPANDS, a new empty body paragraph takes the caret, hidden body kept', async ({ page }) => {
+  test('9b · Enter at the end of a COLLAPSED header: a new paragraph AFTER the toggle takes the caret, the toggle stays collapsed, hidden body untouched; one Ctrl+Z', async ({ page }) => {
     await buildTree(page, [Tog('Head', [Pp('body')], true), Pp('after')]);
     await focusEnd(page, 'Head');
     await press(page, 'Enter');
-    // CURRENT: expands (Notion: inserts a sibling AFTER the toggle and keeps it collapsed). The new paragraph holds the caret,
-    // the existing body is untouched (its position is covered by 9b).
-    expect((await tree(page)).startsWith('toggle▾(Head){')).toBe(true);
-    await expect(page.locator('.nabu-toggle-body')).toHaveCount(1);
-    const t = await typeAndTree(page, 'Z');
-    expect(t).toMatch(/^toggle▾\(Head\)\{(p\(Z\) p\(body\)|p\(body\) p\(Z\))\} ; p\(after\)$/);
+    // DECIDED (P-40 c): the sub-thread stays closed, the new paragraph is a sibling after the toggle.
+    await expectTree(page, 'toggle▸(Head){p(body)} ; p(∅) ; p(after)');
+    await expect(page.locator('.nabu-toggle-body')).toHaveCount(0);
+    await expectCaret(page, '|');
+    expect(await typeAndTree(page, 'Z')).toBe('toggle▸(Head){p(body)} ; p(Z) ; p(after)');
+    await undo(page);
+    await undo(page);
+    await expectTree(page, 'toggle▸(Head){p(body)} ; p(after)');
+    await expectValid(page);
+  });
+
+  test('9c · Enter in the MIDDLE of a COLLAPSED header: the tail goes into the new paragraph after the toggle, which stays collapsed; one Ctrl+Z', async ({ page }) => {
+    await buildTree(page, [Tog('Head', [Pp('body')], true), Pp('after')]);
+    await focusAt(page, 'Head', 2);
+    await press(page, 'Enter');
+    await expectTree(page, 'toggle▸(He){p(body)} ; p(ad) ; p(after)');
+    await expectCaret(page, '|ad');
+    await undo(page);
+    await expectTree(page, 'toggle▸(Head){p(body)} ; p(after)');
     await expectValid(page);
   });
 
@@ -439,35 +452,51 @@ test.describe('B · Toggle', () => {
     });
   });
 
-  test('11 · Backspace at offset 0 of the header: the header text joins the previous block, the children are KEPT (hoisted); empty header de-transforms', async ({ page }) => {
+  test('11 · Backspace at offset 0 of the header: the toggle becomes a paragraph with the header text, its children follow it (same parent, in order); one Ctrl+Z', async ({ page }) => {
     // (a) previous paragraph + body children
-    await buildTree(page, [Pp('before'), Tog('Head', [Pp('body'), Pp('body2')])]);
+    await buildTree(page, [Pp('before'), Tog('Head', [Pp('body'), Pp('body2')]), Pp('after')]);
     await focusAt(page, 'Head', 0);
     await press(page, 'Backspace');
-    // CURRENT: the toggle dissolves: its header text is appended to "before" and its children become ROOT siblings, in order.
-    // Nothing is lost (Notion: the toggle becomes a text block first and keeps its children indented).
-    await expectTree(page, 'p(beforeHead) ; p(body) ; p(body2)');
-    await expectCaret(page, 'before|Head');
-    expect((await allText(page)).join('|')).toBe('beforeHead|body|body2');
-    expect(await typeAndTree(page, 'X')).toBe('p(beforeXHead) ; p(body) ; p(body2)');
+    // DECIDED (P-40 b): no merge into the previous block any more; nothing is lost, the body comes out right after.
+    await expectTree(page, 'p(before) ; p(Head) ; p(body) ; p(body2) ; p(after)');
+    await expectCaret(page, '|Head');
+    expect((await allText(page)).join('|')).toBe('before|Head|body|body2|after');
+    expect(await typeAndTree(page, 'X')).toBe('p(before) ; p(XHead) ; p(body) ; p(body2) ; p(after)');
     await undo(page);
     await undo(page);
-    await expectTree(page, 'p(before) ; toggle▾(Head){p(body) p(body2)}');
-    // (b) first block of the document: nothing to merge into -> no-op, children kept
+    await expectTree(page, 'p(before) ; toggle▾(Head){p(body) p(body2)} ; p(after)');
+    // (b) first block of the document: same behaviour (it used to be a no-op)
     await buildTree(page, [Tog('Head', [Pp('body'), Pp('body2')])]);
     await focusAt(page, 'Head', 0);
     await press(page, 'Backspace');
-    await expectTree(page, 'toggle▾(Head){p(body) p(body2)}');
+    await expectTree(page, 'p(Head) ; p(body) ; p(body2)');
     await expectCaret(page, '|Head');
-    // (c) EMPTY header without body: de-transformed to a paragraph, caret kept
+    await undo(page);
+    await expectTree(page, 'toggle▾(Head){p(body) p(body2)}');
+    // (c) EMPTY header without body: a paragraph, caret kept
     await buildTree(page, [Pp('before'), Tog('', [])]);
     await focusEmpty(page, 0);
     await press(page, 'Backspace');
     await expectTree(page, 'p(before) ; p(∅)');
+    // (d) COLLAPSED toggle: the hidden children come out too (nothing lost), one Ctrl+Z puts everything back
+    await buildTree(page, [Tog('Head', [Pp('body')], true), Pp('after')]);
+    await focusAt(page, 'Head', 0);
+    await press(page, 'Backspace');
+    await expectTree(page, 'p(Head) ; p(body) ; p(after)');
+    await undo(page);
+    await expectTree(page, 'toggle▸(Head){p(body)} ; p(after)');
     await expectValid(page);
   });
 
-  test('12 · Backspace at offset 0 of the FIRST body child merges it into the header; Enter on an EMPTY last body child adds another child (no exit)', async ({ page }) => {
+  test('11b · Backspace in the MIDDLE of the header is a plain deletion (the toggle stays a toggle)', async ({ page }) => {
+    await buildTree(page, [Pp('before'), Tog('Head', [Pp('body')])]);
+    await focusAt(page, 'Head', 2);
+    await press(page, 'Backspace');
+    await expectTree(page, 'p(before) ; toggle▾(Had){p(body)}');
+    await expectCaret(page, 'H|ad');
+  });
+
+  test('12 · Backspace at offset 0 of the FIRST body child merges it into the header; Enter on an EMPTY last body paragraph EXITS the sub-thread', async ({ page }) => {
     await buildTree(page, [Pp('before'), Tog('Head', [Pp('body'), Pp('body2')])]);
     await focusAt(page, 'body', 0);
     await press(page, 'Backspace');
@@ -479,14 +508,57 @@ test.describe('B · Toggle', () => {
     await undo(page);
     await expectTree(page, 'p(before) ; toggle▾(Head){p(body) p(body2)}');
 
+    // DECIDED (P-40 a): Enter on an empty paragraph that is the LAST child moves it right after the toggle.
     await buildTree(page, [Tog('Head', [Pp('body'), Pp('')]), Pp('after')]);
     await focusEmpty(page);
     await press(page, 'Enter');
-    // CURRENT: no "exit on empty line" outliner behaviour: Enter on an empty last child just adds one more empty child
-    // (Notion / Docs outdent it to a sibling of the toggle). Not lost, caret in the new child.
-    await expectTree(page, 'toggle▾(Head){p(body) p(∅) p(∅)} ; p(after)');
+    await expectTree(page, 'toggle▾(Head){p(body)} ; p(∅) ; p(after)');
     await expectCaret(page, '|');
-    expect(await typeAndTree(page, 'X')).toBe('toggle▾(Head){p(body) p(∅) p(X)} ; p(after)');
+    expect(await typeAndTree(page, 'X')).toBe('toggle▾(Head){p(body)} ; p(X) ; p(after)');
+    await expectValid(page);
+  });
+
+  test('12c · exit the sub-thread: ONE Ctrl+Z puts the empty paragraph back in the body; an empty MIDDLE child only adds a paragraph; the last child of the only body leaves an empty body', async ({ page }) => {
+    await buildTree(page, [Tog('Head', [Pp('body'), Pp('')]), Pp('after')]);
+    await focusEmpty(page);
+    await press(page, 'Enter');
+    await expectTree(page, 'toggle▾(Head){p(body)} ; p(∅) ; p(after)');
+    await undo(page);
+    await expectTree(page, 'toggle▾(Head){p(body) p(∅)} ; p(after)');
+    // an empty paragraph that is NOT the last child: no exit
+    await buildTree(page, [Tog('Head', [Pp(''), Pp('b')])]);
+    await focusEmpty(page);
+    await press(page, 'Enter');
+    await expectTree(page, 'toggle▾(Head){p(∅) p(∅) p(b)}');
+    // only child: the toggle keeps an empty body, Enter at the end of the header recreates a first child
+    await buildTree(page, [Tog('Head', [Pp('')])]);
+    await focusEmpty(page);
+    await press(page, 'Enter');
+    await expectTree(page, 'toggle▾(Head) ; p(∅)');
+    await focusEnd(page, 'Head');
+    await press(page, 'Enter');
+    await expectTree(page, 'toggle▾(Head){p(∅)} ; p(∅)');
+    await expectValid(page);
+  });
+
+  test('12d · Delete at the END of a COLLAPSED header merges the next VISIBLE block, never the hidden child; no next block: no-op; one Ctrl+Z', async ({ page }) => {
+    await buildTree(page, [Tog('Head', [Pp('hidden')], true), Pp('next')]);
+    await focusEnd(page, 'Head');
+    await press(page, 'Delete');
+    await expectTree(page, 'toggle▸(Headnext){p(hidden)}');
+    await expectCaret(page, 'Head|next');
+    await undo(page);
+    await expectTree(page, 'toggle▸(Head){p(hidden)} ; p(next)');
+    // Backspace at offset 0 of the block right after: same, into the header
+    await focusAt(page, 'next', 0);
+    await press(page, 'Backspace');
+    await expectTree(page, 'toggle▸(Headnext){p(hidden)}');
+    // nothing after the collapsed toggle: no-op
+    await buildTree(page, [Tog('Head', [Pp('hidden')], true)]);
+    await focusEnd(page, 'Head');
+    await press(page, 'Delete');
+    await expectTree(page, 'toggle▸(Head){p(hidden)}');
+    expect(await typeAndTree(page, 'Q')).toBe('toggle▸(HeadQ){p(hidden)}');
     await expectValid(page);
   });
 

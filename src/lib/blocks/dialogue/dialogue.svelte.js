@@ -16,7 +16,7 @@ export class Dialogue extends TextBlock {
     constructor(nabu, node) {
         super(nabu, node);
 
-        this.serializers.set('markdown', () => `${this.dash} ${this.behavior.toMarkdown()}`);
+        this.serializers.set('markdown', () => `${Dialogue.markdownMarker} ${this.behavior.toMarkdown()}`);
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'dialogue',
@@ -28,24 +28,29 @@ export class Dialogue extends TextBlock {
     static placeholder = 'Dialogue...';
 
     /**
-     * Dialogue marker: shown in front of the line (CSS `::before`, see `--nb-dialogue-dash`) and written by the
-     * markdown export. Overridden by `createDialogueExtension({ dash })`, which registers a subclass.
-     * Markdown import / paste recognizes both `–` and `—` whatever this is.
+     * Dialogue marker DISPLAYED in front of the line (CSS `::before`, see `--nb-dialogue-dash`). Purely visual:
+     * overridden by `createDialogueExtension({ dash })`, which registers a subclass. It never reaches the markdown.
      */
     static dash = '–';
+
+    /**
+     * Markdown syntax of a dialogue line: `-- text`. Fixed, independent of the displayed `dash` (an exchange
+     * format must not depend on a visual preference); `–` / `—` at the start of a line are NOT dialogue.
+     */
+    static markdownMarker = '--';
 
     /** @returns {string} */
     get dash() { return /** @type {typeof Dialogue} */ (this.constructor).dash; }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
-        return `${this.dash} ${deltaToMarkdown(pb.delta || [])}`;
+        return `${Dialogue.markdownMarker} ${deltaToMarkdown(pb.delta || [])}`;
     }
 
     static markdownRules = [
         {
             priority: 10,
-            detect: /^[–—] /,
+            detect: /^-- /,
             consume: () => 1,
         }
     ];
@@ -56,7 +61,7 @@ export class Dialogue extends TextBlock {
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromMarkdown(lines, { parseInline }) {
-        const m = lines[0].match(/^[–—]\s+(.*)/);
+        const m = lines[0].match(/^-- +(.*)/);
         if (!m) return null;
         const delta = parseInline(m[1]);
         if (!delta.length) return null;

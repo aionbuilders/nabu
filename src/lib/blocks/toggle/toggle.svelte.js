@@ -2,7 +2,7 @@ import { MegaBlock } from "../megablock.svelte.js";
 import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 import { LoroText } from "loro-crdt";
 import ToggleComponent from "./Toggle.svelte";
-import { tick } from "svelte";
+import { isEmptyLastParagraph, exitSubThread, dissolveToParagraph, insertParagraphAfter } from "../subthread.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -138,7 +138,41 @@ export class ToggleBlock extends MegaBlock {
     /** @param {import('loro-crdt').Delta<string>[]} data */
     applyDelta(data = []) { return this.behavior.applyDelta(data); }
 
-    // ── Custom beforeinput (handles Enter and Backspace-to-untoggle) ────────
+    // ── Sub-thread rules (P-40) ─────────────────────────────────────────────
+    // Header = own text, body = children. The tree operations live in ../subthread.js, shared with any other
+    // container block (the container Callout will reuse them as is).
+
+    /**
+     * Enter in a body child (called through `ascend("onSplit")`). Only the Enter that EXITS the sub-thread is
+     * taken here: on an EMPTY paragraph that is the LAST child, the paragraph moves right after the toggle and
+     * takes the caret. Anything else is declined (falsy) and goes through the regular split of the child's type.
+     * @param {Event | null} event
+     * @param {{ from: import('../block.svelte.js').Block }} data
+     */
+    onSplit(event, data) {
+        const source = data.from;
+        if (!isEmptyLastParagraph(/** @type {any} */ (this), source)) return false;
+        const id = source.node.id.toString();
+        exitSubThread(source.node, this.node);
+        this.nabu.commit().then(() => {
+            const f = this.nabu.blocks.get(id);
+            if (f) this.nabu.selection.setCursor(f, 0);
+        });
+        return { block: source };
+    }
+
+    /**
+     * Children adopted by a merge (`Block#consume`) never vanish into a HIDDEN body: when collapsed they stay
+     * visible, in order, right after the toggle.
+     * @param {import('../block.svelte.js').Block[]} children
+     * @param {number | null} [index]
+     */
+    adoptChildren(children, index = null) {
+        if (!this.collapsed) return super.adoptChildren(children, index);
+        [...children].reverse().forEach(child => { if (child.node) child.node.moveAfter(this.node); });
+    }
+
+    // ── Custom beforeinput (handles Enter and Backspace in the header) ──────
 
     /**
      * @param {InputEvent} event
@@ -147,10 +181,10 @@ export class ToggleBlock extends MegaBlock {
     beforeinput(event) {
         const sel = this.behavior.selection;
 
-        // Enter in the header → split: keep before-cursor in header, move after-cursor
-        // into a new paragraph as the FIRST body child; expand the toggle; focus it.
-        // NOTE: Two commits happen — one from setCollapsed (if needed) + one from nabu.commit().
-        // This is intentional for simplicity; correctness over micro-optimization.
+        // Enter in the header → split at the caret.
+        //  - COLLAPSED: the tail goes into a new paragraph AFTER the toggle (caret in it); the toggle stays collapsed
+        //    and its hidden body is not touched.
+        //  - EXPANDED: the tail goes into a new paragraph as the FIRST body child (caret in it).
         if (event.inputType === 'insertParagraph' && sel) {
             const from = sel.from;
             const to = sel.isCollapsed ? this.behavior.text.length : sel.to;
@@ -158,11 +192,9 @@ export class ToggleBlock extends MegaBlock {
             if (this.behavior.text.length > from) {
                 this.behavior.delete({ index: from, length: this.behavior.text.length - from });
             }
-            if (this.collapsed) {
-                // setCollapsed commits; the insert below commits again — acceptable
-                this.setCollapsed(false);
-            }
-            const p = this.nabu.insert('paragraph', { delta }, this.node.id.toString(), 0);
+            const p = this.collapsed
+                ? insertParagraphAfter(this.nabu, this.node, delta)
+                : this.nabu.insert('paragraph', { delta }, this.node.id.toString(), 0);
             this.nabu.commit().then(() => {
                 const f = this.nabu.blocks.get(p.id);
                 if (f) this.nabu.selection.setCursor(f, 0);
@@ -170,12 +202,11 @@ export class ToggleBlock extends MegaBlock {
             return true;
         }
 
-        // Backspace at start of an EMPTY header with NO body → de-transform to paragraph.
-        if (event.inputType === 'deleteContentBackward' && sel?.isCollapsed && sel.from === 0
-            && this.behavior.text.length === 0 && this.children.length === 0) {
+        // Backspace at offset 0 of the header (empty or not, with or without body) → the toggle becomes a
+        // paragraph with the header text; its body children follow it. One transaction = one undo step.
+        if (event.inputType === 'deleteContentBackward' && sel?.isCollapsed && sel.from === 0) {
             const id = this.node.id.toString();
-            this.transformTo('paragraph');
-            tick().then(() => {
+            this.nabu.transact(() => dissolveToParagraph(this.node, ['collapsed'])).then(() => {
                 const f = this.nabu.blocks.get(id);
                 if (f) f.focus({ start: 0, end: 0 });
             });
