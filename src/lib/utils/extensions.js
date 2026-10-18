@@ -101,6 +101,45 @@ export class Extension {
 export const extension = (name, init) => new Extension(name, init);
 
 /**
+ * Current version of the `application/x-nabu+json` clipboard format (see docs/design/clipboard-format.md).
+ * Written on copy as `version`; the Nabu paste interpreter accepts it (and fragments without a version).
+ */
+export const CLIPBOARD_FORMAT_VERSION = 1;
+
+/**
+ * Degrades the blocks whose type is NOT registered in the receiving editor (a fragment copied from a richer
+ * editor, an old document, a third-party extension that is not loaded): nothing is dropped.
+ *  - the block becomes a block of `fallbackType` (the editor's default text block) with its text (`delta`) and
+ *    `partial` kept; its props are dropped (they belong to the unknown type);
+ *  - its children are kept as normal blocks RIGHT AFTER it, at the same level (an unknown container has no
+ *    body to hold them), recursively degraded;
+ *  - the children of a known block are degraded in place.
+ * Pure: returns new objects, never mutates the input; the engine names no block type (`isKnown` and
+ * `fallbackType` come from the registry / `defaultBlockType`).
+ * @param {PasteBlock[]} blocks
+ * @param {(type: string) => boolean} isKnown
+ * @param {string | null | undefined} fallbackType  the default text block type; falsy = nothing to degrade to
+ * @returns {PasteBlock[]}
+ */
+export function degradeUnknownBlocks(blocks, isKnown, fallbackType) {
+    if (!Array.isArray(blocks) || !fallbackType) return blocks;
+    /** @param {PasteBlock[]} list @returns {PasteBlock[]} */
+    const walk = (list) => list.flatMap((pb) => {
+        if (!pb || typeof pb !== 'object') return [pb];
+        const kids = Array.isArray(pb.children) && pb.children.length ? walk(pb.children) : null;
+        if (isKnown(pb.type)) {
+            const { children: _drop, ...rest } = pb;
+            return [kids ? { ...rest, children: kids } : rest];
+        }
+        const { children: _c, props: _p, ...rest } = pb;
+        /** @type {PasteBlock} */
+        const own = { ...rest, type: fallbackType, delta: Array.isArray(pb.delta) ? pb.delta : [], partial: kids ? (pb.partial === 'start' || pb.partial === 'both' ? 'start' : false) : (pb.partial ?? false) };
+        return kids ? [own, ...kids] : [own];
+    });
+    return walk(blocks);
+}
+
+/**
  * Convert a `serialize('json')` document export back into PasteBlocks.
  * The json format stores text as Slate-like runs (`{text, ...marks}`);
  * PasteBlocks store Loro deltas (`{insert, attributes}`).

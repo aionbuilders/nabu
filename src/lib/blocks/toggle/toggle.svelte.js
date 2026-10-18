@@ -2,7 +2,7 @@ import { MegaBlock } from "../megablock.svelte.js";
 import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 import { LoroText } from "loro-crdt";
 import ToggleComponent from "./Toggle.svelte";
-import { isEmptyLastParagraph, exitSubThread, dissolveToParagraph, insertParagraphAfter } from "../subthread.js";
+import { isEmptyLastParagraph, exitSubThread, dissolveToParagraph, insertParagraphAfter, pasteIntoHeader } from "../subthread.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -173,6 +173,26 @@ export class ToggleBlock extends MegaBlock {
     adoptChildren(children, index = null) {
         if (!this.collapsed) return super.adoptChildren(children, index);
         [...children].reverse().forEach(child => { if (child.node) child.node.moveAfter(this.node); });
+    }
+
+    /** The body is free-form: an empty paragraph of the body takes the type of a whole block pasted into it. */
+    get adoptsPastedTypes() { return true; }
+
+    /**
+     * Paste with the caret in the HEADER (text only). One pasted text block is the engine's inline merge
+     * (declined). Several blocks: the first completes the header at the caret, the others go to the TOP of the
+     * body (like Enter, which creates the first body child), the header text after the caret follows the last
+     * one (merged into it when it is text, else in a new paragraph). A COLLAPSED toggle is EXPANDED first: the
+     * pasted content would otherwise land hidden. (A paste with the caret in a body child never reaches this
+     * hook: the child's own rules apply, inside the body.)
+     * @param {import('../../utils/extensions.js').PasteBlock[]} blocks
+     * @param {{ offset: number }} ctx
+     */
+    acceptPaste(blocks, ctx) {
+        if (!blocks?.length || (blocks.length === 1 && !blocks[0].children?.length)) return null;
+        const landing = pasteIntoHeader(this.nabu, /** @type {any} */ (this), ctx.offset, blocks);
+        if (landing && this.collapsed) /** @type {any} */ (this.node.data).set('collapsed', false);
+        return landing;
     }
 
     // ── Custom beforeinput (handles Enter and Backspace in the header) ──────

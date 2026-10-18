@@ -72,7 +72,7 @@ C'est le format interne. Il doit encoder :
 
 ```json
 {
-  "version": "1",
+  "version": 1,
   "blocks": [
     {
       "type": "paragraph",
@@ -101,6 +101,8 @@ C'est le format interne. Il doit encoder :
   ]
 }
 ```
+
+> Le format versionné (règles de lecture, blocs de type inconnu) est décrit dans [`clipboard-format.md`](./clipboard-format.md).
 
 Le flag `partial` vaut `"start"`, `"end"`, `false` (complet) ou `"both"` (sélection dans un seul bloc).
 

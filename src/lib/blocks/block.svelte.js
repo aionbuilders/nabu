@@ -363,6 +363,14 @@ export class Block {
     get requiredParent() { return null; }
 
     /**
+     * Whether an EMPTY child of this block takes the type of a whole block pasted into it (a `# Title` pasted
+     * into an empty paragraph makes it a heading). Always true for root blocks; a container with structural
+     * rules about its children (a list) keeps it `false`, a container with a free-form body (a toggle) opts in.
+     * @returns {boolean}
+     */
+    get adoptsPastedTypes() { return false; }
+
+    /**
      * Paste extension point: lets the block that holds the caret decide how a pasted fragment lands, instead
      * of the engine's default (first block merged into the caret block, the rest inserted after it as
      * siblings). A block that lives in a container with its own rules about what it can hold overrides it

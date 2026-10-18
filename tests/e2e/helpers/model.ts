@@ -104,14 +104,20 @@ export async function violations(page: Page): Promise<string[]> {
     const n = (window as any).nabu;
     const out: string[] = [];
     const ids = new Set<string>();
-    const walk = (node: any, parent: any) => {
+    // Blocks expected in the DOM: everything except the content of a block that hides its children
+    // (a collapsed toggle doesn't mount its body).
+    const rendered = new Set<string>();
+    const walk = (node: any, parent: any, hidden = false) => {
       const id = node.id.toString();
       const type = node.data.get('type');
       ids.add(id);
+      if (!hidden) rendered.add(id);
       const kids: any[] = node.children() ?? [];
       const ptype = parent ? parent.data.get('type') : null;
       if (type === 'list-item' && ptype !== 'list') out.push(`list-item ${id} has parent ${ptype}`);
-      if (type === 'list' && ptype !== null && ptype !== 'list-item') out.push(`list ${id} has parent ${ptype}`);
+      // A list may live at the root, under a list-item or inside any container (toggle body…) — never
+      // directly inside another list.
+      if (type === 'list' && ptype === 'list') out.push(`list ${id} has parent ${ptype}`);
       if (type === 'list' && kids.length === 0) out.push(`empty list ${id}`);
       if (type === 'list') for (const k of kids) if (k.data.get('type') !== 'list-item') out.push(`list ${id} has child ${k.data.get('type')}`);
       if (type === 'list-item') {
@@ -134,12 +140,13 @@ export async function violations(page: Page): Promise<string[]> {
         if (have !== want) out.push(`block ${id} children [${have}] != tree [${want}]`);
         if ((block.type) !== type) out.push(`block ${id} type ${block.type} != tree ${type}`);
       }
-      kids.forEach((k) => walk(k, node));
+      const hidesKids = hidden || !!n.blocks.get(id)?.hidesChildren;
+      kids.forEach((k) => walk(k, node, hidesKids));
     };
     n.tree.roots().forEach((r: any) => walk(r, null));
     const domIds = [...document.querySelectorAll('[data-block-id]')].map((e) => e.getAttribute('data-block-id')!);
-    if (domIds.length !== ids.size) out.push(`DOM has ${domIds.length} blocks, tree has ${ids.size}`);
-    for (const d of domIds) if (!ids.has(d)) out.push(`DOM block ${d} not in tree`);
+    if (domIds.length !== rendered.size) out.push(`DOM has ${domIds.length} blocks, tree renders ${rendered.size}`);
+    for (const d of domIds) if (!rendered.has(d)) out.push(`DOM block ${d} not in tree`);
     if (new Set(domIds).size !== domIds.length) out.push('duplicated data-block-id in the DOM');
     return out;
   });

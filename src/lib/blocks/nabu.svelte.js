@@ -4,7 +4,7 @@ import { Block } from './block.svelte.js';
 import { MegaBlock } from './megablock.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf, findLCA } from './container.utils.js';
-import { jsonToPasteBlocks } from '../utils/extensions.js';
+import { jsonToPasteBlocks, degradeUnknownBlocks, CLIPBOARD_FORMAT_VERSION } from '../utils/extensions.js';
 import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
 import { tick } from 'svelte';
 import { Pulse } from '@aionbuilders/pulse';
@@ -1070,7 +1070,7 @@ export class Nabu {
 
         if (!pasteBlocks.length) return;
 
-        const fragment = { blocks: pasteBlocks };
+        const fragment = { version: CLIPBOARD_FORMAT_VERSION, blocks: pasteBlocks };
         e.clipboardData.setData('application/x-nabu+json', JSON.stringify(fragment));
 
         // Recursive serializers — dispatch to each BlockClass's static toMarkdown/toHtml.
@@ -1176,13 +1176,46 @@ export class Nabu {
     }
 
     /**
+     * Degrades the pasted / imported blocks whose type is not registered in THIS editor to the default text
+     * block (text kept, children kept as following siblings, nothing dropped). See `degradeUnknownBlocks`.
+     * @param {import('../utils/extensions.js').PasteBlock[]} blocks
+     * @returns {import('../utils/extensions.js').PasteBlock[]}
+     */
+    #degradeUnknown(blocks) {
+        const fallback = this.defaultBlockType && this.registry.has(this.defaultBlockType) ? this.defaultBlockType
+            : this.registry.has('paragraph') ? 'paragraph' : null;
+        if (!Array.isArray(blocks)) return blocks;
+        /** @type {Set<string>} */
+        const unknown = new Set();
+        const degraded = degradeUnknownBlocks(blocks, (type) => {
+            const known = this.registry.has(type);
+            if (!known) unknown.add(type);
+            return known;
+        }, fallback);
+        if (fallback && unknown.size) this.warn(`paste: unregistered block type(s) [${[...unknown].join(', ')}] degraded to "${fallback}"`);
+        return degraded;
+    }
+
+    /**
+     * What a block IS for the clipboard (its type and structural props), used to continue it after a paste.
+     * @param {Block} block
+     * @returns {{ type: string, props: Record<string, any> }}
+     */
+    #blockSpec(block) {
+        /** @type {any} */
+        let serialized = null;
+        try { serialized = block.serialize('application/x-nabu+json', { from: 0, to: 0, partial: false }); } catch { /* no serializer */ }
+        return { type: block.type, props: { ...(serialized?.props ?? {}) } };
+    }
+
+    /**
      * Insère un PasteFragment à la position du curseur courant.
      * @param {import('../utils/extensions.js').PasteFragment} fragment
      */
     insertFragment(fragment) {
         this.selection.sync(); // public entry point: may be called outside an input event
         // Every fragment (HTML / markdown / nabu JSON / API) goes through here: unsafe link & media URLs are dropped.
-        const blocks = sanitizePasteBlocks(fragment.blocks);
+        const blocks = this.#degradeUnknown(sanitizePasteBlocks(fragment.blocks));
         if (!blocks?.length) return;
 
         let anchorBlock;
@@ -1221,8 +1254,9 @@ export class Nabu {
 
         // A whole pasted block landing in an EMPTY root-level block (e.g. `# Title` into an
         // empty paragraph) brings its type along. Pasting into existing text never coerces.
-        // Blocks nested in a container (list item…) keep their type to preserve the structure.
-        const anchorEmpty = textBehavior.container.length === 0 && !anchorBlock.parent;
+        // Blocks nested in a container (list item…) keep their type to preserve the structure, unless that
+        // container holds free-form content (`Block#adoptsPastedTypes`, e.g. a toggle body).
+        const anchorEmpty = textBehavior.container.length === 0 && (!anchorBlock.parent || anchorBlock.parent.adoptsPastedTypes);
         /** @param {import('../utils/extensions.js').PasteBlock} pb */
         const adoptType = (pb) => {
             if (!anchorEmpty || pb.partial !== false || pb.type === anchorBlock.type || !this.registry.has(pb.type)) return;
@@ -1253,6 +1287,11 @@ export class Nabu {
             textBehavior.delete({ index: offset, length: textBehavior.container.length - offset });
         }
 
+        // What the caret block IS (type + props), captured before it may adopt a pasted type: the text that
+        // follows the caret continues in a block of the same kind, like Enter would (`Ti|tle` heading stays a
+        // heading on both sides of the pasted blocks).
+        const tailSpec = rightDelta.length ? this.#blockSpec(anchorBlock) : null;
+
         const firstPb  = blocks[0];
         const lastPb   = blocks[blocks.length - 1];
         const midPbs   = blocks.slice(1, -1);
@@ -1278,49 +1317,49 @@ export class Nabu {
         }
 
         // ── Last block (only when blocks.length > 1) ──────────────────────────
+        // The text after the caret (`rightDelta`) merges with the last pasted block when that one is TEXT
+        // (cut at the edge of a partial copy, or a default text block), in a block of the caret block's kind;
+        // otherwise (heading, code, image, container…) the block is inserted as it is and the tail follows in
+        // a block of the caret block's kind. Without a tail the last block is simply inserted as it is.
+        /** @param {{type: string, props?: Record<string, any>}} spec @param {import('loro-crdt').Delta<string>[]} delta @param {any} after */
+        const insertLeaf = (spec, delta, after) => {
+            const Class = this.registry.get(spec.type) || this.registry.get('paragraph');
+            if (!Class) return null;
+            const created = Class.create(this, spec.type, spec.props || {});
+            created.node.moveAfter(after);
+            const wrapper = wrapOrphan(this, created);
+            if (delta.length) created.behaviors?.get('text')?.applyDelta(delta);
+            return { block: created, node: wrapper ? wrapper.node : created.node };
+        };
+        const deltaLen = (/** @type {any[]} */ d) => d.reduce((n, op) => n + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
+
         if (blocks.length > 1) {
             if (!lastPb.children?.length) {
-                // Leaf last block: create it, append rightDelta
-                const LastClass = this.registry.get(lastPb.type) || this.registry.get('paragraph');
-                if (LastClass) {
-                    const newLast = LastClass.create(this, lastPb.type, lastPb.props || {});
-                    newLast.node.moveAfter(prevNode);
-                    const wrapper = wrapOrphan(this, newLast);
-                    const tb = newLast.behaviors?.get('text');
-                    if (tb) {
-                        const lastDelta = lastPb.delta || [];
-                        if (lastDelta.length || rightDelta.length) tb.applyDelta([...lastDelta, ...rightDelta]);
-                        focusOffset = lastDelta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
-                    }
-                    focusBlock = newLast;
-                    prevNode = wrapper ? wrapper.node : newLast.node;
+                const lastDelta = lastPb.delta || [];
+                const lastIsText = lastPb.partial === 'end' || lastPb.partial === 'both' || lastPb.type === this.defaultBlockType;
+                if (!tailSpec) {
+                    const done = insertLeaf({ type: lastPb.type, props: lastPb.props }, lastDelta, prevNode);
+                    if (done) { focusBlock = done.block; focusOffset = deltaLen(lastDelta); prevNode = done.node; }
+                } else if (lastIsText) {
+                    const done = insertLeaf(tailSpec, [...lastDelta, ...rightDelta], prevNode);
+                    if (done) { focusBlock = done.block; focusOffset = deltaLen(lastDelta); prevNode = done.node; }
+                } else {
+                    prevNode = this.insertPasteBlock(lastPb, prevNode);
+                    const done = insertLeaf(tailSpec, rightDelta, prevNode);
+                    if (done) { focusBlock = done.block; focusOffset = 0; prevNode = done.node; }
                 }
             } else {
-                // Container last block: insert it, put rightDelta in a new paragraph after
+                // Container last block: insert it, the tail goes in a new block after it
                 prevNode = this.insertPasteBlock(lastPb, prevNode);
-                if (rightDelta.length) {
-                    const PClass = this.registry.get('paragraph');
-                    if (PClass) {
-                        const p = PClass.create(this, 'paragraph', {});
-                        p.node.moveAfter(prevNode);
-                        p.behaviors?.get('text')?.applyDelta(rightDelta);
-                        focusBlock = p;
-                        focusOffset = 0;
-                    }
+                if (tailSpec) {
+                    const done = insertLeaf(tailSpec, rightDelta, prevNode);
+                    if (done) { focusBlock = done.block; focusOffset = 0; }
                 }
             }
-        } else {
-            // Single container block: rightDelta goes in a new paragraph after it
-            if (rightDelta.length) {
-                const PClass = this.registry.get('paragraph');
-                if (PClass) {
-                    const p = PClass.create(this, 'paragraph', {});
-                    p.node.moveAfter(prevNode);
-                    p.behaviors?.get('text')?.applyDelta(rightDelta);
-                    focusBlock = p;
-                    focusOffset = 0;
-                }
-            }
+        } else if (tailSpec) {
+            // Single container block: the tail goes in a new block after it
+            const done = insertLeaf(tailSpec, rightDelta, prevNode);
+            if (done) { focusBlock = done.block; focusOffset = 0; }
         }
 
         this.#isolateNextCommits();
@@ -1341,6 +1380,14 @@ export class Nabu {
      * @returns {any}
      */
     insertPasteBlock(pb, afterNode) {
+        if (!this.registry.has(pb.type)) {
+            // Unknown type: degraded to the default text block, its children follow it (nothing is dropped).
+            const degraded = this.#degradeUnknown([pb]);
+            if (degraded.length === 1 && !this.registry.has(degraded[0].type)) return afterNode; // no default block to degrade to
+            let previous = afterNode;
+            for (const d of degraded) previous = this.insertPasteBlock(d, previous);
+            return previous;
+        }
         if (pb.children?.length) {
             const ContainerClass = this.registry.get(pb.type);
             if (!ContainerClass) return afterNode;
@@ -1375,6 +1422,14 @@ export class Nabu {
      * @returns {Block | null}  the created block
      */
     createPasteBlock(pb, parentId) {
+        if (!this.registry.has(pb.type)) {
+            // Unknown type: the default text block, then its children as ITS following siblings (not inside it).
+            const [head, ...rest] = this.#degradeUnknown([pb]);
+            if (!head || !this.registry.has(head.type)) return null;
+            const created = this.createPasteBlock(head, parentId);
+            for (const sibling of rest) this.createPasteBlock(sibling, parentId);
+            return created;
+        }
         const BlockClass = this.registry.get(pb.type) || this.registry.get('paragraph');
         if (!BlockClass) return null;
         const block = BlockClass.create(this, pb.type, pb.props || {}, parentId);
@@ -1396,7 +1451,7 @@ export class Nabu {
      * @returns {Promise<void>}
      */
     async importFragment(fragment) {
-        const blocks = sanitizePasteBlocks(fragment.blocks);
+        const blocks = this.#degradeUnknown(sanitizePasteBlocks(fragment.blocks));
         if (!blocks?.length) return;
 
         [...this.tree.roots()].forEach(root => this.tree.delete(root.id));
