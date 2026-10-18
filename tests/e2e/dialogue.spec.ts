@@ -30,7 +30,7 @@ test.describe('Dialogue Block', () => {
     await expect(page.locator('[data-block-type="dialogue"]')).toBeVisible();
   });
 
-  test('P0 · dialogue serializes to markdown with em-dash prefix', async ({ page }) => {
+  test('P0 · dialogue serializes to markdown with the en-dash prefix (default dash)', async ({ page }) => {
     await page.evaluate(async () => {
       const n = (window as any).nabu;
       n.delete(n.children[0]);
@@ -38,7 +38,7 @@ test.describe('Dialogue Block', () => {
       await n.commit();
     });
     const md = await getMarkdown(page);
-    expect(md).toContain('— Hello world');
+    expect(md).toContain('– Hello world');
   });
 
   test('P0 · typing in dialogue block works', async ({ page }) => {
@@ -60,7 +60,7 @@ test.describe('Dialogue Block', () => {
 
     await typeText(page, 'spoken text');
     const md = await getMarkdown(page);
-    expect(md).toContain('— spoken text');
+    expect(md).toContain('– spoken text');
   });
 
   // P1 ─────────────────────────────────────────────────────────────────────
@@ -78,8 +78,8 @@ test.describe('Dialogue Block', () => {
     await typeText(page, 'second line');
 
     const md = await getMarkdown(page);
-    expect(md).toContain('— first line');
-    expect(md).toContain('second line');
+    expect(md).toContain('– first line');
+    expect(md).toContain('– second line');
   });
 
   test('P1 · Two Backspace at start of dialogue merges with previous block', async ({ page }) => {
@@ -98,7 +98,7 @@ test.describe('Dialogue Block', () => {
     let md = await getMd();
 
     await test.step('Verify initial markdown structure', async () => {
-      expect(md).toContain('before\n\n— after');
+      expect(md).toContain('before\n\n– after');
     });
 
     await test.step('Press Home and then two Backspaces to merge dialogue with previous block', async () => {
@@ -128,7 +128,7 @@ test.describe('Dialogue Block', () => {
     await press(page, 'Shift+End');
     await press(page, 'Control+b');
     const md = await getMarkdown(page);
-    expect(md).toContain('— **bold text**');
+    expect(md).toContain('– **bold text**');
   });
 
   test('P1 · dialogue JSON serialization includes type and content', async ({ page }) => {
@@ -154,6 +154,6 @@ test.describe('Dialogue Block', () => {
     );
     await waitForBlockType(page, 'dialogue');
     const md = await getMarkdown(page);
-    expect(md).toContain('—');
+    expect(md).toContain('–');
   });
 });

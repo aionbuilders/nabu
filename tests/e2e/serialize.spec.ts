@@ -52,7 +52,7 @@ test.describe('Serialization', () => {
 
   // P1 ─────────────────────────────────────────────────────────────────────
 
-  test('P1 · markdown serializes dialogue with em-dash', async ({ page }) => {
+  test('P1 · markdown serializes dialogue with the en-dash', async ({ page }) => {
     await page.evaluate(async () => {
       const n = (window as any).nabu;
       n.delete(n.children[0]);
@@ -60,7 +60,7 @@ test.describe('Serialization', () => {
       await n.commit();
     });
     const md = await getMarkdown(page);
-    expect(md).toContain('— spoken');
+    expect(md).toContain('– spoken');
   });
 
   test('P1 · markdown serializes bullet list correctly', async ({ page }) => {
@@ -103,7 +103,7 @@ test.describe('Serialization', () => {
     const md = await getMarkdown(page);
     expect(md).toContain('# Title');
     expect(md).toContain('Body paragraph');
-    expect(md).toContain('— A line of dialogue');
+    expect(md).toContain('– A line of dialogue');
   });
 
   test('P1 · json serializes all block types', async ({ page }) => {

@@ -61,26 +61,50 @@ test.describe('A · Heading', () => {
     await expectValid(page);
   });
 
-  test('2 · Enter in the MIDDLE of a heading: the tail becomes a paragraph, the head keeps the heading type', async ({ page }) => {
+  test('2 · Enter in the MIDDLE of a heading: both halves are headings of the same level', async ({ page }) => {
     await buildBlocks(page, [H('Title', 2)]);
     await focusAt(page, 'Title', 2);
     await press(page, 'Enter');
-    // CURRENT: head stays h2, tail ("tle") moves to a PARAGRAPH (Notion: both halves stay headings; Google Docs: both headings).
-    await expectFlat(page, 'h2(Ti) ; p(tle)');
+    // DECIDED (P-36): both halves are headings of the same level (Notion / Google Docs), caret at the start of the second.
+    await expectFlat(page, 'h2(Ti) ; h2(tle)');
     await expectCaret(page, '|tle');
-    expect(await typeAndFlat(page)).toBe('h2(Ti) ; p(Xtle)');
+    expect(await typeAndFlat(page)).toBe('h2(Ti) ; h2(Xtle)');
     await expectValid(page);
   });
 
-  test('3 · Enter at the START of a non-empty heading: an empty heading above, the text is DEMOTED to a paragraph', async ({ page }) => {
+  test('3 · Enter at the START of a non-empty heading: an empty PARAGRAPH above, the heading keeps its text and level', async ({ page }) => {
     await buildBlocks(page, [H('Title', 2)]);
     await focusAt(page, 'Title', 0);
     await press(page, 'Enter');
-    // CURRENT: same split rule as in the middle: head = "" keeps h2, tail = whole text becomes a paragraph. No text lost.
-    // (Notion: empty heading above and the text stays a heading.)
-    await expectFlat(page, 'h2(∅) ; p(Title)');
+    // DECIDED (P-36): an empty paragraph is inserted above; the heading keeps its text and level, the caret stays at the
+    // start of the heading text.
+    await expectFlat(page, 'p(∅) ; h2(Title)');
     await expectCaret(page, '|Title');
-    expect(await typeAndFlat(page)).toBe('h2(∅) ; p(XTitle)');
+    expect(await typeAndFlat(page)).toBe('p(∅) ; h2(XTitle)');
+    await expectValid(page);
+  });
+
+  test('3b · Enter on an EMPTY heading: a paragraph is added below, the empty heading is kept', async ({ page }) => {
+    await buildBlocks(page, [H('', 2)]);
+    await focusEmpty(page);
+    await press(page, 'Enter');
+    // CURRENT: an empty heading is the "end" case of the split: it stays (empty) and a paragraph follows, caret in it.
+    await expectFlat(page, 'h2(∅) ; p(∅)');
+    await expectCaret(page, '|');
+    expect(await typeAndFlat(page)).toBe('h2(∅) ; p(X)');
+    await expectValid(page);
+  });
+
+  test('3c · Enter at the start / in the middle of a LEVEL-3 heading keeps level 3 on both heading halves', async ({ page }) => {
+    await buildBlocks(page, [H('Title', 3)]);
+    await focusAt(page, 'Title', 0);
+    await press(page, 'Enter');
+    await expectFlat(page, 'p(∅) ; h3(Title)');
+    await press(page, 'ArrowRight');
+    await press(page, 'ArrowRight');
+    await press(page, 'Enter');
+    await expectFlat(page, 'p(∅) ; h3(Ti) ; h3(tle)');
+    await expectCaret(page, '|tle');
     await expectValid(page);
   });
 
@@ -322,14 +346,15 @@ test.describe('C · Callout', () => {
     await expectValid(page);
   });
 
-  test('10b · Backspace at offset 0 of a NON-empty callout merges it into the previous block (no de-transform step)', async ({ page }) => {
+  test('10b · Backspace at offset 0 of a NON-empty callout is a NO-OP (nothing merges, variant, text and caret kept)', async ({ page }) => {
     await buildBlocks(page, [Para('before'), C('note', 'tip')]);
     await focusAt(page, 'note', 0);
     await press(page, 'Backspace');
-    // CURRENT: unlike heading / quote / dialogue, a non-empty callout is NOT turned into a paragraph first: its text is
-    // appended to the previous block and the callout (with its variant) disappears. Nothing is lost.
-    await expectFlat(page, 'p(beforenote)');
-    await expectCaret(page, 'before|note');
+    // DECIDED (P-38, interim: the callout is planned to become a container): nothing merges into the previous block and the
+    // callout is not de-transformed either; the block, its variant and the caret stay as they were.
+    await expectFlat(page, 'p(before) ; callout:tip(note)');
+    await expectCaret(page, '|note');
+    expect(await typeAndFlat(page)).toBe('p(before) ; callout:tip(Xnote)');
     await expectValid(page);
   });
 
@@ -337,7 +362,7 @@ test.describe('C · Callout', () => {
     await buildBlocks(page, [C('note')]);
     await focusAt(page, 'note', 0);
     await press(page, 'Backspace');
-    // CURRENT: nothing above -> nothing happens (no way to get a paragraph with Backspace, only via the slash menu).
+    // DECIDED (P-38): same no-op as 10b (here there is nothing above anyway).
     await expectFlat(page, 'callout:note(note)');
     await expectCaret(page, '|note');
     expect(await typeAndFlat(page)).toBe('callout:note(Xnote)');
@@ -385,28 +410,26 @@ test.describe('C · Callout', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('D · Dialogue', () => {
-  test('12a · Enter at the end of a dialogue creates a PARAGRAPH below, caret in it', async ({ page }) => {
+  test('12a · Enter at the end of a non-empty dialogue creates a new DIALOGUE line below, caret in it', async ({ page }) => {
     await buildBlocks(page, [D('talk')]);
     await focusEnd(page, 'talk');
     await press(page, 'Enter');
-    // CURRENT: a paragraph follows. dialogue/index.js defines an onSplit that would create a new DIALOGUE (and turn an
-    // empty one into a paragraph) but it never runs: the hooks are tried in registration order and the Paragraph
-    // extension's generic onSplit (returns a truthy value for ANY block) wins. (Intended-by-code: new dialogue line.)
-    await expectFlat(page, 'dialogue(talk) ; p(∅)');
+    // DECIDED (P-37): the dialogue's own onSplit runs (Block#ascend prefers the hooks of the extension that owns the block
+    // type over the generic Paragraph one): a new dialogue line follows.
+    await expectFlat(page, 'dialogue(talk) ; dialogue(∅)');
     await expectCaret(page, '|');
-    expect(await typeAndFlat(page)).toBe('dialogue(talk) ; p(X)');
+    expect(await typeAndFlat(page)).toBe('dialogue(talk) ; dialogue(X)');
     await expectValid(page);
   });
 
-  test('12b · Enter on an EMPTY dialogue: the dialogue is kept and a paragraph is added below (it is NOT converted)', async ({ page }) => {
+  test('12b · Enter on an EMPTY dialogue: it becomes a paragraph (no empty dialogue left behind)', async ({ page }) => {
     await buildBlocks(page, [D('')]);
     await focusEmpty(page);
     await press(page, 'Enter');
-    // CURRENT: same cause as 12a (the dialogue onSplit "empty -> paragraph" branch is dead code): an empty dialogue
-    // line stays behind, caret goes to the new paragraph.
-    await expectFlat(page, 'dialogue(∅) ; p(∅)');
+    // DECIDED (P-37): leaving the dialogue mode: the empty line is retyped into a paragraph, caret in it.
+    await expectFlat(page, 'p(∅)');
     await expectCaret(page, '|');
-    expect(await typeAndFlat(page)).toBe('dialogue(∅) ; p(X)');
+    expect(await typeAndFlat(page)).toBe('p(X)');
     await expectValid(page);
   });
 
@@ -429,33 +452,33 @@ test.describe('D · Dialogue', () => {
     await expectValid(page);
   });
 
-  test('12e · Enter in the MIDDLE of a dialogue: the tail becomes a paragraph', async ({ page }) => {
+  test('12e · Enter in the MIDDLE of a dialogue: the tail is a dialogue line too', async ({ page }) => {
     await buildBlocks(page, [D('talk')]);
     await focusAt(page, 'talk', 2);
     await press(page, 'Enter');
-    // CURRENT: see 12a.
-    await expectFlat(page, 'dialogue(ta) ; p(lk)');
+    // DECIDED (P-37): see 12a.
+    await expectFlat(page, 'dialogue(ta) ; dialogue(lk)');
     await expectCaret(page, '|lk');
     await expectValid(page);
   });
 
-  test('13 · marks inside a dialogue + the dash is a CSS prefix (not part of the text); markdown uses an em-dash', async ({ page }) => {
+  test('13 · marks inside a dialogue + the dash is a CSS prefix (not part of the text); markdown uses an en-dash', async ({ page }) => {
     await buildBlocks(page, [D('')]);
     await focusEmpty(page);
     await page.keyboard.type('hi there');
-    await expectMd(page, '— hi there');
+    await expectMd(page, '– hi there');
     await press(page, 'Home');
     await press(page, 'Shift+End');
     await bold(page);
-    await expectMd(page, '— **hi there**');
+    await expectMd(page, '– **hi there**');
     await expectFlat(page, 'dialogue(hi there)');
     await press(page, 'ArrowRight');
     await page.keyboard.type('!');
     await expectFlat(page, 'dialogue(hi there!)');
     // The dash only exists as the ::before pseudo-element of the block: the model text stays dash-free.
     const dash = await page.evaluate(() => getComputedStyle(document.querySelector('[data-block-type="dialogue"]')!, '::before').content);
-    // CURRENT: rendered with an EN dash "–" (Dialogue.svelte), while markdown export uses an EM dash "—".
-    expect(dash).toMatch(/^"[–—]"$/);
+    // DECIDED (P-37): one configurable dash (createDialogueExtension({ dash }), default EN dash "–") for display and export.
+    expect(dash).toBe('"–"');
     expect(await page.locator('[data-block-type="dialogue"]').innerText()).not.toMatch(/[–—]/);
     expect((await getJson(page)).blocks[0].type).toBe('dialogue');
     await expectValid(page);
@@ -532,7 +555,9 @@ const UNDO_CASES: UndoCase[] = [
   { title: 'heading · Enter at the end', doc: [H('Title', 2)], at: { text: 'Title', offset: 'end' }, key: 'Enter',
     after: 'h2(Title) ; p(∅)', undone: 'h2(Title)', caretUndone: 'Title|', typed: 'h2(TitleX)' },
   { title: 'heading · Enter in the middle', doc: [H('Title', 2)], at: { text: 'Title', offset: 2 }, key: 'Enter',
-    after: 'h2(Ti) ; p(tle)', undone: 'h2(Title)', caretUndone: 'Ti|tle', typed: 'h2(TiXtle)' },
+    after: 'h2(Ti) ; h2(tle)', undone: 'h2(Title)', caretUndone: 'Ti|tle', typed: 'h2(TiXtle)' },
+  { title: 'heading · Enter at the start', doc: [H('Title', 2)], at: { text: 'Title', offset: 0 }, key: 'Enter',
+    after: 'p(∅) ; h2(Title)', undone: 'h2(Title)', caretUndone: '|Title', typed: 'h2(XTitle)' },
   { title: 'heading · Backspace at 0', doc: [H('Title', 2)], at: { text: 'Title', offset: 0 }, key: 'Backspace',
     after: 'p(Title)', undone: 'h2(Title)', caretUndone: '|Title', typed: 'h2(XTitle)' },
   { title: 'quote · Enter in the middle', doc: [Q('quote')], at: { text: 'quote', offset: 2 }, key: 'Enter',
@@ -545,16 +570,16 @@ const UNDO_CASES: UndoCase[] = [
     after: 'callout:note(no\\nte)', undone: 'callout:note(note)', caretUndone: 'no|te', typed: 'callout:note(noXte)' },
   { title: 'callout · Backspace on an empty callout', doc: [C('', 'tip')], at: 'empty', key: 'Backspace',
     after: 'p(∅)', undone: 'callout:tip(∅)', caretUndone: '|', typed: 'callout:tip(X)' },
-  { title: 'callout · Backspace at 0 (merge into the previous block)', doc: [Para('b'), C('note', 'tip')], at: { text: 'note', offset: 0 }, key: 'Backspace',
-    after: 'p(bnote)', undone: 'p(b) ; callout:tip(note)', caretUndone: '|note', typed: 'p(b) ; callout:tip(Xnote)' },
   { title: 'callout · ArrowDown escape (paragraph creation)', doc: [C('note')], at: { text: 'note', offset: 'end' }, key: 'ArrowDown',
     after: 'callout:note(note) ; p(∅)', undone: 'callout:note(note)', caretUndone: 'note|', typed: 'callout:note(noteX)' },
   { title: 'dialogue · Enter in the middle', doc: [D('talk')], at: { text: 'talk', offset: 2 }, key: 'Enter',
-    after: 'dialogue(ta) ; p(lk)', undone: 'dialogue(talk)', caretUndone: 'ta|lk', typed: 'dialogue(taXlk)' },
+    after: 'dialogue(ta) ; dialogue(lk)', undone: 'dialogue(talk)', caretUndone: 'ta|lk', typed: 'dialogue(taXlk)' },
+  { title: 'dialogue · Enter at the end', doc: [D('talk')], at: { text: 'talk', offset: 'end' }, key: 'Enter',
+    after: 'dialogue(talk) ; dialogue(∅)', undone: 'dialogue(talk)', caretUndone: 'talk|', typed: 'dialogue(talkX)' },
   { title: 'dialogue · Backspace at 0', doc: [D('talk')], at: { text: 'talk', offset: 0 }, key: 'Backspace',
     after: 'p(talk)', undone: 'dialogue(talk)', caretUndone: '|talk', typed: 'dialogue(Xtalk)' },
   { title: 'dialogue · Enter on an empty dialogue', doc: [D('')], at: 'empty', key: 'Enter',
-    after: 'dialogue(∅) ; p(∅)', undone: 'dialogue(∅)', caretUndone: '|', typed: 'dialogue(X)' },
+    after: 'p(∅)', undone: 'dialogue(∅)', caretUndone: '|', typed: 'dialogue(X)' },
 ];
 
 test.describe('F · Ctrl+Z after Enter / Backspace', () => {

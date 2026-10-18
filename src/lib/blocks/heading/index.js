@@ -9,6 +9,9 @@ import { onBeforeInput } from "./hooks/onBeforeInput.hook";
  * @import { Nabu } from "../nabu.svelte.js";
  */
 
+/** Total length of the text inserted by a Loro delta. @param {import('loro-crdt').Delta<string>[]} [delta] */
+const deltaLength = (delta) => (delta || []).reduce((n, op) => n + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
+
 const HeadingExtension = extension("heading", {
     block: Heading,
     component: HeadingComponent,
@@ -24,15 +27,29 @@ const HeadingExtension = extension("heading", {
         /** @param {Nabu} nabu @param {Heading} block @param {Event} event @param {{offset: number, delta: import('loro-crdt').Delta<string>}} data */
         onSplit: (nabu, block, event, data) => {
             const { offset, delta } = data;
-            
-            block.delete({from: offset, to: -1});
-            
-            const currentIndex = block.node.index();
+            const length = block.text.length;
+
+            const currentIndex = block.node.index() ?? 0;
             const parent = block.node.parent();
             const parentId = parent?.id.toString() || null;
-            
-            // On split souvent un titre pour créer un paragraphe après
-            const newBlock = nabu.insert("paragraph", { delta }, parentId, currentIndex + 1);
+
+            // START of a non-empty heading → an empty PARAGRAPH is inserted above; the heading keeps its text,
+            // its level and the caret (at the start of its text). Only when the tail is the WHOLE text (a
+            // collapsed caret): with a range selection the generic split below applies, nothing is dropped.
+            if (offset === 0 && length > 0 && deltaLength(delta) === length) {
+                nabu.insert("paragraph", {}, parentId, currentIndex);
+                block.commit().then(() => nabu.selection.setCursor(block, 0));
+                return { block };
+            }
+
+            block.delete({from: offset, to: -1});
+
+            // END of the heading (or an EMPTY one) → a paragraph below. MIDDLE → both halves are headings of the
+            // same level.
+            const atEnd = offset >= length;
+            const newBlock = atEnd
+                ? nabu.insert("paragraph", /** @type {any} */ ({ delta }), parentId, currentIndex + 1)
+                : nabu.insert("heading", /** @type {any} */ ({ delta, level: block.level }), parentId, currentIndex + 1);
 
             block.commit().then(() => nabu.selection.setCursor(newBlock, 0));
 

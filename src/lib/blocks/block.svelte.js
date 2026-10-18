@@ -403,8 +403,17 @@ export class Block {
         }
 
         // 2. On essaye les hooks d'extensions enregistrés dans Nabu
-        const hooks = this.nabu.hooks.get(eventName);
-        if (hooks) {
+        const registered = /** @type {Function[] | undefined} */ (this.nabu.hooks.get(eventName));
+        if (registered) {
+            // A hook registered by the extension that owns this block's type runs BEFORE the generic ones
+            // (extension order must not let a catch-all hook shadow a block-specific handler).
+            const owners = this.nabu.hookOwners;
+            const hooks = owners
+                ? [
+                    ...registered.filter(h => owners.get(h) === this.type),
+                    ...registered.filter(h => owners.get(h) !== this.type),
+                ]
+                : registered;
             for (const hook of hooks) {
 
                 // Si un hook retourne 'true', on considère l'événement géré

@@ -170,6 +170,7 @@ export class Nabu {
                             this.hooks.set(hookName, []);
                         }
                         this.hooks.get(hookName).push(hookFn);
+                        this.hookOwners.set(hookFn, ext.name);
                     }
                 }
 
@@ -296,6 +297,13 @@ export class Nabu {
     systems = new SvelteMap();
     
     hooks = new Map();
+
+    /**
+     * Hook function -> name of the extension that registered it. Lets `Block#ascend` run the hooks of the
+     * extension that OWNS the block type before the generic ones (type-specific handler wins).
+     * @type {WeakMap<Function, string>}
+     */
+    hookOwners = new WeakMap();
 
     /**
      * Declarative input rules collected from extensions, tested by TextBehavior

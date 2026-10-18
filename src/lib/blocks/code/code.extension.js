@@ -10,7 +10,8 @@ import CodeComponent from "./Code.svelte";
 
 /**
  * onBeforeInput hook for CodeBlock:
- * - Inside a code block: Backspace on empty → transform back to paragraph.
+ * - Inside a code block: Backspace on empty → transform back to paragraph; Backspace at offset 0 of a
+ *   non-empty one → paragraph too (same text, language dropped, caret stays at 0).
  * - Inside a non-code text block: ``` + Enter → transform to code block.
  *
  * @param {Nabu} nabu @param {InputEvent} event @param {Block} block
@@ -27,6 +28,18 @@ const onBeforeInput = (nabu, event, block) => {
         // Backspace at position 0 in an empty code block → back to paragraph
         if (event.inputType === 'deleteContentBackward' && sel.from === 0 && behavior.text.length === 0) {
             const blockId = block.node.id.toString();
+            block.transformTo('paragraph');
+            tick().then(() => {
+                const fresh = nabu.blocks.get(blockId);
+                if (fresh) fresh.focus({ start: 0, end: 0 });
+            });
+            return BREAK;
+        }
+        // Backspace at position 0 in a NON-empty code block (collapsed caret) → it becomes a paragraph with the
+        // same text (the language is dropped), caret stays at 0. A second Backspace then merges normally.
+        if (event.inputType === 'deleteContentBackward' && sel.from === 0 && behavior.text.length > 0) {
+            const blockId = block.node.id.toString();
+            /** @type {any} */ (block.node.data).delete('language');
             block.transformTo('paragraph');
             tick().then(() => {
                 const fresh = nabu.blocks.get(blockId);

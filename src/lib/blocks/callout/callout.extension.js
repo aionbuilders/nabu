@@ -10,7 +10,8 @@ import CalloutComponent from "./Callout.svelte";
 
 /**
  * onBeforeInput hook for CalloutBlock:
- * - Inside a callout block: Backspace on empty → transform back to paragraph.
+ * - Inside a callout block: Backspace on empty → transform back to paragraph; Backspace at offset 0 of a
+ *   non-empty callout → no-op (interim, the callout is planned to become a container).
  * - In any other text block: "! " at the start → transform into a callout.
  *   (The "> " prefix is taken by Blockquote, so callouts use "! " — mnemonic
  *   for alert/important, and free of collisions.)
@@ -34,6 +35,12 @@ const onBeforeInput = (nabu, event, block) => {
                 const fresh = nabu.blocks.get(blockId);
                 if (fresh) fresh.focus({ start: 0, end: 0 });
             });
+            return BREAK;
+        }
+        // Backspace at position 0 in a NON-empty callout → no-op (INTERIM): nothing merges into the previous
+        // block, the text / variant / caret are kept. The callout is planned to become a container (so a
+        // callout will no longer be a flat text block that can be merged or de-transformed with Backspace).
+        if (event.inputType === 'deleteContentBackward' && sel.from === 0 && behavior.text.length > 0) {
             return BREAK;
         }
         return CONTINUE;

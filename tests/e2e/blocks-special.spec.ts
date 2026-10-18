@@ -248,26 +248,34 @@ test.describe('A · Code', () => {
     await expectValid(page);
   });
 
-  test('6 · Backspace at offset 0: non-empty code after a paragraph is absorbed by it, first code block is a no-op, empty code -> paragraph', async ({ page }) => {
+  test('6 · Backspace at offset 0: non-empty code -> paragraph (same text, language dropped) then a 2nd Backspace merges up; empty code -> paragraph', async ({ page }) => {
     // (a) non-empty, previous paragraph
     await buildTree(page, [Pp('para'), Code('ab', 'js')]);
     await focusAt(page, 'ab', 0);
     await press(page, 'Backspace');
-    // CURRENT: plain text merge up (like any block): the code text joins the paragraph, the code type / language are dropped.
-    // Nothing is lost, caret at the join. (Notion: first turns the code block into text, then merges.)
+    // DECIDED (P-39, code.extension.js): first Backspace de-transforms (same text, language dropped, caret stays at 0)...
+    await expectTree(page, 'p(para) ; p(ab)');
+    await expectCaret(page, '|ab');
+    expect(await page.evaluate(() => (window as any).nabu.children[1].node.data.get('language') ?? null)).toBeNull();
+    // ...the second one merges normally.
+    await press(page, 'Backspace');
     await expectTree(page, 'p(paraab)');
     await expectCaret(page, 'para|ab');
     expect(await typeAndTree(page, 'X')).toBe('p(paraXab)');
-    await undo(page);
-    await undo(page);
+    await undo(page); // the typed X
+    await undo(page); // the merge
+    await expectTree(page, 'p(para) ; p(ab)');
+    await undo(page); // the code -> paragraph step
     await expectTree(page, 'p(para) ; code:js(ab)');
-    // (b) non-empty, first block of the document: nothing above -> no-op
+    // (b) non-empty, first block of the document: becomes a paragraph, a 2nd Backspace is then a no-op
     await buildTree(page, [Code('ab')]);
     await focusAt(page, 'ab', 0);
     await press(page, 'Backspace');
-    await expectTree(page, 'code(ab)');
+    await expectTree(page, 'p(ab)');
     await expectCaret(page, '|ab');
-    expect(await typeAndTree(page, 'X')).toBe('code(Xab)');
+    await press(page, 'Backspace');
+    await expectTree(page, 'p(ab)');
+    expect(await typeAndTree(page, 'X')).toBe('p(Xab)');
     // (c) EMPTY code block after a paragraph: de-transformed to an empty paragraph, caret in it
     await buildTree(page, [Pp('para'), Code('')]);
     await focusEmpty(page);
@@ -555,19 +563,24 @@ test.describe('C · Divider', () => {
     await expectValid(page);
   });
 
-  test('14b · Delete at the END of the block before a divider: text is merged, nothing lost; undo restores', async ({ page }) => {
+  test('14b · Delete at the END of the block before a divider deletes the DIVIDER (text + caret kept); one undo restores it', async ({ page }) => {
     await buildTree(page, [Pp('above'), Hr(), Pp('below')]);
     await focusEnd(page, 'above');
     await press(page, 'Delete');
-    // CURRENT: unlike Backspace (which deletes the divider), Delete merges "below" into "above" ACROSS the divider, which is left
-    // behind AFTER the merged text. No text lost, valid tree, but the divider silently moves relative to the content
-    // (the Backspace hook comments on exactly this "orphaned divider" case). Notion: Delete just selects / removes the divider.
-    await expectTree(page, 'p(abovebelow) ; hr');
-    await expectCaret(page, 'above|below');
-    expect(await typeAndTree(page, 'X')).toBe('p(aboveXbelow) ; hr');
-    await undo(page);
-    await undo(page);
+    // DECIDED (P-39, divider.extension.js): symmetric with Backspace after a divider: the divider goes, the text and the caret stay.
+    await expectTree(page, 'p(above) ; p(below)');
+    await expectCaret(page, 'above|');
+    await undo(page); // ONE step restores the divider
     await expectTree(page, 'p(above) ; hr ; p(below)');
+    await press(page, 'Delete');
+    await expectTree(page, 'p(above) ; p(below)');
+    expect(await typeAndTree(page, 'X')).toBe('p(aboveX) ; p(below)');
+    // a second Delete (divider gone) then merges normally
+    await buildTree(page, [Pp('above'), Hr(), Pp('below')]);
+    await focusEnd(page, 'above');
+    await press(page, 'Delete');
+    await press(page, 'Delete');
+    await expectTree(page, 'p(abovebelow)');
     await expectValid(page);
   });
 

@@ -183,7 +183,7 @@ All block types and behaviors are provided as extensions. Pass them to the `Nabu
 | `HeadingExtension` | `heading` block (h1–h6) | `# ` → h1, `## ` → h2, ... |
 | `ListExtension` | `list` container (bullet/ordered/todo) | — |
 | `ListItemExtension` | `list-item` block | `Tab` indent, `Shift+Tab` unindent; `[] ` or `[x] ` → to-do list |
-| `DialogueExtension` | `dialogue` block | `-- ` → dialogue, `Backspace` at start → paragraph |
+| `DialogueExtension` | `dialogue` block | `-- ` → dialogue, `Enter` → new dialogue line (on an empty one → paragraph), `Backspace` at start → paragraph |
 | `BlockquoteExtension` | `blockquote` block | `> ` → blockquote; `Backspace` at start (empty) → paragraph |
 | `DividerExtension` | `divider` block (`<hr>`) | `--- ` → divider |
 | `CodeExtension` | `code` block (monospace, multi-line) | ` ``` ` + Enter → code block; `Tab` inserts 2 spaces |
@@ -203,6 +203,18 @@ Provided by `TypographyExtension` (included in TextPreset, DocumentPreset, and F
 | Input | Output | Description |
 |---|---|---|
 | `--` + space | `— ` | Em-dash (French dialogue convention) |
+
+### Dialogue marker
+
+A dialogue line is displayed and exported with a dash, an EN dash `–` by default. `DialogueExtension` is the default instance; use the factory to pick another marker:
+
+```js
+import { createDialogueExtension } from '@aionbuilders/nabu';
+
+new Nabu({ extensions: [/* … */, createDialogueExtension({ dash: '—' })] });
+```
+
+The dash is shown through the CSS custom property `--nb-dialogue-dash` (set it on any ancestor or rule to override the configured dash, e.g. `--nb-dialogue-dash: "—"`) and written by the markdown export (`– Tu viens ?`). Markdown import and paste recognize both `–` and `—` as dialogue markers.
 
 ### Inline markdown shortcuts
 
@@ -235,7 +247,7 @@ engine.redo();
 
 // Serialize
 const markdown = engine.serialize('markdown');
-// dialogue blocks serialize as: — Tu viens ce soir ?
+// dialogue blocks serialize as: – Tu viens ce soir ?
 
 const json = engine.serialize('json');
 

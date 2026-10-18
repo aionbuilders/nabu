@@ -64,6 +64,7 @@ async function commitDivider(nabu, block) {
  * - Backspace at the start of a block whose previous sibling is a divider
  *   → delete the divider (otherwise the text merge would skip over it and
  *   leave it orphaned).
+ * - Delete at the end of a block whose next sibling is a divider → delete the divider (symmetric).
  *
  * @param {Nabu} nabu @param {InputEvent} event @param {Block} block
  */
@@ -84,6 +85,21 @@ const onBeforeInput = (nabu, event, block) => {
         nabu.commit().then(() => {
             const fresh = nabu.blocks.get(blockId);
             if (fresh) nabu.selection.setCursor(fresh, 0);
+        });
+        return BREAK;
+    }
+
+    // Delete at the END of the block right BEFORE a divider → delete the divider (symmetric with Backspace
+    // after it). The text and the caret are kept; one transaction = one undo step.
+    if (event.inputType === "deleteContentForward" && sel.from === behavior.text.length) {
+        const { next } = block.getAdjacentSiblings();
+        if (next?.type !== 'divider') return CONTINUE;
+        const blockId = block.id;
+        const offset = sel.from;
+        nabu.tree.delete(next.node.id);
+        nabu.commit().then(() => {
+            const fresh = nabu.blocks.get(blockId);
+            if (fresh) nabu.selection.setCursor(fresh, offset);
         });
         return BREAK;
     }
