@@ -22,11 +22,16 @@
       <span>{block.name || 'file'}</span>
       <span class="nabu-file-chip-status">Uploading…</span>
     </div>
-  {:else}
+  {:else if block.displaySrc}
     <a href={block.displaySrc} download={block.name} class="nabu-file-chip">
       <span>📎</span>
       <span>{block.name || 'file'}</span>
     </a>
+  {:else}
+    <div class="nabu-file-chip">
+      <span>📎</span>
+      <span>{block.name || 'file'}</span>
+    </div>
   {/if}
 </div>
 

@@ -1,7 +1,7 @@
 import { TextBlock } from "../text-block.svelte.js";
 import { LoroText } from "loro-crdt";
 import DialogueComponent from "./Dialogue.svelte";
-import { deltaToMarkdown } from "../../behaviors/text";
+import { deltaToMarkdown, deltaToHtml } from "../../behaviors/text";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -45,6 +45,11 @@ export class Dialogue extends TextBlock {
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
         return `${Dialogue.markdownMarker} ${deltaToMarkdown(pb.delta || [])}`;
+    }
+
+    /** @param {import('../../utils/extensions.js').PasteBlock} pb */
+    static toHtml(pb) {
+        return `<p>${deltaToHtml(pb.delta || [])}</p>`;
     }
 
     static markdownRules = [

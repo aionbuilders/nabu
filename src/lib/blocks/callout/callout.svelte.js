@@ -2,6 +2,7 @@ import { TextBlock } from "../text-block.svelte.js";
 import { LoroText } from "loro-crdt";
 import CalloutComponent from "./Callout.svelte";
 import { tick } from "svelte";
+import { escapeAttr } from "../../utils/html.js";
 import { deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 
 /**
@@ -118,7 +119,7 @@ export class CalloutBlock extends TextBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) {
-        const v = pb.props?.variant || 'note';
+        const v = escapeAttr(pb.props?.variant || 'note');
         return '<aside class="callout callout-' + v + '" data-callout="' + v + '">' + deltaToHtml(pb.delta || []) + '</aside>';
     }
 

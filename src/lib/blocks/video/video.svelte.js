@@ -1,6 +1,7 @@
 // @ts-ignore
 import { MediaBlock } from "../media/media-block.svelte.js";
 import VideoComponent from "./Video.svelte";
+import { escapeAttr, sanitizeUrl } from "../../utils/html.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -40,7 +41,9 @@ export class VideoBlock extends MediaBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) {
-        return '<video src="' + (pb.props?.ref || '') + '" controls></video>';
+        const ref = pb.props?.ref || '';
+        const src = ref === '' ? '' : sanitizeUrl(ref, { kind: 'media' });
+        return src === null ? '' : '<video src="' + escapeAttr(src) + '" controls></video>';
     }
 
     static htmlRules = [
@@ -49,13 +52,15 @@ export class VideoBlock extends MediaBlock {
 
     /**
      * @param {Element} el
-     * @returns {import('../../utils/extensions.js').PasteBlock}
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromHTML(el) {
+        const src = el.getAttribute('src') || el.querySelector('source')?.getAttribute('src') || '';
+        if (src && sanitizeUrl(src, { kind: 'media' }) === null) return null;
         return {
             type: 'video',
             props: {
-                ref: el.getAttribute('src') || el.querySelector('source')?.getAttribute('src') || '',
+                ref: src,
                 alt: '',
             },
             partial: false,

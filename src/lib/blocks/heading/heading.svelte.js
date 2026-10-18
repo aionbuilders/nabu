@@ -44,13 +44,15 @@ export class Heading extends TextBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
-        const level = pb.props?.level ?? 1;
+        const n = Math.trunc(Number(pb.props?.level));
+        const level = n >= 1 && n <= 6 ? n : 1; // never interpolate an arbitrary value into a tag name
         return `${'#'.repeat(level)} ${deltaToMarkdown(pb.delta || [])}`;
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) {
-        const level = pb.props?.level ?? 1;
+        const n = Math.trunc(Number(pb.props?.level));
+        const level = n >= 1 && n <= 6 ? n : 1; // never interpolate an arbitrary value into a tag name
         return `<h${level}>${deltaToHtml(pb.delta || [])}</h${level}>`;
     }
 

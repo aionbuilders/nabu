@@ -5,6 +5,7 @@ import { MegaBlock } from './megablock.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf, findLCA } from './container.utils.js';
 import { jsonToPasteBlocks } from '../utils/extensions.js';
+import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
 import { tick } from 'svelte';
 import { Pulse } from '@aionbuilders/pulse';
 import { normalizePlaceholders } from '../utils/placeholders.js';
@@ -1090,7 +1091,7 @@ export class Nabu {
                 return BlockClass.toHtml(pb, { ...ctx, recurse: (/** @type {any} */ child, /** @type {any} */ childCtx) => pbToHtml(child, { ...ctx, ...childCtx }) });
             }
             const text = (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
-            return text ? `<p>${text}</p>` : '';
+            return text ? `<p>${escapeHtml(text)}</p>` : ''; // unknown block type: escaped, never raw
         };
 
         e.clipboardData.setData('text/plain', pasteBlocks.map(pb => pbToMarkdown(pb)).join('\n\n'));
@@ -1173,7 +1174,8 @@ export class Nabu {
      */
     insertFragment(fragment) {
         this.selection.sync(); // public entry point: may be called outside an input event
-        const { blocks } = fragment;
+        // Every fragment (HTML / markdown / nabu JSON / API) goes through here: unsafe link & media URLs are dropped.
+        const blocks = sanitizePasteBlocks(fragment.blocks);
         if (!blocks?.length) return;
 
         let anchorBlock;
@@ -1365,7 +1367,7 @@ export class Nabu {
      * @returns {Promise<void>}
      */
     async importFragment(fragment) {
-        const { blocks } = fragment;
+        const blocks = sanitizePasteBlocks(fragment.blocks);
         if (!blocks?.length) return;
 
         [...this.tree.roots()].forEach(root => this.tree.delete(root.id));

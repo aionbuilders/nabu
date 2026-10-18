@@ -1,6 +1,7 @@
 // @ts-ignore
 import { MediaBlock } from "../media/media-block.svelte.js";
 import FileComponent from "./File.svelte";
+import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -40,7 +41,11 @@ export class FileBlock extends MediaBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) {
-        return '<a href="' + (pb.props?.ref || '') + '" download="' + (pb.props?.name || '') + '">' + (pb.props?.name || 'file') + '</a>';
+        const ref = pb.props?.ref || '';
+        const href = ref === '' ? '' : sanitizeUrl(ref, { kind: 'media' });
+        const name = pb.props?.name || '';
+        if (href === null) return '<p>' + escapeHtml(name || 'file') + '</p>';
+        return '<a href="' + escapeAttr(href) + '" download="' + escapeAttr(name) + '">' + escapeHtml(name || 'file') + '</a>';
     }
 
     static htmlRules = [
@@ -52,14 +57,13 @@ export class FileBlock extends MediaBlock {
      * @returns {import('../../utils/extensions.js').PasteBlock}
      */
     static fromHTML(el) {
-        return {
-            type: 'file',
-            props: {
-                ref: el.getAttribute('href') || '',
-                name: el.getAttribute('download') || el.textContent || '',
-            },
-            partial: false,
-        };
+        const href = el.getAttribute('href') || '';
+        const name = el.getAttribute('download') || el.textContent || '';
+        // An unsafe href never becomes a file block: keep the label as plain text.
+        if (href && sanitizeUrl(href, { kind: 'media' }) === null) {
+            return { type: 'paragraph', delta: name ? [{ insert: name }] : [], partial: false };
+        }
+        return { type: 'file', props: { ref: href, name }, partial: false };
     }
 
     /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */

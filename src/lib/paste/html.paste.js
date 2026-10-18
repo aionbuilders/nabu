@@ -1,4 +1,5 @@
 import { Extension } from '../utils/extensions.js';
+import { sanitizeUrl } from '../utils/html.js';
 
 // ── Inline mark mapping: HTML tag → Nabu mark name ──────────────────────────
 const MARK_TAGS = {
@@ -16,6 +17,12 @@ const SKIP_IN_INLINE = new Set([
     'ul', 'ol', 'li',
     'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th',
     'script', 'style', 'noscript', 'iframe',
+]);
+
+// ── Tags whose content is NEVER read as text (active / embedded content) ─────
+// Kept apart from SKIP_IN_INLINE: that set also drives block-container detection.
+const DROP_IN_INLINE = new Set([
+    'object', 'embed', 'applet', 'template', 'svg', 'math', 'frame', 'frameset', 'canvas', 'audio', 'video', 'img',
 ]);
 
 // ── Tags treated as transparent containers: flattened at the top level ───────
@@ -70,14 +77,15 @@ export function parseInline(el, marks = {}) {
             const el2 = /** @type {Element} */ (child);
             const tag = el2.tagName.toLowerCase();
             if (tag === 'br') { ops.push({ insert: '\n' }); continue; }
-            if (SKIP_IN_INLINE.has(tag)) continue;
+            if (SKIP_IN_INLINE.has(tag) || DROP_IN_INLINE.has(tag)) continue;
             const markName = MARK_TAGS[tag];
             const styleMarks = { ...marks };
             if (markName) styleMarks[markName] = true;
             // <a href> → link mark (value = href)
             if (tag === 'a') {
                 const href = el2.getAttribute('href');
-                if (href) styleMarks['link'] = /** @type {any} */ (href);
+                // Unsafe hrefs (javascript:, data:…) are dropped; the text is kept, just not as a link.
+                if (href && sanitizeUrl(href, { kind: 'link' }) !== null) styleMarks['link'] = /** @type {any} */ (href);
             }
             // Detect marks from inline styles (e.g. Google Docs uses font-weight:700 on <span>)
             if (el2.nodeType === Node.ELEMENT_NODE) {

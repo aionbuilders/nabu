@@ -4,6 +4,7 @@
 
 import { Extension } from '../../utils/extensions.js';
 import { TextBehavior } from './text.behavior.svelte.js';
+import { sanitizeUrl } from '../../utils/html.js';
 
 /** @type {Record<string, string>} */
 const MARK_SHORTCUTS = {
@@ -123,6 +124,18 @@ function onKeyDown(nabu, event) {
     return nabu.BREAK;
 }
 
+/**
+ * A link href that may enter the model: http(s), mailto, tel, relative, `#fragment`. Anything else
+ * (`javascript:`, `data:`, `vbscript:`…) is refused with a warning. Returns the href, or null.
+ * @param {any} nabu @param {unknown} href @returns {string | null}
+ */
+function safeHref(nabu, href) {
+    if (!href) return null;
+    const safe = sanitizeUrl(href, { kind: 'link' });
+    if (safe === null) nabu.warn('link: refused unsafe href', href);
+    return safe;
+}
+
 export const RichTextExtension = new Extension('rich-text', {
     // Declare all mark attributes so Loro's applyDelta can handle them correctly.
     // Marks are exact (expand: 'none') — they don't auto-extend at boundaries.
@@ -143,8 +156,9 @@ export const RichTextExtension = new Extension('rich-text', {
         'mark:remove': (nabu, data) => removeMark(nabu, data?.mark),
         // Links — the 'link' mark stores the href as its value
         'link:set': (nabu, data) => {
-            if (!data?.href) return;
-            return applyMark(nabu, 'link', data.href);
+            const href = safeHref(nabu, data?.href);
+            if (!href) return;
+            return applyMark(nabu, 'link', href);
         },
         'link:remove': (nabu) => removeMark(nabu, 'link'),
         'link:toggle': (nabu, data) => {
@@ -152,8 +166,9 @@ export const RichTextExtension = new Extension('rich-text', {
             if (!targets.length) return;
             const allHaveLink = targets.every(({ behavior, sel }) => behavior.isMarkActive('link', sel));
             if (allHaveLink) return removeMark(nabu, 'link');
-            if (!data?.href) return;
-            return applyMark(nabu, 'link', data.href);
+            const href = safeHref(nabu, data?.href);
+            if (!href) return;
+            return applyMark(nabu, 'link', href);
         },
         // Aliases
         'bold':          (nabu) => toggleMark(nabu, 'bold'),

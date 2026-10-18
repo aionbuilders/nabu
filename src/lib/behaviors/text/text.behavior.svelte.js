@@ -4,18 +4,7 @@
 
 import { LoroText } from "loro-crdt";
 import { tick } from "svelte";
-
-/**
- * Escape special HTML characters in plain text.
- * @param {string} text
- * @returns {string}
- */
-function escapeHtml(text) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
+import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 
 /**
  * Converts a Loro text delta to inline HTML.
@@ -33,7 +22,11 @@ export function deltaToHtml(delta) {
         if (attrs.italic)        text = `<em>${text}</em>`;
         if (attrs.underline)     text = `<u>${text}</u>`;
         if (attrs.strikethrough) text = `<s>${text}</s>`;
-        if (attrs.link)          text = `<a href="${escapeHtml(String(attrs.link))}">${text}</a>`;
+        if (attrs.link) {
+            // An unsafe href (javascript:, data:…) never becomes a live link: the label survives, the <a> does not.
+            const href = sanitizeUrl(attrs.link, { kind: 'link' });
+            if (href !== null) text = `<a href="${escapeAttr(href)}">${text}</a>`;
+        }
         return text;
     }).join('');
 }
@@ -465,6 +458,11 @@ export class TextBehavior {
     /** @param {string} markName @param {any} value @param {ReturnType<TextBehavior["getSelection"]>} sel */
     applyMark(markName, value, sel) {
         if (!sel || sel.isCollapsed) return;
+        // Model guard: an unsafe link (javascript:…) never enters the document through any mark API.
+        if (markName === 'link' && sanitizeUrl(value, { kind: 'link' }) === null) {
+            this.nabu.warn('applyMark: refused unsafe link href', value);
+            return;
+        }
         this.container.mark({ start: sel.from, end: sel.to }, markName, value);
     }
 

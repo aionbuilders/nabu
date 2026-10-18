@@ -1,5 +1,6 @@
 import { Block } from "../block.svelte.js";
 import { Files } from "../../files/files.svelte.js";
+import { sanitizeUrl } from "../../utils/html.js";
 
 /** @import { Nabu, NabuNode } from "../nabu.svelte.js"; */
 
@@ -47,8 +48,10 @@ export class MediaBlock extends Block {
 
     /** Resolved display URL. While pending → local preview; else resolve the ref. @returns {string} */
     get displaySrc() {
-        if (this.status === 'pending' && this.previewUrl) return this.previewUrl;
-        return Files.get(this.nabu).resolve(this.ref);
+        // Render guard: only a media-safe URL (http(s), blob:, nabu-asset:, data:image|video, relative) reaches
+        // a `src` / `href` — a document loaded with `javascript:` in `ref` renders as "no media".
+        if (this.status === 'pending' && this.previewUrl) return sanitizeUrl(this.previewUrl, { kind: 'media' }) ?? '';
+        return sanitizeUrl(Files.get(this.nabu).resolve(this.ref), { kind: 'media' }) ?? '';
     }
 
     /** @param {string} v */

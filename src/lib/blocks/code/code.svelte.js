@@ -2,6 +2,7 @@ import { TextBlock } from "../text-block.svelte.js";
 import { LoroText } from "loro-crdt";
 import CodeComponent from "./Code.svelte";
 import { tick } from "svelte";
+import { escapeHtml } from "../../utils/html.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -18,18 +19,6 @@ import { tick } from "svelte";
  */
 function pbText(pb) {
     return (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
-}
-
-/**
- * Escape special HTML characters.
- * @param {string} text
- * @returns {string}
- */
-function escapeHtml(text) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
 }
 
 // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)

@@ -1,4 +1,6 @@
 <script>
+    import { sanitizeUrl } from '../../utils/html.js';
+
     /** @type {{ delta: import('loro-crdt').Delta<string>[] }} */
     let { delta } = $props();
 
@@ -17,8 +19,10 @@
 </script>
 
 {#each segments as op}
-    {#if op.attributes?.link}
-        <a href={String(op.attributes.link)} class="nabu-link {getClasses(op.attributes)}" target="_blank" rel="noopener">{op.insert}</a>
+    {@const link = /** @type {any} */ (op.attributes)?.link}
+    {@const href = link ? sanitizeUrl(link, { kind: 'link' }) : null}
+    {#if href !== null}
+        <a {href} class="nabu-link {getClasses(op.attributes ?? {})}" target="_blank" rel="noopener noreferrer">{op.insert}</a>
     {:else if op.attributes && Object.values(op.attributes).some(Boolean)}
         <span class={getClasses(op.attributes)}>{op.insert}</span>
     {:else}
