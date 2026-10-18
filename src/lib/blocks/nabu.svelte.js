@@ -1119,10 +1119,10 @@ export class Nabu {
         const result = deleteSelectionContent(this, this);
         if (!result) return;
 
-        // 3. Single Loro transaction (its own undo step, like a structural op) + restore cursor
+        // 3. Single Loro transaction (its own undo step, like a structural op) + restore cursor. The caret is placed
+        //    once the commit has re-rendered the text: set earlier, the DOM node it points into is replaced.
         this.#isolateNextCommits();
-        this.commit();
-        this.selection.setCursor(result.block, result.offset);
+        this.commit().then(() => this.selection.setCursor(this.blocks.get(result.block.id) ?? result.block, result.offset));
     }
 
     /** @param {ClipboardEvent} e */

@@ -239,7 +239,7 @@ export class ListItem extends MegaBlock {
     split(options) { 
         return this.ascend("onSplit", null, { 
             offset: options?.offset || 0,
-            delta: this.behavior.container.sliceDelta(options?.offset || 0, this.text.length)
+            delta: this.behavior.container.sliceDelta(options?.offset || 0, this.behavior.container.length)
         });
     }
 

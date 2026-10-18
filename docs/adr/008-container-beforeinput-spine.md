@@ -71,3 +71,15 @@ L'héritage a été envisagé mais rejeté pour trois raisons :
 1. **Dépendance circulaire** : `Block → Nabu`, `MegaBlock → Block`, `Nabu → MegaBlock → Block → Nabu`
 2. **Incompatibilité constructeur** : `MegaBlock(nabu, node)` — Nabu n'a pas de `LoroTreeNode`
 3. **Héritage de baggage inutile** : `selected`, `element`, `behaviors`, `parent`, `index` n'ont aucun sens sur Nabu
+
+## Addendum — `deleteRange` (P-44)
+
+La logique spine existait en deux exemplaires (`handleContainerBeforeInput` et `deleteSelectionContent`, utilisé par la coupe et le collage) qui avaient divergé : la coupe détruisait la racine commune aux deux spines (document corrompu), et les deux déplaçaient les survivants de la spine de fin dans le mauvais ordre. Il n'y a plus qu'une implémentation, `deleteRange(nabu, { startBlock, startOffset, endBlock, endOffset })` ; `handleContainerBeforeInput` (Backspace, frappe, Entrée sur une sélection) et `deleteSelectionContent` (coupe, collage) l'appellent.
+
+Algorithme (générique, aucun type de bloc) :
+- LCA des deux blocs ; spine de début = `startBlock` → enfant du LCA, spine de fin idem.
+- Détruits : les enfants du LCA entre les deux spines ; les frères suivants de chaque nœud de la spine de début (et les enfants du bloc de début) ; les frères précédents de chaque nœud de la spine de fin ; les nœuds de la spine de fin eux-mêmes (leur texte est dans la sélection).
+- Survivants : ce qui suit le point de fin dans les blocs partiellement sélectionnés de la spine de fin, dans l'ordre du document (enfants de `endBlock`, ses frères suivants, ceux de son parent…), déplacés après `startBlock` (`wrapOrphan` pour `requiredParent`) AVANT la destruction de leurs anciens ancêtres (supprimer un nœud Loro supprime son sous-arbre).
+- Cas « bloc de début ancêtre du bloc de fin » (sélection du texte d'un hybride jusque dans son corps) : le reste du corps reste en place ; seul le premier bloc de la spine de fin qui a un texte propre est retiré, ses survivants prenant sa place.
+- Texte : tête du bloc de début + queue du bloc de fin fusionnées (`absorbs`) ; les enfants de `endBlock` sont adoptés par le bloc de début s'il sait en porter, sinon promus.
+- Un seul `commit` (une étape d'annulation) ; les normaliseurs (listes…) nettoient ensuite les invariants propres aux types.

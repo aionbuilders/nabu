@@ -464,9 +464,7 @@ test.describe('C · cut', () => {
     expect(fragTexts(ev.nabu!.blocks)).toEqual(['lo world', 'second', 'third']);
     expect(ev.text).toBe('lo world\n\nsecond\n\nthird');
     await expect.poll(() => flat(page)).toBe('p(hel para)');
-    // BROKEN: the caret lands at the START of the merged block ("|hel para") instead of at the cut junction ("hel| para",
-    // where Backspace on the same selection puts it): the next keystroke is inserted at the wrong place. Suspected:
-    // deleteSelectionContent computes `startOffset` for a multi-block selection (container.utils.js:259) as 0.
+    // P-44: the caret lands at the cut junction (where Backspace on the same selection puts it), not at the block start.
     expect.soft(await caret(page), 'caret at the cut junction').toBe('hel| para');
     expect(await violations(page)).toEqual([]);
 
@@ -492,11 +490,8 @@ test.describe('C · cut', () => {
       await selectRange(page, fb, fo, tb, to);
       await cut(page);
 
-      // BROKEN: the cut tears the tree down — `ul[]`, an empty list, Block instances / DOM out of sync with the tree and
-      // "Text is deleted. You cannot apply the op on a deleted container" page errors — while Backspace on the SAME
-      // selection is fine. Cause: deleteSelectionContent (container.utils.js:246) destroys `startOfEndSpine` unconditionally
-      // (it is the root list shared by both boundaries), where handleContainerBeforeInput guards it with
-      // `startOfEndSpine !== startOfStartSpine` (container.utils.js:218-226).
+      // P-44: cut, Backspace and typing share ONE range deletion (deleteRange, container.utils.js): valid tree, the rest of the
+      // end spine survives in document order, a single undo step. See multi-delete.spec.ts for the order assertions.
       expect.soft(await violations(page), `violations after cut ${label}`).toEqual([]);
       const left = (await allText(page)).filter(Boolean);
       for (const s of survive) expect.soft(left.join('|'), `text "${s}" kept after cut ${label}`).toContain(s);
