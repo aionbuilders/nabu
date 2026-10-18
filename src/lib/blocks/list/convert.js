@@ -43,12 +43,13 @@ function hoistToTopLevel(nabu, item) {
  * @param {NabuNode} item  a list-item node
  * @param {string} type
  * @param {Record<string, any>} [props]
+ * @param {boolean} [numbered=true]  see `liftItemTo`
  * @returns {boolean} whether the item was retyped
  */
-export function retypeItem(nabu, item, type, props = {}) {
+export function retypeItem(nabu, item, type, props = {}, numbered = true) {
     if (type === "list-item") return false;
     hoistToTopLevel(nabu, item);
-    return liftItemTo(nabu, item, type, props);
+    return liftItemTo(nabu, item, type, props, numbered);
 }
 
 /**

@@ -1205,6 +1205,20 @@ export class Nabu {
             return;
         }
 
+        // The caret block may take over the insertion (a list item keeps pasted paragraphs in its list, and
+        // splits the list around a block it cannot hold…). It declines with null: the default path runs.
+        const landing = anchorBlock.acceptPaste(blocks, { offset });
+        if (landing) {
+            this.#isolateNextCommits();
+            this.commit();
+            tick().then(() => {
+                if (!landing.block) return;
+                const fb = this.blocks.get(landing.block.id) || landing.block;
+                this.selection.setCursor(fb, landing.offset);
+            });
+            return;
+        }
+
         // A whole pasted block landing in an EMPTY root-level block (e.g. `# Title` into an
         // empty paragraph) brings its type along. Pasting into existing text never coerces.
         // Blocks nested in a container (list item…) keep their type to preserve the structure.
@@ -1255,12 +1269,12 @@ export class Nabu {
             focusOffset = offset + firstDelta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
         } else {
             // Container (e.g. List): insert it after anchor
-            prevNode = this.#insertPasteBlock(firstPb, prevNode);
+            prevNode = this.insertPasteBlock(firstPb, prevNode);
         }
 
         // ── Middle blocks ─────────────────────────────────────────────────────
         for (const pb of midPbs) {
-            prevNode = this.#insertPasteBlock(pb, prevNode);
+            prevNode = this.insertPasteBlock(pb, prevNode);
         }
 
         // ── Last block (only when blocks.length > 1) ──────────────────────────
@@ -1283,7 +1297,7 @@ export class Nabu {
                 }
             } else {
                 // Container last block: insert it, put rightDelta in a new paragraph after
-                prevNode = this.#insertPasteBlock(lastPb, prevNode);
+                prevNode = this.insertPasteBlock(lastPb, prevNode);
                 if (rightDelta.length) {
                     const PClass = this.registry.get('paragraph');
                     if (PClass) {
@@ -1320,12 +1334,13 @@ export class Nabu {
     /**
      * Inserts a PasteBlock after `afterNode`. Handles both leaf blocks (wrapOrphan)
      * and container blocks (creates container, recurses into children).
-     * Returns the outer node to use as the next prevNode.
+     * Returns the outer node to use as the next prevNode. Public: part of the paste toolbox a block's
+     * `acceptPaste` hook builds on. No commit.
      * @param {import('../utils/extensions.js').PasteBlock} pb
      * @param {any} afterNode
      * @returns {any}
      */
-    #insertPasteBlock(pb, afterNode) {
+    insertPasteBlock(pb, afterNode) {
         if (pb.children?.length) {
             const ContainerClass = this.registry.get(pb.type);
             if (!ContainerClass) return afterNode;
@@ -1335,7 +1350,7 @@ export class Nabu {
             const ctb = container.behaviors?.get('text');
             if (ctb && pb.delta?.length) ctb.applyDelta(pb.delta);
             for (const child of pb.children) {
-                this.#createInContainer(child, container.node.id.toString());
+                this.createPasteBlock(child, container.node.id.toString());
             }
             const wrapper = wrapOrphan(this, container);
             return wrapper ? wrapper.node : container.node;
@@ -1353,19 +1368,22 @@ export class Nabu {
     }
 
     /**
-     * Creates a block inside a container, recursively handling nested children.
+     * Creates a block inside a container, recursively handling nested children. Public: part of the paste
+     * toolbox a block's `acceptPaste` hook builds on. No commit.
      * @param {import('../utils/extensions.js').PasteBlock} pb
      * @param {string} parentId
+     * @returns {Block | null}  the created block
      */
-    #createInContainer(pb, parentId) {
+    createPasteBlock(pb, parentId) {
         const BlockClass = this.registry.get(pb.type) || this.registry.get('paragraph');
-        if (!BlockClass) return;
+        if (!BlockClass) return null;
         const block = BlockClass.create(this, pb.type, pb.props || {}, parentId);
         const tb = block.behaviors?.get('text');
         if (tb && pb.delta?.length) tb.applyDelta(pb.delta);
         for (const child of pb.children || []) {
-            this.#createInContainer(child, block.node.id.toString());
+            this.createPasteBlock(child, block.node.id.toString());
         }
+        return block;
     }
 
     // DOCUMENT IMPORT
@@ -1390,7 +1408,7 @@ export class Nabu {
             const tb = block.behaviors?.get('text');
             if (tb && pb.delta?.length) tb.applyDelta(pb.delta);
             for (const child of pb.children || []) {
-                this.#createInContainer(child, block.node.id.toString());
+                this.createPasteBlock(child, block.node.id.toString());
             }
         }
 

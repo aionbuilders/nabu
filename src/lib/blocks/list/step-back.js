@@ -24,9 +24,12 @@ import { typeOf, kids, sublistsOf, dropIfEmpty, moveItems } from "./indent.js";
  * @param {NabuNode} item
  * @param {string} [type]
  * @param {Record<string, any>} [props]
+ * @param {boolean} [numbered=true]  whether the item counts as a numbered item of an ORDERED list (the tail
+ *   resumes after it). False for a pure placeholder (a paste splitting the list): the tail resumes right where
+ *   the items before it stop.
  * @returns {boolean} whether the item was lifted (false when it is nested / not in a list)
  */
-export function liftItemTo(nabu, item, type = "paragraph", props = {}) {
+export function liftItemTo(nabu, item, type = "paragraph", props = {}, numbered = true) {
     const list = item.parent();
     if (!list || typeOf(list) !== "list" || typeOf(list.parent()) === "list-item") return false;
 
@@ -35,7 +38,7 @@ export function liftItemTo(nabu, item, type = "paragraph", props = {}) {
     const own = sublistsOf(item);
     const listType = /** @type {any} */ (list.data.get("listType")) || "bullet";
     // The number the first follower had: the list's own start + the items before it (item included).
-    const tailStart = (listStart(listType, list.data.get("start")) ?? 1) + index + 1;
+    const tailStart = (listStart(listType, list.data.get("start")) ?? 1) + index + (numbered ? 1 : 0);
     const parentId = list.parent()?.id.toString();
 
     item.moveAfter(list);

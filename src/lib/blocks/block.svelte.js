@@ -362,6 +362,23 @@ export class Block {
      */
     get requiredParent() { return null; }
 
+    /**
+     * Paste extension point: lets the block that holds the caret decide how a pasted fragment lands, instead
+     * of the engine's default (first block merged into the caret block, the rest inserted after it as
+     * siblings). A block that lives in a container with its own rules about what it can hold overrides it
+     * (e.g. a list item turns pasted paragraphs into siblings items and splits its list around a block it
+     * cannot hold). The engine has already removed the selection; it commits the whole paste as ONE
+     * transaction (one undo step) and puts the caret at the returned point.
+     *
+     * Contract: return null to DECLINE, and then touch nothing (the default insertion runs). Otherwise
+     * apply the whole paste on the tree (the blocks are created through `nabu.createPasteBlock` /
+     * `nabu.insertPasteBlock`), do NOT commit, and return where the caret goes.
+     * @param {import('../utils/extensions.js').PasteBlock[]} blocks  the sanitized fragment
+     * @param {{ offset: number }} ctx  the caret offset in this block's text
+     * @returns {{ block: Block | null, offset: number } | null}  `block: null` leaves the caret to the engine
+     */
+    acceptPaste(blocks, ctx) { return null; }
+
     /** @param {{from?: number, to?: number, index?: number, length?: number, offset?: number}} options @returns {{block: Block} | null} */
     split(options) {
         this.nabu.warn("Not implemented: split block", this.id, "with options", options);

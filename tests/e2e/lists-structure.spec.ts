@@ -818,10 +818,10 @@ test.describe('G · Paste into list items', () => {
     await buildDoc(page, [UL(I(''))]);
     await focusEmpty(page);
     await pasteText(page, 'a\nb\nc');
-    // BROKEN: result is "ul[a, p(b), p(c)]": the extra lines become PARAGRAPHS that are direct children of the
-    // list (invalid tree). nabu.svelte.js insertFragment (leaf last/middle blocks) only calls wrapOrphan for blocks
-    // with a requiredParent, so a paragraph is dropped into the list as is. (Notion / Docs: one list item per line.)
+    // DECIDED (P-49): pasted paragraphs become ITEMS of the list they land in (one item per line). More cases in
+    // paste-lists.spec.ts.
     expect(await texts(page)).toEqual(['a', 'b', 'c']);
+    await expectOutline(page, 'ul[a, b, c]');
     await expectValidSoft(page);
     await expectCaret(page, 'c|');
   });
@@ -830,8 +830,9 @@ test.describe('G · Paste into list items', () => {
     await buildDoc(page, [UL(I('x'))]);
     await focusEnd(page, 'x');
     await pasteText(page, 'a\nb\nc');
-    // BROKEN: same root cause as 23a ("ul[xa, p(b), p(c)]").
+    // DECIDED (P-49): same as 23a, the first line merges into the item.
     expect(await texts(page)).toEqual(['xa', 'b', 'c']);
+    await expectOutline(page, 'ul[xa, b, c]');
     await expectValidSoft(page);
   });
 
@@ -839,9 +840,9 @@ test.describe('G · Paste into list items', () => {
     await buildDoc(page, [UL(I(''), I('after'))]);
     await focusEmpty(page);
     await pasteText(page, '- x\n- y');
-    // BROKEN: a LIST is inserted as a direct child of the list ("ul[∅, ul[x, y], after]"): list under list, and the
-    // empty item remains. Same cause as 23 (no wrapOrphan / no unwrapping of the fragment list into the host list).
+    // DECIDED (P-49): the items of a pasted list join the current level (the empty item is replaced).
     expect(await texts(page)).toEqual(['x', 'y', 'after']);
+    await expectOutline(page, 'ul[x, y, after]');
     await expectValidSoft(page);
   });
 
@@ -849,8 +850,9 @@ test.describe('G · Paste into list items', () => {
     await buildDoc(page, [UL(I('p', UL(I(''))))]);
     await focusEmpty(page);
     await pasteText(page, 'a\nb\nc');
-    // BROKEN: paragraphs end up inside the nested list ("ul[p > ul[a, p(b), p(c)]]"), same cause as 23a.
+    // DECIDED (P-49): items of the NESTED list.
     expect(await texts(page)).toEqual(['p', 'a', 'b', 'c']);
+    await expectOutline(page, 'ul[p > ul[a, b, c]]');
     await expectValidSoft(page);
   });
 
@@ -858,8 +860,9 @@ test.describe('G · Paste into list items', () => {
     await buildDoc(page, [UL(I('p', UL(I('n1'))))]);
     await focusEnd(page, 'n1');
     await pasteText(page, '- x\n- y');
-    // BROKEN: a list is nested directly in the sublist ("ul[p > ul[n1, ul[x, y]]]"), same cause as 24.
+    // DECIDED (P-49): the pasted items join the nested level.
     expect(await texts(page)).toEqual(['p', 'n1', 'x', 'y']);
+    await expectOutline(page, 'ul[p > ul[n1, x, y]]');
     await expectValidSoft(page);
   });
 

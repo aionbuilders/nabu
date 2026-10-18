@@ -3,6 +3,7 @@ import ListItemComponent from "./ListItem.svelte";
 import { List } from "./list.svelte.js";
 import { moveItems, handleTab } from "./indent.js";
 import { retypeItem } from "./convert.js";
+import { pasteIntoItem } from "./paste.js";
 import { LoroText } from "loro-crdt";
 import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 
@@ -199,6 +200,16 @@ export class ListItem extends MegaBlock {
      */
     retype(newType, props = {}) {
         retypeItem(this.nabu, /** @type {NabuNode} */ (this.node), newType, props);
+    }
+
+    /**
+     * A paste landing in a list item: paragraphs and lists are absorbed as items of this list, any block an
+     * item cannot hold splits the list. See paste.js.
+     * @param {import('../../utils/extensions.js').PasteBlock[]} blocks
+     * @param {{ offset: number }} ctx
+     */
+    acceptPaste(blocks, ctx) {
+        return pasteIntoItem(/** @type {any} */ (this), ctx.offset, blocks);
     }
 
     /** @param {KeyboardEvent} event */
