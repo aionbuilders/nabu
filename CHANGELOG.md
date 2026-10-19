@@ -124,6 +124,7 @@
 - Generic schema rule in `Nabu.commit()`: a block whose class cannot hold children (not a `MegaBlock`) never keeps child nodes. Retyping a node into such a block (`block:transform`, markdown shortcuts, `data.set('type')`) or moving a node under one moves its children to right after it, in order, in the same transaction (nothing is lost; e.g. a list item with a sublist transformed to a paragraph no longer hides the sublist). The tree-subscription no longer throws when a retyped block has no `updateChildren()`.
 
 ### Tests
+- E2E suite now runs against a PRODUCTION build (T-09): `playwright.config.js` builds with `VITE_NABU_E2E=1` (`build:e2e`) and serves it with `vite preview` on port 5180; the `/e2e` route is only reachable in dev or in such a build (a normal build still 404s). Removes the random `beforeEach` boot timeouts of the dev server (3 consecutive full runs green, ~2.5 min). `NABU_E2E_DEV=1` / `test:e2e:dev` keeps the dev-server mode for debugging. `tests/README.md` updated (obsolete `__nabu_debug` flow removed, T-05).
 - E2E harness: dedicated dev-only `/e2e` route (fresh editor per test, `?persist=<docId>`, `?options=<json>`), fixing a startup race that made ~35 tests time out. New specs: `text-marks`, `shortcuts-slash`, `fast-input`, `list-start`. 307/307 e2e, 390/390 unit.
 
 ## 0.1.0-beta.0

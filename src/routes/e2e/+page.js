@@ -5,10 +5,12 @@ import { dev } from '$app/environment';
 export const ssr = false;
 
 /**
- * E2E harness route — available in dev only, never shipped to the deployed site.
+ * E2E harness route. Available in dev, and in a production build ONLY when it was built with
+ * `VITE_NABU_E2E=1` (`bun run build:e2e`, used by the Playwright webServer). A normal
+ * `vite build` (the deployed demo site) leaves the flag unset and answers 404.
  * @type {import('./$types').PageLoad}
  */
 export function load() {
-  if (!dev) error(404, 'Not found');
+  if (!dev && import.meta.env.VITE_NABU_E2E !== '1') error(404, 'Not found');
   return {};
 }

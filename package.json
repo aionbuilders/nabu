@@ -11,7 +11,9 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch",
 		"test:unit": "vitest run",
 		"test:unit:watch": "vitest",
+		"build:e2e": "VITE_NABU_E2E=1 vite build",
 		"test:e2e": "playwright test",
+		"test:e2e:dev": "NABU_E2E_DEV=1 playwright test",
 		"test": "bun run test:unit && bun run test:e2e"
 	},
 	"files": [

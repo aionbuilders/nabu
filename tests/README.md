@@ -51,8 +51,12 @@ bun run test:unit
 # Unit tests in watch mode
 bun run test:unit:watch
 
-# E2E tests (requires running dev server OR auto-started via webServer config)
+# E2E tests: builds the app with VITE_NABU_E2E=1 (production build) and serves it
+# with `vite preview` on port 5180 (started and stopped by Playwright, ~25 s build)
 bun run test:e2e
+
+# E2E against the Vite dev server instead (debugging only: slower, flaky under load)
+bun run test:e2e:dev        # = NABU_E2E_DEV=1 playwright test
 
 # Both unit + E2E
 bun run test
@@ -68,12 +72,32 @@ npx playwright test --project=flaky
 | `vitest.config.js`    | Vitest with happy-dom, Svelte plugin, $lib alias |
 | `playwright.config.js`| Dual project: `core` (normal) + `flaky` (retries: 2) |
 
+## E2E target: production build
+
+Every test boots a fresh editor (WASM loro) on the `/e2e` route. Against the dev server the
+on-demand transforms made that boot time out under load (random `beforeEach` timeouts), so the
+suite runs against a **production build**:
+
+- `playwright.config.js` `webServer` runs `bun run build:e2e && bun run preview -- --port 5180 --strictPort`
+  (`reuseExistingServer: false`, so a stale server can never serve an old build).
+- `build:e2e` is `VITE_NABU_E2E=1 vite build`. The `/e2e` route (`src/routes/e2e/+page.js`) answers
+  404 unless `dev` is true **or** `import.meta.env.VITE_NABU_E2E === '1'`; a normal `vite build`
+  (the deployed demo) leaves it a 404.
+- `NABU_E2E_DEV=1` (or `bun run test:e2e:dev`) switches back to `bun run dev` on port 5180.
+- `workers: 6`. Measured on the prod build (644 tests): 6 workers ~2.5 min, always green; 10 and
+  12 workers are not faster (~2.4 min) and 10 gave a few timing failures in one of two runs; 4 workers ~2.8 min.
+- Use `--reporter=line` (or `list`) for ad-hoc runs; the default config also writes a JSON report to `test-results/results.json` (git-ignored).
+
+The `/e2e` route reads `?persist=<docId>` (IndexedDB-backed editor), `?options=<json>` (Nabu init
+options), `?hostFiles=1|gated` (in-memory `files.onBeforePersist`), and exposes `window.nabu` plus
+`window.__nabu_ready`.
+
 ## Key Constraints
 
 These rules are enforced throughout the test suite:
 
 1. **Never `page.fill()` on contenteditable** — only `keyboard.type()` / `keyboard.press()`
-2. **`window.nabu` via `page.evaluate()`** after `window.__nabu_debug?.()` is called
+2. **`window.nabu` via `page.evaluate()`** — set by the `/e2e` route once the engine is created (`window.__nabu_ready`)
 3. **`waitForEditor()`** uses `page.waitForFunction()` — no arbitrary sleeps
 4. **`clearAndReset()`** at the start of each test for a clean slate
 5. **No modifications to `src/lib/`** — bugs are noted with `// BUG: description`
@@ -97,12 +121,8 @@ Categories: clipboard APIs, CRDT undo timing, IndexedDB debounce, cross-block se
 
 ## Debug Access
 
-The app exposes `window.nabu` via:
-```js
-window.__nabu_debug?.()  // triggers debug mode, sets window.nabu
-```
-
-All E2E helpers call this automatically via `gotoEditor()`.
+The `/e2e` route exposes `window.nabu` (the engine) and sets `window.__nabu_ready = true` once
+it is created. `gotoEditor()` navigates there and waits for it; there is no debug-mode toggle.
 
 ## Svelte 5 Rune Notes
 

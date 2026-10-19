@@ -22,7 +22,7 @@
       console.warn('[e2e] invalid ?options JSON', e);
     }
 
-    // Test-only (this route is dev-only): `?hostFiles=1` installs an in-memory `files.onBeforePersist` that "uploads" to
+    // Test-only (this route only exists in dev / `build:e2e`): `?hostFiles=1` installs an in-memory `files.onBeforePersist` that "uploads" to
     // a blob: URL and records the call in `window.__hostUploads`; `?hostFiles=gated` makes every upload wait for
     // `window.__hostRelease()` (to observe the pending state of a paste).
     const hostFiles = page.url.searchParams.get('hostFiles');

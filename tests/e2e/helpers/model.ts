@@ -11,7 +11,7 @@
  */
 
 import { type Page, expect } from '@playwright/test';
-import { flushRender } from './editor.js';
+import { flushRender, networkWasReset } from './editor.js';
 
 // ── Fixture spec ───────────────────────────────────────────────────────────
 
@@ -265,5 +265,6 @@ export function collectErrors(page: Page) {
     if (/Failed to load resource/i.test(t)) return; // missing favicon etc., not an editor error
     errors.push(`console.error: ${t}`);
   });
-  return { list: () => errors };
+  // `net::ERR_NETWORK_CHANGED` (host network reset, see helpers/editor.ts) makes in-page fetches / dynamic imports fail: not a product error.
+  return { list: () => (networkWasReset(page) ? errors.filter((e) => !/Failed to fetch/i.test(e)) : errors) };
 }

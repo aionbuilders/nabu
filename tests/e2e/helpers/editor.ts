@@ -25,11 +25,158 @@ export interface NabuSnapshot {
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 
+// ── Boot diagnostics & resilience ──────────────────────────────────────────
+
+/** Internal readiness budget per attempt — shorter than the 20 s test timeout so the diagnostic is produced before it. */
+const READY_TIMEOUT = 10000;
+/** Boot attempts when the BROWSER's network stack was reset mid-load (see `NETWORK_CHANGED`). */
+const MAX_ATTEMPTS = 3;
+/**
+ * Chromium aborts in-flight requests with `net::ERR_NETWORK_CHANGED` whenever the host's network configuration
+ * changes (typical on WSL2 / laptops switching Wi-Fi, VPN, …) — even for localhost. When it hits a JS chunk of the
+ * app, the SvelteKit client dies silently (blank page or "500 Internal Error"), `__nabu_ready` is never set and the
+ * test would "hang" in beforeEach. That is an environment flake, not a product bug: reload and retry.
+ */
+const NETWORK_CHANGED = 'ERR_NETWORK_CHANGED';
+
+interface BootTracker {
+  console: string[];
+  errors: string[];
+  pending: Map<unknown, string>;
+  failed: string[];
+  networkChanged: boolean;
+  /** Sticky for the whole page lifetime (not cleared by `reset`). */
+  everNetworkChanged: boolean;
+  /** Resolves (once per navigation attempt) as soon as a request fails with ERR_NETWORK_CHANGED. */
+  onNetworkChanged: Promise<'network-changed'>;
+  reset(): void;
+}
+
+const trackers = new WeakMap<Page, BootTracker>();
+
+/** Start recording console / page errors / request lifecycle for `page` (idempotent). */
+function trackBoot(page: Page): BootTracker {
+  const existing = trackers.get(page);
+  if (existing) return existing;
+  let signal: () => void = () => {};
+  const t: BootTracker = {
+    console: [],
+    errors: [],
+    pending: new Map(),
+    failed: [],
+    networkChanged: false,
+    everNetworkChanged: false,
+    onNetworkChanged: new Promise<'network-changed'>((r) => { signal = () => r('network-changed'); }),
+    reset() {
+      this.console = [];
+      this.errors = [];
+      this.pending.clear();
+      this.failed = [];
+      this.networkChanged = false;
+      this.onNetworkChanged = new Promise<'network-changed'>((r) => { signal = () => r('network-changed'); });
+    },
+  };
+  page.on('console', (m) => t.console.push(`[${m.type()}] ${m.text()}`));
+  page.on('pageerror', (e) => t.errors.push(String(e?.stack ?? e)));
+  page.on('request', (r) => t.pending.set(r, `${r.method()} ${r.url()}`));
+  page.on('requestfinished', (r) => t.pending.delete(r));
+  page.on('requestfailed', (r) => {
+    t.pending.delete(r);
+    const err = r.failure()?.errorText ?? '';
+    t.failed.push(`${r.method()} ${r.url()} -> ${err}`);
+    if (err.includes(NETWORK_CHANGED)) {
+      t.networkChanged = true;
+      t.everNetworkChanged = true;
+      signal();
+    }
+  });
+  trackers.set(page, t);
+  return t;
+}
+
+/**
+ * True if this page's browser reported `net::ERR_NETWORK_CHANGED` at any point (host network reset — an
+ * environment flake). Lets error collectors ignore the resulting "Failed to fetch ..." noise.
+ */
+export function networkWasReset(page: Page): boolean {
+  return trackers.get(page)?.everNetworkChanged ?? false;
+}
+
+/** Build a human-readable report of the page's boot state (never throws). */
+async function bootReport(page: Page, t: BootTracker, reason: string): Promise<string> {
+  let state: unknown;
+  try {
+    state = await Promise.race([
+      page.evaluate(() => ({
+        url: location.href,
+        readyState: document.readyState,
+        hasNabu: !!(window as any).nabu,
+        nabuReady: (window as any).__nabu_ready,
+        children: (window as any).nabu?.children?.length ?? null,
+        blockEls: document.querySelectorAll('[data-block-id]').length,
+        body: document.body?.innerText?.slice(0, 200),
+      })),
+      new Promise((r) => setTimeout(() => r('<page.evaluate hung (>3s)>'), 3000)),
+    ]);
+  } catch (e) {
+    state = `<page.evaluate failed: ${e}>`;
+  }
+  const lines = [
+    `Nabu editor not ready: ${reason}`,
+    `page url: ${page.url()}`,
+    `state: ${JSON.stringify(state)}`,
+    `unfinished requests (${t.pending.size}): ${[...t.pending.values()].join(' | ') || '-'}`,
+    `failed requests (${t.failed.length}): ${t.failed.join(' | ') || '-'}`,
+    `page errors (${t.errors.length}): ${t.errors.join(' | ') || '-'}`,
+    `console (${t.console.length}): ${t.console.slice(-20).join(' | ') || '-'}`,
+  ];
+  return lines.join('\n  ');
+}
+
+/**
+ * Run `navigate` then wait for the editor; if the browser reported ERR_NETWORK_CHANGED during the attempt,
+ * navigate again (up to MAX_ATTEMPTS). Any other failure throws a diagnostic immediately.
+ */
+async function bootWithRetry(page: Page, navigate: () => Promise<unknown>, timeout: number, freshStart: boolean) {
+  const t = trackBoot(page);
+  for (let attempt = 1; ; attempt++) {
+    // `freshStart` false: the caller already triggered the navigation, keep what was recorded so far.
+    if (freshStart || attempt > 1) t.reset();
+    let failure: string | null = null;
+    try {
+      await navigate();
+      // Race readiness against a network reset: the latter means the app can never boot, no need to wait for the timeout.
+      const ready = page
+        .waitForFunction(
+          () => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0,
+          null,
+          { timeout },
+        )
+        .then(() => 'ready' as const);
+      ready.catch(() => {}); // may be abandoned (and time out later) when the network-changed branch wins
+      if ((await Promise.race([ready, t.onNetworkChanged])) === 'ready') {
+        t.reset(); // don't let later, unrelated request failures look like a boot failure
+        return;
+      }
+    } catch (e) {
+      failure = (e as Error).message.split('\n')[0];
+      if (!t.networkChanged) throw new Error(await bootReport(page, t, failure));
+    }
+    if (attempt >= MAX_ATTEMPTS) {
+      throw new Error(await bootReport(page, t, `${failure ?? 'network reset'} (gave up after ${attempt} attempts, each hit ${NETWORK_CHANGED})`));
+    }
+    console.warn(`[e2e] ${NETWORK_CHANGED} while booting the editor (attempt ${attempt}/${MAX_ATTEMPTS}); retrying`);
+    await page.waitForTimeout(250 * attempt); // let the network stack settle
+  }
+}
+
 /**
  * Navigate to the dedicated e2e route and wait for the editor to be ready.
  * Without `persist` the editor is in-memory and starts empty; with
  * `persist: docId` it is backed by IndexedDB under that docId (no seed content).
  * `options` is forwarded (as JSON, via `?options=`) to the editor factory.
+ *
+ * On failure the error carries a diagnostic (console, page errors, readyState, unfinished requests…).
  */
 export async function gotoEditor(
   page: Page,
@@ -40,20 +187,33 @@ export async function gotoEditor(
   // JSON-able Nabu init options (e.g. { placeholders: { show: 'empty' } }), merged into the editor init.
   if (opts.options) params.set('options', JSON.stringify(opts.options));
   const query = params.toString();
-  await page.goto(query ? '/e2e?' + query : '/e2e');
-  await waitForEditor(page);
+  // `domcontentloaded`: readiness is decided by the editor itself, not by the window `load` event
+  // (which any slow sub-resource would delay).
+  await bootWithRetry(
+    page,
+    () => page.goto(query ? '/e2e?' + query : '/e2e', { waitUntil: 'domcontentloaded', timeout: READY_TIMEOUT }),
+    READY_TIMEOUT,
+    true,
+  );
 }
 
 /**
  * Wait until the /e2e route has fully created the engine (window.__nabu_ready)
- * and the editor has at least one block. Timeout is generous because the first
- * navigation may trigger on-demand route compilation + WASM load.
+ * and the editor has at least one block (e.g. after `page.reload()`). A production build boots in well under
+ * a second, so the default budget is deliberately short and a failure throws a diagnostic.
+ * If the page's boot was broken by a browser network reset it is reloaded (see NETWORK_CHANGED).
  */
-export async function waitForEditor(page: Page, timeout = 20000) {
-  await page.waitForFunction(
-    () => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0,
-    null,
-    { timeout },
+export async function waitForEditor(page: Page, timeout = READY_TIMEOUT) {
+  let first = true;
+  await bootWithRetry(
+    page,
+    async () => {
+      // The caller already triggered the navigation the first time; only reload on a retry.
+      if (!first) await page.reload({ waitUntil: 'domcontentloaded', timeout });
+      first = false;
+    },
+    timeout,
+    false,
   );
 }
 
