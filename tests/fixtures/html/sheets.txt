@@ -1,0 +1,3 @@
+Name	Score
+Alice	42
+Bob	37
