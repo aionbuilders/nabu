@@ -50,7 +50,7 @@ export class VideoBlock extends MediaBlock {
     }
 
     static htmlRules = [
-        { selector: 'video' },
+        { selector: 'video', embed: true },
     ];
 
     /**

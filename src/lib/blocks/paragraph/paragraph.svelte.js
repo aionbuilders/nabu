@@ -2,6 +2,7 @@ import { TextBlock } from "../text-block.svelte.js";
 import { LoroText } from "loro-crdt";
 import ParagraphComponent from "./Paragraph.svelte";
 import { deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
+import { tableToRowParagraphs } from "./table.html.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -69,14 +70,20 @@ export class Paragraph extends TextBlock {
     static htmlRules = [
         { selector: 'p' },
         { selector: 'blockquote' },
+        // No table block yet: a pasted table gives one paragraph per row, cells separated by a TAB. LOWEST priority (below
+        // every block rule): an extension with a real table block declares its own rule for `table` at a higher priority
+        // and takes over, nothing else to change. See table.html.js.
+        { selector: 'table', priority: -100 },
     ];
 
     /**
      * @param {Element} el
      * @param {{ parseInline: (el: Element) => import('loro-crdt').Delta<string>[] }} helpers
-     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     * @returns {import('../../utils/extensions.js').PasteBlock | import('../../utils/extensions.js').PasteBlock[] | null}
      */
-    static fromHTML(el, { parseInline }) {
+    static fromHTML(el, helpers) {
+        const { parseInline } = helpers;
+        if (el.localName === 'table') return tableToRowParagraphs(el, helpers);
         const delta = parseInline(el);
         if (!delta.length) return null;
         return { type: 'paragraph', delta, partial: false };

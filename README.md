@@ -367,11 +367,32 @@ const engine = createFullEditor({
 
     // Byte threshold before the default (Loro) mode warns. Default ~2 MB.
     maxInlineSize: 2 * 1024 * 1024,
+
+    // Opt-in (default false): import the images of pasted web pages. See "Pasting images and files" below.
+    importRemote: false,
   }
 });
 ```
 
 The `files` option is also accepted by the generic `createEditor({ preset, files })` and the bare `new Nabu({ extensions, files })` constructor.
+
+### Pasting images and files
+
+- **Files on the clipboard** (a screenshot, a file copied from the OS): each one becomes a block at the caret, in order. The image / video / file extensions decide by MIME type (`image/*` → Image, `video/*` → Video, anything else → File). The bytes go through `Files`: stored in the document in the default mode, or sent to your `onBeforePersist` (the block is `pending` with a local preview until you answer). Files win over the text payloads of the same clipboard, except an internal Nabu copy (`application/x-nabu+json`) and a spreadsheet range (an HTML table). One undo step. A pasted block lands at the caret: the text block is split around it.
+- **Images of a pasted web page** (`<img src>` in the `text/html` of the clipboard) become image blocks that reference the **original URL** (hot-linked, nothing is downloaded); an `<img>` inside a paragraph splits it, and unsafe or missing sources are dropped. Set `files.importRemote: true` to **import** them instead: each remote `http(s)` image is fetched and stored through the same path as a local file (so `onBeforePersist` receives the downloaded `File`); the block shows the original URL while it is fetched, and **keeps the original URL if the fetch fails** (network error, CORS, HTTP error, not a media type). The swap to the stored ref is not an undo step. Remote servers must allow cross-origin reads (CORS) for the import to succeed; credentials are never sent.
+
+An extension can make a block of a pasted file with `pasteFileHandlers` (the engine names no block type):
+
+```js
+extension('audio', {
+  block: AudioBlock,
+  pasteFileHandlers: [{
+    accepts: (file) => file.type.startsWith('audio/'),
+    // The engine stores the bytes and sets `props.ref`; return the type and the other props.
+    block: (file) => ({ type: 'audio', partial: false, props: { name: file.name } }),
+  }],
+});
+```
 
 ## Task tracking (Todos)
 

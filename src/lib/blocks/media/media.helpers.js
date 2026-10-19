@@ -49,3 +49,17 @@ export function insertMediaUrl(nabu, type, data) {
     BlockClass.create(nabu, type, { ref: data.ref, alt: data.alt || '', name: data.name || '', status: 'ready' }, parentId, idx >= 0 ? idx : null);
     return nabu.commit();
 }
+
+/**
+ * The paste-file handler of a media block (`Extension.pasteFileHandlers`): a pasted file the block recognises becomes a
+ * block of `type` named after the file; the engine stores the bytes and sets the `ref`.
+ * @param {string} type  block type
+ * @param {(file: File) => boolean} accepts
+ * @param {number} [priority]  higher is asked first: the specific kinds (image, video) before the catch-all file
+ * @returns {import('../../utils/extensions.js').PasteFileHandler}
+ */
+export const mediaFileHandler = (type, accepts, priority = 0) => ({
+    priority,
+    accepts: (file) => accepts(file),
+    block: (file) => ({ type, partial: false, props: { name: file.name || '', alt: '' } }),
+});

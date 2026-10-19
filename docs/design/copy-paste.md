@@ -552,10 +552,34 @@ Sprint 5 — Edge cases & stress tests
 
 - **Import de document** (`nabu.import('markdown', str)`) — problème similaire mais différent : importe tout un document depuis un format externe, pas un fragment à la position du curseur. Peut réutiliser les interpréteurs mais l'algorithme d'insertion est plus simple (replace all). À traiter séparément.
 - **Drag & Drop** — utilise le même `DataTransfer` que le clipboard mais déclenché par un `drop` event. Peut réutiliser les interpréteurs, mais l'algorithme d'insertion doit cibler la position du drop (pas la sélection courante). À traiter séparément.
-- **Images dans le presse-papier** — `image/png`, `image/jpeg` dans le `ClipboardEvent`. Nécessite une `ImageExtension` future.
+- **Images dans le presse-papier** — `image/png`, `image/jpeg` dans le `ClipboardEvent`. Nécessite une `ImageExtension` future. *(Fait : voir §13, `pasteFileHandlers`.)*
 - **Collaboration temps-réel** — le paste doit être CRDT-safe (il l'est automatiquement puisque tout passe par Loro), mais la question du broadcasting de l'opération vers d'autres peers n'est pas adressée ici.
 
 ---
 
 *Ce document doit être validé et challengé avant de passer aux ADRs formels.*
 *Prochaine étape : ADR 012 (Copy/Paste — Architecture Générale) + éventuellement ADR 013 (Interpréteurs) si la complexité le justifie.*
+
+---
+
+## 13. Contenu externe — structures, tableaux, images, fichiers (P-55, P-56)
+
+Cette section décrit ce qui a été ajouté à l'interpréteur HTML (`src/lib/paste/html.paste.js`) et au moteur. Règle d'architecture inchangée : le noyau n'écrit aucun nom de bloc ; tout ce qui est propre à un bloc vit dans ses `htmlRules` / `fromHTML` statiques.
+
+**Hooks génériques de l'interpréteur HTML** (utilisés par les règles ci-dessous) :
+- `fromHTML(el, helpers, rule, siblings)` peut renvoyer **un bloc, plusieurs blocs, ou rien**.
+- `static htmlSiblings(el, rule, helpers)` : une classe de bloc peut absorber les frères qui suivent son élément (la structure continue sur plusieurs éléments) ; ils arrivent en 4e argument de `fromHTML` et ne sont pas lus seuls.
+- Une règle `{ selector, embed: true }` marque un élément qui peut se trouver dans le contenu inline d'un autre bloc (`<img>` dans un `<p>`) : il est sorti en bloc, et l'hôte est coupé autour (texte avant, bloc, texte après, via les wrappers inline, ex. `<a><img></a>`). Un élément qui ne donne aucun bloc (source absente ou dangereuse) ne coupe rien.
+- Le fragment produit porte `external: true` (contenu venu de l'extérieur : `files.importRemote` s'applique).
+
+**Listes Google Docs / Word** (`blocks/list/html-flat.js`, `List.htmlSiblings` + `List.fromHTML`) : le niveau est lu (`aria-level` de Docs, y compris un `<ul>` imbriqué directement dans le `<ul>` ou un `<ul>` par niveau en frères ; `levelN` + identité `lN lfoN` de Word), le type (puce / numérotée) vient de `list-style-type` (Docs) ou du marqueur ignoré par Word (`·`, `o`, `§` / `1.`, `a)`, `i.`), chaque niveau garde son type, `<ol start>` (et le premier numéro d'un marqueur Word) est conservé, `aria-checked` donne une liste de tâches. Les listes sont reconstruites en vraies listes imbriquées.
+
+**Tableaux** (`blocks/paragraph/table.html.js`) : tant qu'aucun bloc Table n'existe, chaque **ligne** devient **un paragraphe** dont les cellules sont séparées par une **tabulation** (`\t`) ; marques inline des cellules conservées (y compris le style de la cellule, `font-weight:bold` d'un `<td>` de Sheets), blocs / listes / tableaux imbriqués aplatis en texte avec des espaces, `colspan` = cellules vides en plus (colonnes alignées), lignes sans texte supprimées, `<caption>` en paragraphe d'abord. C'est le même découpage que le `text/plain` TSV de Sheets / Excel : le chemin HTML (priorité 50) gagne et donne les mêmes lignes.
+La règle est déclarée par le **paragraphe** avec la priorité **la plus basse** (`{ selector: 'table', priority: -100 }`, sous toute règle de bloc). Une future `TableExtension` déclare sa propre règle `table` avec une priorité plus haute (`> -100`, par ex. `0`) : elle prend le relais **sans rien changer d'autre** (le test `html-paste-structures` le vérifie).
+
+**Images du web** : `<img src>` → bloc image, `ref` = URL d'origine nettoyée par `sanitizeUrl` (pas de téléchargement), `alt` conservé ; `data:` hors règles média et `javascript:` écartés. Option `files.importRemote` (défaut `false`) : l'image est téléchargée et persistée par `Files.persist` (donc `onBeforePersist`) avec le flux optimiste (`pending`, URL d'origine affichée en attendant) ; en cas d'échec (réseau, CORS, HTTP, type non média) l'URL d'origine est conservée. Le remplacement final est un commit silencieux (pas un pas d'undo).
+
+**Coller un bloc sans texte (P-53)** : un bloc collé sans `delta` (image, séparateur…) ne peut pas fusionner dans le texte du bloc au curseur : le bloc est coupé autour de lui (tête, bloc collé, queue) ; au tout début du texte la tête vide est supprimée ; dans un bloc vide il le remplace (inchangé).
+
+**Coller des fichiers (P-55)** : `clipboardData.files` (ou `items` de type `file`) → blocs créés au curseur, dans l'ordre. Point d'extension générique : `Extension.pasteFileHandlers = [{ priority?, accepts(file, nabu), block(file, nabu) }]` ; le premier handler (par priorité) qui accepte un fichier le prend, `block()` renvoie le `PasteBlock` (type + props hors `ref`). Le moteur lit les octets (`Files#stage`), puis un seul `insertFragment` (donc `Files#adoptAssets` : stockés dans le document, ou envoyés à `onBeforePersist` avec le bloc `pending`) = un pas d'undo ; l'échange final du ref reste hors undo. Les fichiers passent **avant** les payloads texte, sauf si le presse-papiers contient aussi `application/x-nabu+json` (la copie interne gagne) ou si un interpréteur déclare que son payload l'emporte (`PasteInterpreter.outranksFiles(raw)`, utilisé par le HTML quand il contient un `<table>` : Excel / Sheets mettent aussi une image de la plage).
+

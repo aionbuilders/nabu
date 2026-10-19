@@ -1,6 +1,6 @@
 import { LoroMap } from 'loro-crdt';
 import { sanitizeUrl } from '../utils/html.js';
-import { ASSET_PREFIX, PENDING_PREFIX, assetIdOf, mapAssetBlocks, collectAssetIds, bytesToBase64, base64ToBytes } from './assets.clipboard.js';
+import { ASSET_PREFIX, PENDING_PREFIX, assetIdOf, mapAssetBlocks, mapRemoteBlocks, remoteFileName, collectAssetIds, bytesToBase64, base64ToBytes } from './assets.clipboard.js';
 
 /** Origin of the commits that finish a paste in the background (ref swap): not undoable. See Nabu's UndoManager. */
 export const SILENT_ORIGIN = 'nabu:silent:files';
@@ -23,6 +23,10 @@ export const HTML_INLINE_LIMIT = 1024 * 1024;
  *   storage (the bytes are NOT stored in Loro). Return nothing to fall back to default.
  * @property {(ref: string) => string} [resolve] Turn a stored ref into a display URL.
  * @property {number} [maxInlineSize] Byte threshold above which the default (Loro) mode warns. Default 2MB.
+ * @property {boolean} [importRemote] Opt-in, default `false`. When `true`, a remote image / media (an `http(s)` URL) pasted
+ *   from the HTML of a web page is fetched and stored through {@link Files#persist} (so `onBeforePersist` sees it) instead of
+ *   being hot-linked: the block shows the original URL meanwhile (`pending`) and gets the stored ref when done. A fetch that
+ *   fails (network, CORS, HTTP error) keeps the original URL.
  */
 
 /**
@@ -65,9 +69,10 @@ export class Files {
      * the bytes in the Loro `assets` map.
      * @param {File} file
      * @param {{ signal?: AbortSignal, onProgress?: (p:number)=>void }} [ctx]
+     * @param {{ silent?: boolean }} [options]  `silent`: the default-mode write is not an undo step (a background completion)
      * @returns {Promise<string>}
      */
-    async persist(file, ctx = {}) {
+    async persist(file, ctx = {}, { silent = false } = {}) {
         const hook = this.config.onBeforePersist;
         if (hook) {
             const result = await hook(file, ctx);
@@ -83,7 +88,7 @@ export class Files {
         sub.set('data', buf);
         sub.set('type', file.type || 'application/octet-stream');
         sub.set('name', file.name || '');
-        this.#nabu.doc.commit();
+        this.#nabu.doc.commit(silent ? { origin: SILENT_ORIGIN } : undefined);
         return 'nabu-asset:' + id;
     }
 
@@ -205,20 +210,85 @@ export class Files {
         });
     }
 
+    // ── Clipboard: files pasted from outside ──────────────────────────────────────────────────
+
+    /**
+     * PASTE FILES: read a pasted File and prepare it for {@link Files#adoptAssets}: a new `nabu-asset:` ref and the bytes
+     * as an embedded asset, so that the file goes through the same path as media pasted between documents (stored in the
+     * document in the default mode, in the paste's own undo step; sent to `onBeforePersist` with a `pending` block when the
+     * host configured one).
+     * @param {File} file
+     * @returns {Promise<{ id: string, ref: string, asset: EmbeddedAsset }>}
+     */
+    async stage(file) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (!this.config.onBeforePersist && bytes.length > this.maxInlineSize) {
+            this.#nabu.warn(`paste: "${file.name}" is ${(bytes.length / 1048576).toFixed(1)}MB, stored inline in the document (default mode). For large media, configure files.onBeforePersist to upload to your own storage.`);
+        }
+        const id = globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + Math.random().toString(36).slice(2);
+        return {
+            id,
+            ref: ASSET_PREFIX + id,
+            asset: { mime: file.type || 'application/octet-stream', name: file.name || '', size: bytes.length, data: bytesToBase64(bytes) },
+        };
+    }
+
+    /**
+     * PASTE (HTML from outside): with `config.importRemote`, every block of `blocks` whose `ref` is a remote `http(s)` URL is
+     * fetched and stored through {@link Files#persist}. The block shows the original URL at once, as `pending`, and gets the
+     * final ref in the background (a silent commit, not an undo step); when the fetch or the storage fails it keeps the
+     * original URL. Without the option, `blocks` come back untouched. No commit; never throws.
+     * @param {any[]} blocks PasteBlocks (already sanitized)
+     * @returns {any[]}
+     */
+    importRemote(blocks) {
+        if (!this.config.importRemote || typeof globalThis.fetch !== 'function') return blocks;
+        /** @type {Map<string, string>} */
+        const seen = new Map();
+        return mapRemoteBlocks(blocks, (_pb, url) => {
+            let tempRef = seen.get(url);
+            if (!tempRef) {
+                tempRef = PENDING_PREFIX + (globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + Math.random().toString(36).slice(2));
+                this.#pendingUrls.set(tempRef, url); // shown from where it comes from while it is fetched and stored
+                seen.set(url, tempRef);
+                this.#fetchRemote(url, tempRef);
+            }
+            return { ref: tempRef, status: 'pending' };
+        });
+    }
+
+    /** @param {string} url @param {string} tempRef */
+    async #fetchRemote(url, tempRef) {
+        /** @type {string | null} */
+        let finalRef = null;
+        try {
+            const response = await fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer' });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const blob = await response.blob();
+            if (/^(text\/|application\/(xhtml|json))/i.test(blob.type)) throw new Error('not a media file: ' + blob.type);
+            finalRef = await this.persist(new File([blob], remoteFileName(url, blob.type), { type: blob.type }), {}, { silent: true });
+        } catch {
+            finalRef = null; // kept as a link to the original
+        }
+        await this.#settle(null, tempRef, finalRef, url);
+    }
+
     /**
      * End of a background re-creation: every block still holding `tempRef` gets the final ref (or the `error` status
      * when the upload failed). Committed with a silent origin: not an undo step of its own, the paste stays ONE step.
-     * @param {string} id @param {string} tempRef @param {string | null} finalRef
+     * @param {string | null} id asset id of a media pasted from another document (`null`: a remote URL, see importRemote)
+     * @param {string} tempRef @param {string | null} finalRef
+     * @param {string | null} [fallbackRef] the ref to keep when there is no final one (the original URL of a remote media)
      */
-    async #settle(id, tempRef, finalRef) {
-        if (finalRef) this.#adopted.set(id, finalRef); else this.#adopted.delete(id);
+    async #settle(id, tempRef, finalRef, fallbackRef = null) {
+        if (id !== null) { if (finalRef) this.#adopted.set(id, finalRef); else this.#adopted.delete(id); }
         const nabu = this.#nabu;
         let touched = false;
         for (const block of nabu.blocks.values()) {
             const node = /** @type {any} */ (block.node);
             if (node.isDeleted?.() || node.data.get('ref') !== tempRef) continue;
-            node.data.set('ref', finalRef ?? '');
-            node.data.set('status', finalRef ? 'ready' : 'error');
+            node.data.set('ref', finalRef ?? fallbackRef ?? '');
+            node.data.set('status', finalRef || fallbackRef ? 'ready' : 'error');
             touched = true;
         }
         try {
@@ -226,7 +296,7 @@ export class Files {
         } finally {
             const url = this.#pendingUrls.get(tempRef);
             this.#pendingUrls.delete(tempRef);
-            if (url) URL.revokeObjectURL(url);
+            if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
         }
     }
 }

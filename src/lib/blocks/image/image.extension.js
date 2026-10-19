@@ -1,7 +1,7 @@
 import { extension } from "../../utils/extensions";
 import { ImageBlock } from "./image.svelte.js";
 import ImageComponent from "./Image.svelte";
-import { insertMediaFromFile, pickMedia, insertMediaUrl } from "../media/media.helpers.js";
+import { insertMediaFromFile, pickMedia, insertMediaUrl, mediaFileHandler } from "../media/media.helpers.js";
 
 /**
  * Insert an image block from a local File: optimistic preview → persist → ref.
@@ -14,6 +14,8 @@ export const ImageExtension = extension("image", {
     // @ts-ignore — static-side variance on create()
     block: ImageBlock,
     component: ImageComponent,
+    // A file pasted from the clipboard becomes this block.
+    pasteFileHandlers: [mediaFileHandler('image', (file) => /^image\//i.test(file.type), 20)],
     actions: {
         'image:pick': (nabu) => pickMedia(nabu, 'image', 'image/*'),
         /**

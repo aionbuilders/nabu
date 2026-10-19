@@ -2,6 +2,7 @@ import { MegaBlock } from "../megablock.svelte.js";
 import { ListBehavior } from "./list.behavior.svelte.js";
 import ListComponent from "./List.svelte";
 import { stepBack } from "./step-back.js";
+import { hasLeveledItems, docsEntries, docsSiblings, isWordListParagraph, wordEntries, wordSiblings, nestEntries } from "./html-flat.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -255,17 +256,49 @@ export class List extends MegaBlock {
 
     static htmlRules = [
         { selector: 'ul.contains-task-list', props: { listType: 'todo' }, priority: 10 },
+        // Word writes a list as consecutive `<p style="mso-list:l0 level2 lfo1">` (list identity + level), see html-flat.js.
+        { selector: 'p', filter: isWordListParagraph, props: { listType: 'bullet' }, priority: 20 },
         { selector: 'ul', props: { listType: 'bullet' } },
         { selector: 'ol', props: { listType: 'ordered' } },
     ];
 
     /**
+     * The elements after `el` that continue its list (the `html` interpreter reads them as part of this list): the `<ul>`
+     * per nesting level of Google Docs, the following list paragraphs of Word.
      * @param {Element} el
-     * @param {{ parseChildren: (el: Element) => import('../../utils/extensions.js').PasteBlock[] }} helpers
+     * @returns {Element[]}
+     */
+    static htmlSiblings(el) {
+        return el.localName === 'p' ? wordSiblings(el) : docsSiblings(el);
+    }
+
+    /**
+     * @param {Element} el
+     * @param {{ parseChildren: (el: Element) => import('../../utils/extensions.js').PasteBlock[], parseBlock: (el: Element) => import('../../utils/extensions.js').PasteBlock | null, parseInline: (el: Element) => import('loro-crdt').Delta<string>[] }} helpers
      * @param {{ props?: { listType?: string } }} [rule]
+     * @param {Element[]} [siblings]  what `htmlSiblings` absorbed
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
-    static fromHTML(el, { parseChildren }, rule) {
+    static fromHTML(el, helpers, rule, siblings = []) {
+        const { parseChildren } = helpers;
+        /** @param {string} listType @param {number | null} start */
+        const propsOf = (listType, start) => { const n = listStart(listType, start); return n === null ? { listType } : { listType, start: n }; };
+        // Word: a run of list paragraphs; Docs: leveled items. Either way the levels are rebuilt as real nested lists.
+        if (el.localName === 'p') {
+            const raw = wordEntries([el, ...siblings]);
+            return nestEntries(raw.flatMap((e) => {
+                const delta = helpers.parseInline(e.el);
+                return delta.some((op) => typeof op.insert === 'string' && /\S/.test(op.insert))
+                    ? [{ ...e, item: /** @type {import('../../utils/extensions.js').PasteBlock} */ ({ type: 'list-item', delta, partial: false }) }] : [];
+            }), propsOf);
+        }
+        if (siblings.length || hasLeveledItems(el)) {
+            const raw = [el, ...siblings].flatMap((list) => docsEntries(list));
+            return nestEntries(raw.flatMap((e) => {
+                const item = helpers.parseBlock(e.el);
+                return item ? [{ ...e, item }] : [];
+            }), propsOf);
+        }
         const children = parseChildren(el);
         if (!children.length) return null;
         // Determine listType: prefer rule, but promote to 'todo' if any child has checked prop

@@ -388,20 +388,132 @@ function isEmptyTextBlock(pb, el) {
 }
 
 /**
- * Match a DOM element against the registered ruleset and call the matching block class's static fromHTML(). An empty
- * text block (see {@link isEmptyTextBlock}) is dropped.
+ * Match a DOM element against the registered ruleset and call the matching block class's static `fromHTML()`. The rule's
+ * `fromHTML` may return one PasteBlock, several (a table gives one paragraph per row) or nothing. Empty text blocks (see
+ * {@link isEmptyTextBlock}) are dropped.
  *
+ * @param {Element} el
+ * @param {Array<{ BlockClass: any, rule: any }>} ruleset
+ * @param {Object} helpers
+ * @param {Element[]} [siblings]  the following siblings the rule absorbed (see {@link claimSiblings})
+ * @returns {import('../utils/extensions.js').PasteBlock[]}
+ */
+function parseBlocks(el, ruleset, helpers, siblings = []) {
+    if (el.nodeType !== Node.ELEMENT_NODE) return [];
+    const entry = findRule(el, ruleset);
+    if (!entry) return [];
+    const out = entry.BlockClass.fromHTML(el, helpers, entry.rule, siblings);
+    const list = Array.isArray(out) ? out : out ? [out] : [];
+    return list.filter((pb) => pb && !isEmptyTextBlock(pb, el));
+}
+
+/**
+ * The first block of {@link parseBlocks}, or `null`.
  * @param {Element} el
  * @param {Array<{ BlockClass: any, rule: any }>} ruleset
  * @param {Object} helpers
  * @returns {import('../utils/extensions.js').PasteBlock | null}
  */
 function parseBlock(el, ruleset, helpers) {
-    if (el.nodeType !== Node.ELEMENT_NODE) return null;
-    const entry = findRule(el, ruleset);
-    if (!entry) return null;
-    const pb = entry.BlockClass.fromHTML(el, helpers, entry.rule);
-    return pb && isEmptyTextBlock(pb, el) ? null : pb;
+    return parseBlocks(el, ruleset, helpers)[0] ?? null;
+}
+
+/**
+ * A block class may ask to absorb the siblings that follow its element (`static htmlSiblings(el, rule, helpers)` returns
+ * them, in order): the structure continues over several elements (Google Docs puts each nesting level of a list in its own
+ * `<ul>`, Word writes a list as consecutive `<p>`). They reach `fromHTML` as 4th argument and are not read on their own.
+ * Only blank text and comments may lie between the element and what it absorbs; the claim stops at the first thing that does not.
+ * @param {Element} el
+ * @param {{ BlockClass: any, rule: any }} entry
+ * @param {any} helpers
+ * @returns {{ siblings: Element[], nodes: Node[] }}  the absorbed elements, and every node covered (blank text / comments included)
+ */
+function claimSiblings(el, entry, helpers) {
+    /** @type {Element[]} */
+    const siblings = [];
+    /** @type {Node[]} */
+    const nodes = [];
+    const ask = entry.BlockClass.htmlSiblings;
+    if (typeof ask !== 'function') return { siblings, nodes };
+    let wanted;
+    try { wanted = new Set(ask.call(entry.BlockClass, el, entry.rule, helpers) ?? []); } catch { return { siblings, nodes }; }
+    /** @type {Node[]} */
+    let between = [];
+    for (let n = el.nextSibling; n && siblings.length < wanted.size; n = n.nextSibling) {
+        if (n.nodeType === Node.ELEMENT_NODE) {
+            if (!wanted.has(/** @type {Element} */ (n))) break;
+            siblings.push(/** @type {Element} */ (n));
+            nodes.push(...between, n);
+            between = [];
+        } else if (n.nodeType === Node.COMMENT_NODE || (n.nodeType === Node.TEXT_NODE && !/\S/.test(n.textContent ?? ''))) {
+            between.push(n);
+        } else break;
+    }
+    return { siblings, nodes };
+}
+
+// ── Elements embedded in inline content (an <img> in a paragraph) ────────────
+
+/**
+ * Selector of the elements whose rule says `embed: true`: they may sit inside the inline content of another block, and
+ * are then lifted out as blocks of their own.
+ * @param {Array<{ BlockClass: any, rule: any }>} ruleset
+ * @returns {string}
+ */
+const embedSelector = (ruleset) => ruleset.filter((e) => e.rule.embed).map((e) => e.rule.selector).join(',');
+
+/**
+ * The embeddable elements of a block element that can be lifted out of it: reached through inline wrappers only (never
+ * through a list / table / `<pre>` or another ruled block, which read their own content).
+ * An embeddable element that gives no block (an `<img>` with an unsafe or missing source) is not lifted: it simply is not there.
+ * @param {Element} host
+ * @param {Array<{ BlockClass: any, rule: any }>} ruleset
+ * @param {any} helpers
+ * @returns {Element[]}
+ */
+function findEmbeds(host, ruleset, helpers) {
+    const selector = embedSelector(ruleset);
+    if (!selector) return [];
+    let candidates;
+    try { candidates = [...host.querySelectorAll(selector)]; } catch { return []; }
+    return candidates.filter((embed) => {
+        if (!findRule(embed, ruleset)?.rule.embed || !parseBlocks(embed, ruleset, helpers).length) return false;
+        for (let a = embed.parentElement; a && a !== host; a = a.parentElement) {
+            const tag = a.tagName.toLowerCase();
+            if (STRUCTURAL.has(tag) || tag === 'pre' || tag === 'code' || findRule(a, ruleset)) return false;
+        }
+        return true;
+    });
+}
+
+/**
+ * @typedef {{ el: Element } | { embed: Element }} Piece
+ */
+
+/**
+ * Cut `node` around the `embeds` it contains: the content before an embed, the embed, the content after, each side being
+ * a shallow copy of `node` (and of the inline wrappers on the way) holding its slice of the children.
+ * @param {Element} node
+ * @param {Set<Element>} embeds
+ * @returns {Piece[]}
+ */
+function splitAround(node, embeds) {
+    /** @type {Piece[]} */
+    const pieces = [];
+    let current = /** @type {Element} */ (node.cloneNode(false));
+    const flush = () => { if (current.childNodes.length) pieces.push({ el: current }); current = /** @type {Element} */ (node.cloneNode(false)); };
+    for (const child of node.childNodes) {
+        if (child.nodeType !== Node.ELEMENT_NODE) { current.appendChild(child.cloneNode(true)); continue; }
+        const el = /** @type {Element} */ (child);
+        if (embeds.has(el)) { flush(); pieces.push({ embed: el }); continue; }
+        if ([...embeds].some((e) => el.contains(e))) {
+            for (const piece of splitAround(el, embeds)) {
+                if ('embed' in piece) { flush(); pieces.push(piece); } else current.appendChild(piece.el);
+            }
+        } else current.appendChild(el.cloneNode(true));
+    }
+    if (current.childNodes.length) pieces.push({ el: current });
+    return pieces;
 }
 
 /**
@@ -444,16 +556,19 @@ function parseNodes(parent, ruleset, helpers, hooks = {}) {
     const blocks = [];
     /** @type {Node[]} */
     let run = [];
+    /** @type {Set<Node>} nodes already read as part of the block that absorbed them */
+    const claimed = new Set();
     const flush = () => {
         if (!run.length) return;
         const owner = parent.ownerDocument ?? /** @type {Document} */ (parent);
         const p = owner.createElement('p');
         for (const node of run) p.appendChild(node.cloneNode(true));
         run = [];
-        const pb = hooks.onRun ? hooks.onRun(p) : parseBlock(p, ruleset, helpers);
-        if (pb) blocks.push(pb);
+        if (hooks.onRun) { const pb = hooks.onRun(p); if (pb) blocks.push(pb); }
+        else blocks.push(...parseBlocks(p, ruleset, helpers));
     };
-    for (const node of parent.childNodes) {
+    for (const node of [...parent.childNodes]) {
+        if (claimed.has(node)) continue;
         if (node.nodeType === Node.TEXT_NODE) { run.push(node); continue; }
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
         const el = /** @type {Element} */ (node);
@@ -462,8 +577,18 @@ function parseNodes(parent, ruleset, helpers, hooks = {}) {
         if (kind === 'inline') { run.push(el); continue; }
         flush();
         if (kind === 'block') {
-            const pb = parseBlock(el, ruleset, helpers);
-            if (pb) blocks.push(pb);
+            const entry = /** @type {{ BlockClass: any, rule: any }} */ (findRule(el, ruleset));
+            const { siblings, nodes } = claimSiblings(el, entry, helpers);
+            for (const n of nodes) claimed.add(n);
+            // An <img> inside a paragraph: text before, the image block, text after.
+            const embeds = entry.rule.embed || siblings.length ? [] : findEmbeds(el, ruleset, helpers);
+            if (embeds.length) {
+                for (const piece of splitAround(el, new Set(embeds))) {
+                    blocks.push(...('embed' in piece ? parseBlocks(piece.embed, ruleset, helpers) : parseBlocks(piece.el, ruleset, helpers)));
+                }
+            } else {
+                blocks.push(...parseBlocks(el, ruleset, helpers, siblings));
+            }
         } else {
             blocks.push(...parseNodes(el, ruleset, helpers));
         }
@@ -477,6 +602,8 @@ export const HtmlPasteExtension = new Extension('html-paste', {
         {
             format: 'text/html',
             priority: 50,
+            // A spreadsheet range comes with an image of it next to its table: the table is what was copied.
+            outranksFiles: (raw) => /<table[\s>]/i.test(raw),
             /**
              * @param {string} raw
              * @param {import('../blocks/nabu.svelte.js').Nabu} nabu
@@ -492,13 +619,12 @@ export const HtmlPasteExtension = new Extension('html-paste', {
                     // Set while the implicit paragraph of an inline-only fragment is read: its edge spaces are meaningful.
                     let keepEdges = false;
 
-                    /** @type {{ parseInline: (el: Element) => import('loro-crdt').Delta<string>[], parseBlock: (el: Element) => any, parseChildren: (el: Element) => any[] }} */
+                    /** @type {{ parseInline: (el: Element) => import('loro-crdt').Delta<string>[], parseBlock: (el: Element) => any, parseBlocks: (el: Element) => any[], parseChildren: (el: Element) => any[] }} */
                     const helpers = {
                         parseInline: (el) => parseInline(el, {}, { keepEdges }),
                         parseBlock:  (el) => parseBlock(el, ruleset, helpers),
-                        parseChildren: (el) => [...el.children]
-                            .map(child => parseBlock(child, ruleset, helpers))
-                            .filter(Boolean),
+                        parseBlocks: (el) => parseBlocks(el, ruleset, helpers),
+                        parseChildren: (el) => [...el.children].flatMap(child => parseBlocks(child, ruleset, helpers)),
                     };
 
                     // Inline-only HTML (a part of a line copied from Docs / a browser): ONE inline fragment, merged at the
@@ -516,7 +642,7 @@ export const HtmlPasteExtension = new Extension('html-paste', {
                                 keepEdges = true;
                                 try {
                                     const pb = parseBlock(p, ruleset, helpers);
-                                    return pb ? { ...pb, partial: 'both' } : null;
+                                    return pb ? { ...pb, partial: /** @type {const} */ ('both') } : null;
                                 } finally { keepEdges = false; }
                             },
                         });
@@ -524,7 +650,8 @@ export const HtmlPasteExtension = new Extension('html-paste', {
                         blocks = parseNodes(body, ruleset, helpers);
                     }
 
-                    return blocks.length ? { blocks } : null;
+                    // `external`: the content comes from outside the editor (a web page, Docs…): remote media URLs may be imported.
+                    return blocks.length ? { blocks, external: true } : null;
                 } catch {
                     return null;
                 }

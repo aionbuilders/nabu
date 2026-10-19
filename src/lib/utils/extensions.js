@@ -13,6 +13,8 @@
 
 /**
  * @typedef {Object} PasteFragment
+ * @property {boolean} [external] the content comes from outside the editor (the HTML of a web page, Docs…) rather than from
+ *   Nabu itself: `files.importRemote` applies to its remote media URLs
  * @property {PasteBlock[]} blocks
  * @property {Record<string, { mime: string, name: string, size: number, data: string }>} [assets] bytes (base64) of the
  *   `nabu-asset:` refs used by `blocks` (see docs/design/clipboard-format.md)
@@ -23,6 +25,21 @@
  * @property {string} format - MIME type géré ('application/x-nabu+json', 'text/html', 'text/plain')
  * @property {number} [priority] - Plus haut = appelé en premier (default: 0)
  * @property {(raw: string, nabu: Nabu, options?: PasteInterpretOptions) => PasteFragment | null} interpret
+ * @property {(raw: string) => boolean} [outranksFiles] - Files on the clipboard normally win over the text payloads. Return
+ *   true when THIS payload is worth more than the files that come with it (a spreadsheet range is put on the clipboard as
+ *   a table AND as an image of it).
+ */
+
+/**
+ * What an extension does with a FILE pasted from the clipboard (a screenshot, a file copied from the OS): it makes a block
+ * of it. The engine reads the bytes, stores them through `Files` (in the document, or sent to `files.onBeforePersist` with the
+ * optimistic `pending` block) and inserts the blocks at the caret, in the order of the files, as ONE undo step. The engine
+ * names no block type: whatever an extension accepts is its own business.
+ * @typedef {Object} PasteFileHandler
+ * @property {number} [priority] - Higher is asked first (default 0). The first handler that accepts a file takes it.
+ * @property {(file: File, nabu: Nabu) => boolean} accepts - Whether this handler takes `file` (by MIME type, name…)
+ * @property {(file: File, nabu: Nabu) => PasteBlock | null} block - The block the file becomes: `type` and the props other
+ *   than `ref` (`name`, `alt`…), which the engine sets to the stored file. `null` declines the file.
  */
 
 /**
@@ -67,6 +84,8 @@
  * @property {Record<string, (nabu: Nabu) => any>} [serializers]
  * @property {Record<string, (nabu: Nabu, data: any, topic: string) => any>} [actions]
  * @property {PasteInterpreter[]} [pasteInterpreters]
+ * @property {PasteFileHandler[]} [pasteFileHandlers]
+ *   Make a block of a file pasted from the clipboard (see {@link PasteFileHandler}).
  * @property {InputRule[]} [inputRules]
  *   Declarative text-replacement rules applied while typing (e.g. markdown
  *   shortcuts, smart typography). Tested against the text before the cursor.
@@ -91,6 +110,8 @@ export class Extension {
         this.actions = init.actions || {};
         /** @type {PasteInterpreter[]} */
         this.pasteInterpreters = init.pasteInterpreters || [];
+        /** @type {PasteFileHandler[]} */
+        this.pasteFileHandlers = init.pasteFileHandlers || [];
         /** @type {InputRule[]} */
         this.inputRules = init.inputRules || [];
         /** @type {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>} */

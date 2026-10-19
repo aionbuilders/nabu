@@ -1,12 +1,14 @@
 import { extension } from "../../utils/extensions";
 import { VideoBlock } from "./video.svelte.js";
 import VideoComponent from "./Video.svelte";
-import { pickMedia, insertMediaUrl } from "../media/media.helpers.js";
+import { pickMedia, insertMediaUrl, mediaFileHandler } from "../media/media.helpers.js";
 
 export const VideoExtension = extension("video", {
     // @ts-ignore — static-side variance on create()
     block: VideoBlock,
     component: VideoComponent,
+    // A file pasted from the clipboard becomes this block.
+    pasteFileHandlers: [mediaFileHandler('video', (file) => /^video\//i.test(file.type), 20)],
     actions: {
         'video:pick': (nabu) => pickMedia(nabu, 'video', 'video/*'),
         /**

@@ -6,7 +6,8 @@
  *  - no stray bold (the Google Docs `font-weight:normal` wrapper), no empty paragraph, no junk (Word markers, scripts, styles);
  *  - Google redirect links are unwrapped; unsafe links keep their text only;
  *  - NBSP kept between two visible characters ("10 km"), regular spaces collapsed;
- *  - no text lost in lists / tables (their exact structure is lot 2);
+ *  - Docs / Word lists come out as real nested lists (levels, bullet vs numbered, `start`); a table is one paragraph per row,
+ *    cells separated by a TAB (the same rows as the text/plain TSV); web images become image blocks that split the paragraph;
  *  - one undo restores the empty document; no console error.
  */
 
@@ -14,7 +15,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { gotoEditor, clearAndReset, focusEditor } from './helpers/editor.js';
-import { pasteHtml } from './helpers/clipboard.js';
+import { pasteHtml, pasteText } from './helpers/clipboard.js';
 import { undo, redo } from './helpers/keyboard.js';
 import { violations, collectErrors, allText } from './helpers/model.js';
 
@@ -59,6 +60,30 @@ const markedRuns = (page: Page, mark: string) => page.evaluate((m) => {
   n.tree.roots().forEach(walk);
   return out;
 }, mark);
+
+/** `start` of every list that has one (numbering that does not begin at 1). */
+const listStarts = (page: Page) => page.evaluate(() => {
+  const n = (window as any).nabu;
+  const out: number[] = [];
+  const walk = (node: any) => {
+    if (node.data.get('type') === 'list' && node.data.get('start') !== undefined) out.push(node.data.get('start'));
+    (node.children() ?? []).forEach(walk);
+  };
+  n.tree.roots().forEach(walk);
+  return out;
+});
+
+/** The `ref` of every image block, in document order. */
+const imageRefs = (page: Page) => page.evaluate(() => {
+  const n = (window as any).nabu;
+  const out: string[] = [];
+  const walk = (node: any) => {
+    if (node.data.get('type') === 'image') out.push(node.data.get('ref'));
+    (node.children() ?? []).forEach(walk);
+  };
+  n.tree.roots().forEach(walk);
+  return out;
+});
 
 const links = (page: Page) => page.evaluate(() => {
   const n = (window as any).nabu;
@@ -111,8 +136,13 @@ test('Google Docs: the font-weight:normal wrapper does not bold the document, th
     'h1(Project notes)',
     'p(This is a [b:bold] word, an [i:italic] one and a [a=https://example.org/docs?page=2&lang=en:link].)',
     'p(Distance:⍽10⍽km)',
-    'ul[li(First item), li(Second item), li(Nested item)]',
+    'ul[li(First item), li(Second item) > ul[li(Nested item)]]',
+    'p(Plan with levels:)',
+    'ul[li(Plan) > ol[li(Draft), li(Review) > ul[li(Typos)]], li(Ship)]',
+    'p(Numbered from 3:)',
+    'ol[li(Third) > ul[li(Detail)], li(Fourth)]',
   ].join(' ; '));
+  expect(await listStarts(page)).toEqual([3]);
   expect(await markedRuns(page, 'bold')).toEqual(['bold']);
   expect(await markedRuns(page, 'underline')).toEqual([]);
   expect(await links(page)).toEqual(['https://example.org/docs?page=2&lang=en']);
@@ -145,21 +175,19 @@ test('Word: <o:p>, conditional comments, mso styles and list markers leave no tr
   expect(model).toBe([
     'p([b:Quarterly summary])',
     'p(Results were [i:better] than expected, see [a=https://example.org/report:the report].)',
-    'p(Revenue up)',
-    'p(Costs stable)',
+    'ul[li(Revenue up) > ul[li(Cloud) > ul[li(Storage)]], li(Costs stable)]',
+    'p(Next steps)',
+    'ol[li(Plan) > ol[li(Draft)], li(Ship)]',
   ].join(' ; '));
   expect(model).not.toMatch(/·|⍽|mso|supportLists|StartFragment|Fragment/);
   expect(await markedRuns(page, 'bold')).toEqual(['Quarterly summary']);
   expect(await links(page)).toEqual(['https://example.org/report']);
   expect(await hasEmptyTextBlock(page)).toBe(false);
-  // lot 2 turns the MsoListParagraph paragraphs into a list; their text must be there either way
-  const text = (await allText(page)).join('|');
-  expect(text).toContain('Revenue up');
-  expect(text).toContain('Costs stable');
+  expect((await allText(page)).join('|')).not.toMatch(/[·§]/);
   await expectOneUndo(page, model);
 });
 
-test('Wikipedia: headings, citation, no style leak, table text is not lost', async ({ page }) => {
+test('Wikipedia: headings, citation, no style leak, the table is one paragraph per row', async ({ page }) => {
   await pasteFixture(page, 'wikipedia.html');
   const model = await dump(page);
   // Chrome resolves relative hrefs against the page when it hands the clipboard HTML over.
@@ -168,7 +196,7 @@ test('Wikipedia: headings, citation, no style leak, table text is not lost', asy
     'h2(History)',
     'p([[a=/w/index.php?title=Example&action=edit&section=1:edit]])',
     'p(The [b:Example] language was designed in 1990[a=/e2e#cite_note-1:[1]] by a small team.⍽It is [i:widely] used.)',
-    'p(Releases) ; p(Version) ; p(Year) ; p(1.0) ; p(1992) ; p(2.0) ; p(1999)',
+    'p(Releases) ; p(Version\tYear) ; p(1.0\t1992) ; p(2.0\t1999)',
     'h3(Legacy)',
     'p(See [a=/wiki/Other_article:Other article] for more.)',
   ].join(' ; '));
@@ -231,9 +259,39 @@ test('Notion: headings, marks, nested list, quote, to-do, divider and code', asy
   await expectOneUndo(page, model);
 });
 
-test('Google Sheets: every cell value is kept, none of the clipboard <style> / colgroup leaks', async ({ page }) => {
+test('Google Sheets: the table pastes as tab-separated rows, the same as the text/plain TSV; no <style> / colgroup leak', async ({ page }) => {
   await pasteFixture(page, 'sheets.html', fixture('sheets.txt'));
-  const text = await allText(page);
-  expect(text).toEqual(['Name', 'Score', 'Alice', '42', 'Bob', '37']); // lot 2: a real table block
-  await expectOneUndo(page, await dump(page));
+  const model = await dump(page);
+  expect(model).toBe('p([b:Name]\t[b:Score]) ; p(Alice\t42) ; p(Bob\t37)');
+  expect(await allText(page)).toEqual(fixture('sheets.txt').trim().split('\n'));
+  await expectOneUndo(page, model);
+});
+
+test('Google Sheets: with only the TSV on the clipboard the rows are the same', async ({ page }) => {
+  await pasteText(page, fixture('sheets.txt'));
+  await expect.poll(() => allText(page)).toEqual(fixture('sheets.txt').trim().split('\n'));
+});
+
+test('web page with inline images: the paragraph is split around the image block, text before and after is kept', async ({ page }) => {
+  await pasteFixture(page, 'web-images.html');
+  const model = await dump(page);
+  expect(model).toBe([
+    'p(Before the picture)',
+    'image()',
+    'p(and after it.)',
+    'h2(Gallery)',
+    'image()',
+    'image()',
+    'p(An unsafe one and a caption.)',
+  ].join(' ; '));
+  expect(await imageRefs(page)).toEqual(['https://example.org/img/cat.png', 'https://example.org/img/dog.jpg', 'https://example.org/img/bird.gif']);
+  expect(await hasEmptyTextBlock(page)).toBe(false);
+  await expectOneUndo(page, model);
+});
+
+test('image sources that are unsafe (javascript:, data:text/html) or missing are dropped; the text stays', async ({ page }) => {
+  await pasteHtml(page, '<p>A <img src="javascript:alert(1)"> B <img src="data:text/html,<script>alert(1)</script>"> C <img alt="no source"> D</p>');
+  await expect.poll(() => dump(page)).toBe('p(A B C D)');
+  expect(await imageRefs(page)).toEqual([]);
+  expect(await violations(page)).toEqual([]);
 });

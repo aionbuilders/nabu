@@ -53,7 +53,8 @@ export class ImageBlock extends MediaBlock {
     }
 
     static htmlRules = [
-        { selector: 'img' },
+        // `embed`: an <img> inside a paragraph is lifted out as an image block, the text around it stays (paste/html.paste.js).
+        { selector: 'img', embed: true },
     ];
 
     /**
@@ -61,9 +62,9 @@ export class ImageBlock extends MediaBlock {
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromHTML(el) {
-        const src = el.getAttribute('src') || '';
-        // An unsafe source (javascript:, data:text/html…) never becomes an image block.
-        if (src && sanitizeUrl(src, { kind: 'media' }) === null) return null;
+        const src = (el.getAttribute('src') || '').trim();
+        // No source (a lazy-loaded placeholder) or an unsafe one (javascript:, data:text/html…) never becomes an image block.
+        if (!src || sanitizeUrl(src, { kind: 'media' }) === null) return null;
         return {
             type: 'image',
             props: {

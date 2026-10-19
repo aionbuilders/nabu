@@ -73,12 +73,12 @@ describe('ImageBlock statics', () => {
         });
     });
 
-    it('fromHTML handles missing src and alt', async () => {
+    it('fromHTML: an <img> without src (lazy placeholder) is no image block; a missing alt is empty', async () => {
         const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
+        expect(ImageBlock.fromHTML(document.createElement('img'))).toBeNull();
         const el = document.createElement('img');
-        const result = ImageBlock.fromHTML(el);
-        expect(result.props.ref).toBe('');
-        expect(result.props.alt).toBe('');
+        el.setAttribute('src', ' https://example.com/a.png ');
+        expect(ImageBlock.fromHTML(el).props).toEqual({ ref: 'https://example.com/a.png', alt: '' });
     });
 
     it('markdownRules[0].detect matches image markdown', async () => {

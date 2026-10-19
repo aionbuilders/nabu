@@ -308,9 +308,9 @@ describe('rule 7 — Word junk produces nothing', () => {
     expect(read(html)).toBe('p(Hello) ; p(World)');
   });
 
-  it('the bullet marker of a Word list paragraph (mso-list:Ignore) is not text', () => {
+  it('the marker of a Word list paragraph (mso-list:Ignore) is not text: it only tells bullet from numbered', () => {
     const html = `<p class=MsoListParagraph style='mso-list:l0 level1 lfo1'><![if !supportLists]><span style='mso-list:Ignore'>1.<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp; </span></span><![endif]>First<o:p></o:p></p>`;
-    expect(read(html)).toBe('p(First)');
+    expect(read(html)).toBe('ol{li(First)}');
   });
 
   it('namespaced Office elements are dropped, other prefixed elements keep their text', () => {

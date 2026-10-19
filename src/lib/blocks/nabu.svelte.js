@@ -88,6 +88,8 @@ export class Nabu {
     #pulse = new Pulse();
     /** @type {import('../utils/extensions.js').PasteInterpreter[]} */
     #pasteInterpreters = [];
+    /** @type {import('../utils/extensions.js').PasteFileHandler[]} sorted by priority, highest first */
+    #pasteFileHandlers = [];
 
     // ── IME composition state ────────────────────────────────────────────────
     // During an active IME composition the browser mutates the DOM freely
@@ -194,6 +196,11 @@ export class Nabu {
                     for (const interpreter of ext.pasteInterpreters) {
                         this.#pasteInterpreters.push(interpreter);
                     }
+                }
+
+                if (ext.pasteFileHandlers?.length) {
+                    this.#pasteFileHandlers.push(...ext.pasteFileHandlers);
+                    this.#pasteFileHandlers.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
                 }
 
                 if (ext.inputRules?.length) {
@@ -1144,16 +1151,26 @@ export class Nabu {
         const clipboard = e.clipboardData;
         if (!clipboard) return;
 
+        const sorted = [...this.#pasteInterpreters].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+        // Files on the clipboard (a screenshot, a file copied from the OS) win over its text payloads: each one becomes the
+        // block its file handler makes of it. Except an internal copy (`application/x-nabu+json` already holds the blocks,
+        // and their bytes), and a text payload that declares itself worth more (a spreadsheet range comes with an image of it).
+        const planned = this.#planPastedFiles(clipboard, sorted);
+
         // A block with `pastesAsPlainText` (code…) is a verbatim buffer: take the clipboard text as-is,
         // before any interpreter (markdown / HTML / nabu JSON) gets a chance to split it into blocks.
         const target = this.selection.anchorBlock;
         if (target && target === this.selection.focusBlock && target.pastesAsPlainText) {
             const text = clipboard.getData('text/plain');
-            if (text) this.#pasteVerbatim(target, text);
-            return;
+            if (text) { this.#pasteVerbatim(target, text); return; }
+            if (!planned.length) return;
         }
 
-        const sorted = [...this.#pasteInterpreters].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+        if (planned.length) {
+            this.#pasteFiles(planned);
+            return;
+        }
 
         for (const interpreter of sorted) {
             const raw = clipboard.getData(interpreter.format);
@@ -1166,6 +1183,63 @@ export class Nabu {
         }
 
         this.warn('handlePaste: no interpreter matched');
+    }
+
+    /**
+     * The files of a paste event that an extension's `pasteFileHandlers` takes, with the block each one becomes. Empty when
+     * the paste is not a file paste (no file, no handler accepting one, an internal copy, a text payload that outranks them).
+     * @param {DataTransfer} clipboard
+     * @param {import('../utils/extensions.js').PasteInterpreter[]} interpreters
+     * @returns {Array<{ file: File, block: import('../utils/extensions.js').PasteBlock }>}
+     */
+    #planPastedFiles(clipboard, interpreters) {
+        if (!this.#pasteFileHandlers.length) return [];
+        /** @type {File[]} */
+        let files = [...(clipboard.files ?? [])];
+        if (!files.length) {
+            files = [...(clipboard.items ?? [])].filter((item) => item.kind === 'file').map((item) => item.getAsFile()).filter((f) => !!f);
+        }
+        if (!files.length) return [];
+        if (clipboard.getData('application/x-nabu+json')) return [];
+        for (const interpreter of interpreters) {
+            if (!interpreter.outranksFiles) continue;
+            const raw = clipboard.getData(interpreter.format);
+            if (raw && interpreter.outranksFiles(raw)) return [];
+        }
+        /** @type {Array<{ file: File, block: import('../utils/extensions.js').PasteBlock }>} */
+        const planned = [];
+        for (const file of files) {
+            for (const handler of this.#pasteFileHandlers) {
+                let block = null;
+                try { if (handler.accepts(file, this)) block = handler.block(file, this); } catch (error) { this.warn('paste: a file handler failed: ' + error); }
+                if (block) { planned.push({ file, block }); break; }
+            }
+        }
+        return planned;
+    }
+
+    /**
+     * Insert the blocks made of pasted files, at the caret, in order. The bytes are read first (`Files#stage`), then ONE
+     * `insertFragment` does the rest like any other paste: stored in the document, or sent to the host's `onBeforePersist`
+     * with the optimistic `pending` block; a single undo step.
+     * @param {Array<{ file: File, block: import('../utils/extensions.js').PasteBlock }>} planned
+     */
+    async #pasteFiles(planned) {
+        const files = Files.get(this);
+        /** @type {import('../utils/extensions.js').PasteBlock[]} */
+        const blocks = [];
+        /** @type {Record<string, import('../files/files.svelte.js').EmbeddedAsset>} */
+        const assets = {};
+        for (const { file, block } of planned) {
+            try {
+                const staged = await files.stage(file);
+                blocks.push({ ...block, props: { ...block.props, ref: staged.ref }, partial: false });
+                assets[staged.id] = staged.asset;
+            } catch (error) {
+                this.warn(`paste: could not read file "${file.name}": ${error}`);
+            }
+        }
+        if (blocks.length) this.insertFragment({ blocks, assets });
     }
 
     /**
@@ -1227,7 +1301,11 @@ export class Nabu {
     insertFragment(fragment) {
         this.selection.sync(); // public entry point: may be called outside an input event
         // Every fragment (HTML / markdown / nabu JSON / API) goes through here: unsafe link & media URLs are dropped.
-        const blocks = this.#degradeUnknown(Files.get(this).adoptAssets(sanitizePasteBlocks(fragment.blocks), fragment.assets));
+        const files = Files.get(this);
+        let adopted = files.adoptAssets(sanitizePasteBlocks(fragment.blocks), fragment.assets);
+        // Content from outside (a web page): remote images are fetched and stored, when the host asked for it (`files.importRemote`).
+        if (fragment.external) adopted = files.importRemote(adopted);
+        const blocks = this.#degradeUnknown(adopted);
         if (!blocks?.length) return;
 
         let anchorBlock;
@@ -1277,8 +1355,13 @@ export class Nabu {
             for (const [key, value] of Object.entries(pb.props || {})) data.set(key, value);
         };
 
+        // A pasted block is TEXT when it carries a delta; one without (image, divider…) cannot merge into the caret block's
+        // text: it is inserted as a block (the caret block is split around it), or replaces an empty caret block (see adoptType).
+        /** @param {import('../utils/extensions.js').PasteBlock} pb */
+        const isText = (pb) => Array.isArray(pb.delta);
+
         // ── Inline: single flat block ─────────────────────────────────────────
-        if (blocks.length === 1 && !blocks[0].children?.length) {
+        if (blocks.length === 1 && !blocks[0].children?.length && (isText(blocks[0]) || anchorEmpty)) {
             const pb = blocks[0];
             const delta = pb.delta || [];
             const len = delta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
@@ -1312,16 +1395,19 @@ export class Nabu {
         let focusOffset = offset;
 
         // ── First block ───────────────────────────────────────────────────────
-        if (!firstPb.children?.length) {
+        if (!firstPb.children?.length && (isText(firstPb) || anchorEmpty)) {
             // Leaf: merge content into anchor (anchor type survives, unless it was empty — see adoptType)
             adoptType(firstPb);
             const firstDelta = firstPb.delta || [];
             if (firstDelta.length) textBehavior.applyDelta([{ retain: offset }, ...firstDelta]);
             focusOffset = offset + firstDelta.reduce((s, op) => s + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
         } else {
-            // Container (e.g. List): insert it after anchor
+            // Container (e.g. List) or void block (image…): insert it after anchor
             prevNode = this.insertPasteBlock(firstPb, prevNode);
         }
+        // The caret was at the very start of a text block and a block (not text) comes first: nothing precedes the pasted
+        // block, the blank head left behind goes (the tail, created below, is the block that keeps the text).
+        const dropHead = offset === 0 && !!rightDelta.length && !isText(firstPb) && !anchorEmpty && !/** @type {any} */ (anchorBlock).children?.length;
 
         // ── Middle blocks ─────────────────────────────────────────────────────
         for (const pb of midPbs) {
@@ -1373,6 +1459,8 @@ export class Nabu {
             const done = insertLeaf(tailSpec, rightDelta, prevNode);
             if (done) { focusBlock = done.block; focusOffset = 0; }
         }
+
+        if (dropHead && focusBlock !== anchorBlock) this.tree.delete(anchorBlock.node.id);
 
         this.#isolateNextCommits();
         this.commit();

@@ -8,7 +8,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { gotoEditor, clearAndReset, focusEditor, getEditor } from './helpers/editor.js';
 import { pasteHtml } from './helpers/clipboard.js';
 import { buildBlocks, buildTree, Para, Pp, type TreeSpec } from './helpers/blocks.js';
-import { selectRange } from './helpers/model.js';
+import { selectRange, allText } from './helpers/model.js';
 
 /** Every link mark value in the model. */
 const links = (page: Page) => page.evaluate(() =>
@@ -55,7 +55,8 @@ test.describe('URL safety', () => {
     await pasteHtml(page,
       '<p onclick="window.pwned=true">a<script>window.pwned=true</script><iframe src="javascript:window.pwned=true"></iframe><img src="x" onerror="window.pwned=true"><b onmouseover="window.pwned=true">b</b></p>',
       'ab');
-    await expect(getEditor(page)).toContainText('ab');
+    // the <img src="x"> is a (relative, safe) image block now: it splits the paragraph, its onerror is just not an attribute anywhere
+    await expect.poll(() => allText(page)).toEqual(['a', 'b']);
     await expect(page.locator('[data-block-id] script, [data-block-id] iframe, [data-block-id] [onclick], [data-block-id] [onerror], [data-block-id] [onmouseover]')).toHaveCount(0);
     expect(await page.evaluate(() => (window as any).pwned)).toBe(false);
   });

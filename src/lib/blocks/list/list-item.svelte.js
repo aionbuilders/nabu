@@ -306,6 +306,8 @@ export class ListItem extends MegaBlock {
         /** @type {import('../../utils/extensions.js').PasteBlock} */
         const result = { type: 'list-item', delta, partial: false };
         if (cb) result.props = { checked: cb.hasAttribute('checked') };
+        // Google Docs checklist: `<li role="checkbox" aria-checked="true">`
+        else if (el.getAttribute('aria-checked') === 'true' || el.getAttribute('aria-checked') === 'false') result.props = { checked: el.getAttribute('aria-checked') === 'true' };
         if (childLists.length) result.children = childLists;
         return result;
     }

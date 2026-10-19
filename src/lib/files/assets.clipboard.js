@@ -49,6 +49,49 @@ export function mapAssetBlocks(blocks, fn) {
 }
 
 /**
+ * Walk PasteBlocks (children included) and call `fn(block, url)` for every block whose `props.ref` is an absolute
+ * `http(s)` URL (a remote file). `fn` returns a props PATCH or nothing. Same contract as {@link mapAssetBlocks}.
+ * @template {{ props?: Record<string, any>, children?: any[] }} B
+ * @param {B[]} blocks
+ * @param {(block: B, url: string) => Record<string, any> | null | undefined | void} fn
+ * @returns {B[]}
+ */
+export function mapRemoteBlocks(blocks, fn) {
+    if (!Array.isArray(blocks)) return blocks;
+    let changed = false;
+    const out = blocks.map((pb) => {
+        if (!pb || typeof pb !== 'object') return pb;
+        let next = pb;
+        const ref = pb.props?.ref;
+        if (typeof ref === 'string' && /^https?:\/\//i.test(ref.trim())) {
+            const patch = fn(pb, ref.trim());
+            if (patch) next = { ...next, props: { ...pb.props, ...patch } };
+        }
+        if (Array.isArray(pb.children) && pb.children.length) {
+            const children = mapRemoteBlocks(pb.children, fn);
+            if (children !== pb.children) next = { ...next, children };
+        }
+        if (next !== pb) changed = true;
+        return next;
+    });
+    return changed ? out : blocks;
+}
+
+/**
+ * A file name for a remote URL: the last segment of its path, or `file` + the extension of its type.
+ * @param {string} url
+ * @param {string} [mime]
+ * @returns {string}
+ */
+export function remoteFileName(url, mime = '') {
+    let name = '';
+    try { name = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() ?? ''); } catch { /* keep '' */ }
+    if (name) return name;
+    const ext = /^[a-z]+\/([a-z0-9.+-]+)/i.exec(mime)?.[1]?.replace('svg+xml', 'svg').replace('jpeg', 'jpg');
+    return ext ? 'file.' + ext : 'file';
+}
+
+/**
  * Ids of the assets referenced by PasteBlocks (children included), in order of appearance, deduplicated.
  * @param {any[]} blocks
  * @returns {string[]}

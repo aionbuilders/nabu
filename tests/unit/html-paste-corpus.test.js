@@ -2,7 +2,7 @@
 /**
  * The HTML paste corpus (tests/fixtures/html): hand-written reconstructions of what each source puts on the clipboard,
  * parsed through the HTML interpreter. Asserts the block outline, the marks and the texts.
- * Lists / tables: lot 2 owns their exact structure; here we only pin what the engine does today and that no text is lost.
+ * Lists (Docs / Word levels rebuilt as nested lists) and tables (one paragraph per row, cells joined by a TAB) included.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -22,7 +22,11 @@ describe('corpus — Google Docs', () => {
       'h1(Project notes)',
       'p(This is a [b:bold] word, an [i:italic] one and a [a=https://example.org/docs?page=2&lang=en:link].)',
       'p(Distance:⍽10⍽km)',
-      'ul{li(First item) li(Second item) li(Nested item)}',
+      'ul{li(First item) li(Second item){ul{li(Nested item)}}}',
+      'p(Plan with levels:)',
+      'ul{li(Plan){ol{li(Draft) li(Review){ul{li(Typos)}}}} li(Ship)}',
+      'p(Numbered from 3:)',
+      'ol{li(Third){ul{li(Detail)}} li(Fourth)}',
     ].join(' ; '));
     // No bold anywhere but the one word.
     const bold = f.blocks.flatMap((b) => (b.delta ?? []).filter((op) => op.attributes?.bold).map((op) => op.insert));
@@ -55,8 +59,10 @@ describe('corpus — Microsoft Word', () => {
     expect(outline(f)).toBe([
       'p([b:Quarterly summary])',
       'p(Results were [i:better] than expected, see [a=https://example.org/report:the report].)',
-      'p(Revenue up)', // lot 2 turns MsoListParagraph + mso-list into a list
-      'p(Costs stable)',
+      // MsoListParagraph + mso-list: levels from `levelN`, bullet / numbered from the marker, one list per list id
+      'ul{li(Revenue up){ul{li(Cloud){ul{li(Storage)}}}} li(Costs stable)}',
+      'p(Next steps)',
+      'ol{li(Plan){ol{li(Draft)}} li(Ship)}',
     ].join(' ; '));
     const text = allText(f);
     expect(text).not.toMatch(/[· ]|mso|supportLists|StartFragment/);
@@ -85,8 +91,8 @@ describe('corpus — Wikipedia', () => {
       // Loose inline sibling of the heading. Browsers exclude it from a real copy (user-select:none); see the fixture README.
       'p([[a=/w/index.php?title=Example&action=edit&section=1:edit]])',
       'p(The [b:Example] language was designed in 1990[a=#cite_note-1:[1]] by a small team.⍽It is [i:widely] used.)',
-      // lot 2: <table> becomes a table block; until then every cell is kept as a paragraph.
-      'p(Releases) ; p(Version) ; p(Year) ; p(1.0) ; p(1992) ; p(2.0) ; p(1999)',
+      // no table block yet: the caption, then one paragraph per row, cells separated by a TAB
+      'p(Releases) ; p(Version\tYear) ; p(1.0\t1992) ; p(2.0\t1999)',
       'h3(Legacy)',
       'p(See [a=/wiki/Other_article:Other article] for more.)',
     ].join(' ; '));
@@ -114,13 +120,14 @@ describe('corpus — GitHub README', () => {
 });
 
 describe('corpus — Google Sheets', () => {
-  it('keeps every cell value (table structure is lot 2); the TSV fixture matches', () => {
+  it('one paragraph per row, cells separated by a TAB: the same rows as the text/plain TSV of the clipboard', () => {
     const f = read('sheets.html');
-    const cells = f.blocks.map((b) => b.delta.map((op) => op.insert).join(''));
-    expect(cells).toEqual(['Name', 'Score', 'Alice', '42', 'Bob', '37']);
-    // text/plain companion: same values, row by row.
-    const tsv = fixture('sheets.txt').trim().split('\n').map((l) => l.split('\t'));
-    expect(tsv.flat()).toEqual(cells);
+    const rows = f.blocks.map((b) => b.delta.map((op) => op.insert).join(''));
+    expect(rows).toEqual(['Name\tScore', 'Alice\t42', 'Bob\t37']);
+    // text/plain companion: same rows, line by line.
+    expect(rows).toEqual(fixture('sheets.txt').trim().split('\n'));
+    // the header cells are bold in the sheet: the marks of the cells are kept
+    expect(f.blocks[0].delta.filter((op) => op.attributes?.bold).map((op) => op.insert)).toEqual(['Name', 'Score']);
     // the <style> / <colgroup> of the clipboard never leak as text
     expect(allText(f)).not.toMatch(/border|cccccc|colgroup/);
   });
