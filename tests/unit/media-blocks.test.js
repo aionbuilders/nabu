@@ -20,7 +20,8 @@ describe('VideoBlock statics', () => {
     it('toHtml handles empty ref', async () => {
         const { VideoBlock } = await import('$lib/blocks/video/video.svelte.js');
         const html = VideoBlock.toHtml({ type: 'video', props: {} });
-        expect(html).toContain('<video src=""');
+        expect(html).toBe(''); // no source: no live <video>
+        expect(VideoBlock.toHtml({ type: 'video', props: { name: 'clip.mp4' } })).toBe('<p>clip.mp4</p>');
     });
 
     it('toMarkdown renders [alt](ref) link form (no native video in markdown)', async () => {

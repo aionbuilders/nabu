@@ -1,7 +1,7 @@
 // @ts-ignore
 import { MediaBlock } from "../media/media-block.svelte.js";
 import VideoComponent from "./Video.svelte";
-import { escapeAttr, sanitizeUrl } from "../../utils/html.js";
+import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -36,14 +36,17 @@ export class VideoBlock extends MediaBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
-        return '[' + (pb.props?.alt || pb.props?.name || 'video') + '](' + (pb.props?.ref || '') + ')';
+        if (!pb.props?.ref) return pb.props?.alt || pb.props?.name || ''; // no source: the label only
+        return '[' + (pb.props?.alt || pb.props?.name || 'video') + '](' + pb.props.ref + ')';
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) {
         const ref = pb.props?.ref || '';
-        const src = ref === '' ? '' : sanitizeUrl(ref, { kind: 'media' });
-        return src === null ? '' : '<video src="' + escapeAttr(src) + '" controls></video>';
+        const src = sanitizeUrl(ref, { kind: 'media' }); // null for an empty ref too
+        const label = pb.props?.alt || pb.props?.name || '';
+        if (src === null) return label ? '<p>' + escapeHtml(label) + '</p>' : ''; // no live <video> without a source
+        return '<video src="' + escapeAttr(src) + '" controls></video>';
     }
 
     static htmlRules = [

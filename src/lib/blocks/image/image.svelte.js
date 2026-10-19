@@ -39,13 +39,14 @@ export class ImageBlock extends MediaBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
-        return '![' + (pb.props?.alt || '') + '](' + (pb.props?.ref || '') + ')';
+        if (!pb.props?.ref) return pb.props?.alt || ''; // no source (an embedded asset outside Nabu): the alt text only
+        return '![' + (pb.props?.alt || '') + '](' + pb.props.ref + ')';
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) {
         const ref = pb.props?.ref || '';
-        const src = ref === '' ? '' : sanitizeUrl(ref, { kind: 'media' });
+        const src = sanitizeUrl(ref, { kind: 'media' }); // null for an empty ref too
         const alt = pb.props?.alt || '';
         if (src === null) return alt ? '<p>' + escapeHtml(alt) + '</p>' : ''; // unsafe / empty source: no live <img>
         return '<img src="' + escapeAttr(src) + '" alt="' + escapeAttr(alt) + '">';

@@ -7,6 +7,7 @@ import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDir
 import { jsonToPasteBlocks, degradeUnknownBlocks, CLIPBOARD_FORMAT_VERSION } from '../utils/extensions.js';
 import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
 import { tick } from 'svelte';
+import { Files } from '../files/files.svelte.js';
 import { Pulse } from '@aionbuilders/pulse';
 import { normalizePlaceholders } from '../utils/placeholders.js';
 
@@ -128,6 +129,8 @@ export class Nabu {
         // Initialize Undo/Redo Manager
         this.undoManager = new UndoManager(this.doc, {
             maxUndoSteps: 100,
+            // Background completions (e.g. a pasted file finishing its upload) are not undo steps of their own.
+            excludeOriginPrefixes: ['nabu:silent'],
             mergeInterval: this.#mergeInterval,
             onPush: () => {
                 if (this.#isolatedSteps > 0) this.#isolatedSteps--;
@@ -418,7 +421,12 @@ export class Nabu {
     }
 
 
-    async commit() {
+    /**
+     * Commit the pending changes as one Loro transaction.
+     * @param {{ origin?: string }} [options] `origin` tags the transaction; an origin starting with `nabu:silent` is
+     *   not recorded as an undo step (background completions that must not be undone on their own).
+     */
+    async commit({ origin } = {}) {
         this.#evictChildrenOfLeaves();
         this.trigger("onBeforeTransaction", this);
         // Structural operations (split, merge, delete/move of blocks, type change, list indent…)
@@ -439,7 +447,7 @@ export class Nabu {
                 this.#isolateNextCommits();
             }
         }
-        this.doc.commit();
+        this.doc.commit(typeof origin === 'string' ? { origin } : undefined);
         if (continuation && this.#isolating) {
             // The merge above must not leak: the typing after the operation stays isolated
             // (a merged commit may still call onPush, so don't count it as a pushed step).
@@ -1070,7 +1078,11 @@ export class Nabu {
 
         if (!pasteBlocks.length) return;
 
-        const fragment = { version: CLIPBOARD_FORMAT_VERSION, blocks: pasteBlocks };
+        // Media stored in the document (`nabu-asset:` refs) is meaningless in another document: its bytes travel in the
+        // fragment (`assets`), the blocks keep their ref. Outside Nabu (html / plain) such a ref is replaced, never leaked.
+        const files = Files.get(this);
+        const assets = files.embedAssets(pasteBlocks);
+        const fragment = { version: CLIPBOARD_FORMAT_VERSION, blocks: pasteBlocks, ...(assets ? { assets } : {}) };
         e.clipboardData.setData('application/x-nabu+json', JSON.stringify(fragment));
 
         // Recursive serializers — dispatch to each BlockClass's static toMarkdown/toHtml.
@@ -1100,9 +1112,9 @@ export class Nabu {
             ? pasteBlocks[0] : null;
         const plain = single
             ? /** @type {any[]} */ (single.delta).map(op => typeof op.insert === 'string' ? op.insert : '').join('')
-            : pasteBlocks.map(pb => pbToMarkdown(pb)).join('\n\n');
+            : files.externalize(pasteBlocks).map(pb => pbToMarkdown(pb)).join('\n\n');
         e.clipboardData.setData('text/plain', plain);
-        e.clipboardData.setData('text/html',  pasteBlocks.map(pb => pbToHtml(pb)).join('\n'));
+        e.clipboardData.setData('text/html',  files.externalize(pasteBlocks, { inline: true }).map(pb => pbToHtml(pb)).join('\n'));
 
     }
 
@@ -1215,7 +1227,7 @@ export class Nabu {
     insertFragment(fragment) {
         this.selection.sync(); // public entry point: may be called outside an input event
         // Every fragment (HTML / markdown / nabu JSON / API) goes through here: unsafe link & media URLs are dropped.
-        const blocks = this.#degradeUnknown(sanitizePasteBlocks(fragment.blocks));
+        const blocks = this.#degradeUnknown(Files.get(this).adoptAssets(sanitizePasteBlocks(fragment.blocks), fragment.assets));
         if (!blocks?.length) return;
 
         let anchorBlock;
@@ -1451,7 +1463,7 @@ export class Nabu {
      * @returns {Promise<void>}
      */
     async importFragment(fragment) {
-        const blocks = this.#degradeUnknown(sanitizePasteBlocks(fragment.blocks));
+        const blocks = this.#degradeUnknown(Files.get(this).adoptAssets(sanitizePasteBlocks(fragment.blocks), fragment.assets));
         if (!blocks?.length) return;
 
         [...this.tree.roots()].forEach(root => this.tree.delete(root.id));

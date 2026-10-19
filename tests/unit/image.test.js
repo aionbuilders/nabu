@@ -15,7 +15,8 @@ describe('ImageBlock statics', () => {
     it('toMarkdown handles empty alt and ref', async () => {
         const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const pb = { type: 'image', props: {} };
-        expect(ImageBlock.toMarkdown(pb)).toBe('![]()');
+        expect(ImageBlock.toMarkdown(pb)).toBe(''); // no source: alt text only (here none)
+        expect(ImageBlock.toMarkdown({ type: 'image', props: { alt: 'cat' } })).toBe('cat');
     });
 
     it('toHtml renders <img src alt> tag', async () => {
@@ -29,7 +30,8 @@ describe('ImageBlock statics', () => {
         const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const pb = { type: 'image', props: {} };
         const html = ImageBlock.toHtml(pb);
-        expect(html).toContain('<img src="" alt="">');
+        expect(html).toBe(''); // no source: no live <img>
+        expect(ImageBlock.toHtml({ type: 'image', props: { alt: 'cat' } })).toBe('<p>cat</p>');
     });
 
     it('fromMarkdown parses alt and ref from image syntax', async () => {

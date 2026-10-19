@@ -14,6 +14,8 @@
 /**
  * @typedef {Object} PasteFragment
  * @property {PasteBlock[]} blocks
+ * @property {Record<string, { mime: string, name: string, size: number, data: string }>} [assets] bytes (base64) of the
+ *   `nabu-asset:` refs used by `blocks` (see docs/design/clipboard-format.md)
  */
 
 /**

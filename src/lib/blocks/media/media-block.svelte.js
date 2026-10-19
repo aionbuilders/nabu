@@ -34,7 +34,11 @@ export class MediaBlock extends Block {
 
     /** @type {string} */ ref = $state('');
     /** @type {string} */ alt = $state('');
-    /** @type {string} */ status = $state('ready');
+    /**
+     * `ready` | `pending` (bytes being stored / uploaded) | `error` (upload failed) | `missing` (a `nabu-asset:` ref pasted
+     * without its bytes: the file does not exist in this document; components render a "missing file" state).
+     * @type {string}
+     */ status = $state('ready');
     /** @type {string} */ name = $state('');
     /** Transient local objectURL while pending (not persisted). @type {string | null} */ previewUrl = $state(null);
 

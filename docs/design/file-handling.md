@@ -87,3 +87,4 @@ Image / File / Video **partagent toute l'infra ci-dessus** ; ne diffèrent que p
 - Sérialisation markdown d'une ref `nabu-asset:` = `![alt](nabu-asset:id)` (pas portable hors du doc — les blobs ne tiennent pas dans du markdown). Acceptable ; export "vrai" = via le hook/URL.
 - Cancel-on-remove + progress : contrat présent (`signal`/`onProgress`), câblage bloc basique en v1.
 - Paste/drop d'images : post-v1 (slash file-pick + insert programmatique d'abord).
+- Copier-coller entre documents (P-51) : les octets d'un asset `nabu-asset:` voyagent dans le fragment `application/x-nabu+json` et sont recréés dans le document cible (hook `onBeforePersist` inclus), voir `clipboard-format.md`. Un coller sans octets donne un bloc `status: 'missing'`.

@@ -22,6 +22,28 @@
       console.warn('[e2e] invalid ?options JSON', e);
     }
 
+    // Test-only (this route is dev-only): `?hostFiles=1` installs an in-memory `files.onBeforePersist` that "uploads" to
+    // a blob: URL and records the call in `window.__hostUploads`; `?hostFiles=gated` makes every upload wait for
+    // `window.__hostRelease()` (to observe the pending state of a paste).
+    const hostFiles = page.url.searchParams.get('hostFiles');
+    if (hostFiles) {
+      const w = /** @type {any} */ (window);
+      w.__hostUploads = [];
+      /** @type {() => void} */
+      let release = () => {};
+      const gate = hostFiles === 'gated' ? new Promise((resolve) => { release = () => resolve(undefined); }) : null;
+      w.__hostRelease = release;
+      options.files = {
+        ...(options.files ?? {}),
+        onBeforePersist: async (/** @type {File} */ file) => {
+          const ref = URL.createObjectURL(file);
+          w.__hostUploads.push({ name: file.name, size: file.size, type: file.type, ref });
+          if (gate) await gate;
+          return { ref };
+        },
+      };
+    }
+
     (async () => {
       // No `persist` param: fresh in-memory editor. Otherwise: persisted under that docId (no seeding).
       const eng = docId

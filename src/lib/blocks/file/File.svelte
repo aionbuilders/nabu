@@ -13,9 +13,16 @@
   class:selected={block.selected}
   class:pending={block.status === 'pending'}
   class:error={block.status === 'error'}
+  class:missing={block.status === 'missing'}
 >
   {#if block.status === 'error'}
     <div class="nabu-file-chip nabu-file-chip--error">⚠️ Upload failed</div>
+  {:else if block.status === 'missing'}
+    <div class="nabu-file-chip nabu-file-chip--error nabu-file-chip--missing" data-nabu-missing>
+      <span>📎</span>
+      <span>{block.name || 'file'}</span>
+      <span class="nabu-file-chip-status">Missing file</span>
+    </div>
   {:else if block.status === 'pending'}
     <div class="nabu-file-chip nabu-file-chip--pending">
       <span>📎</span>

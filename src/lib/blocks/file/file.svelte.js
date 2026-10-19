@@ -36,13 +36,14 @@ export class FileBlock extends MediaBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
-        return '[' + (pb.props?.name || 'file') + '](' + (pb.props?.ref || '') + ')';
+        if (!pb.props?.ref) return pb.props?.name || 'file'; // no source: the file name only
+        return '[' + (pb.props?.name || 'file') + '](' + pb.props.ref + ')';
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) {
         const ref = pb.props?.ref || '';
-        const href = ref === '' ? '' : sanitizeUrl(ref, { kind: 'media' });
+        const href = sanitizeUrl(ref, { kind: 'media' }); // null for an empty ref too
         const name = pb.props?.name || '';
         if (href === null) return '<p>' + escapeHtml(name || 'file') + '</p>';
         return '<a href="' + escapeAttr(href) + '" download="' + escapeAttr(name) + '">' + escapeHtml(name || 'file') + '</a>';

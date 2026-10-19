@@ -1,4 +1,20 @@
 import { LoroMap } from 'loro-crdt';
+import { sanitizeUrl } from '../utils/html.js';
+import { ASSET_PREFIX, PENDING_PREFIX, assetIdOf, mapAssetBlocks, collectAssetIds, bytesToBase64, base64ToBytes } from './assets.clipboard.js';
+
+/** Origin of the commits that finish a paste in the background (ref swap): not undoable. See Nabu's UndoManager. */
+export const SILENT_ORIGIN = 'nabu:silent:files';
+/** Largest asset (bytes) turned into a `data:` URL in the `text/html` of a copy. */
+export const HTML_INLINE_LIMIT = 1024 * 1024;
+
+/**
+ * An asset as carried by `application/x-nabu+json` (`assets: { [id]: EmbeddedAsset }`).
+ * @typedef {Object} EmbeddedAsset
+ * @property {string} mime
+ * @property {string} name
+ * @property {number} size byte length
+ * @property {string} data base64
+ */
 
 /**
  * @typedef {Object} FilesConfig
@@ -18,6 +34,10 @@ export class Files {
     #nabu;
     /** @type {Map<string,string>} ref → objectURL cache for nabu-asset: refs */
     #urlCache = new Map();
+    /** @type {Map<string,string>} transient `nabu-pending:` ref → local objectURL (bytes being re-created by a paste) */
+    #pendingUrls = new Map();
+    /** @type {Map<string,string>} id of an asset pasted from ANOTHER document → the ref it got here (temporary until settled) */
+    #adopted = new Map();
 
     /** @param {import('../blocks/nabu.svelte.js').Nabu} nabu */
     constructor(nabu) {
@@ -74,6 +94,7 @@ export class Files {
      */
     resolve(ref) {
         if (!ref) return '';
+        if (ref.startsWith(PENDING_PREFIX)) return this.#pendingUrls.get(ref) ?? '';
         if (ref.startsWith('nabu-asset:')) {
             const cached = this.#urlCache.get(ref);
             if (cached) return cached;
@@ -89,5 +110,123 @@ export class Files {
         }
         if (this.config.resolve) return this.config.resolve(ref);
         return ref;
+    }
+
+    // ── Clipboard (P-51): media travelling between documents ─────────────────────────────────
+
+    /**
+     * The stored asset behind a `nabu-asset:` ref (or bare id), or `null` (not an asset ref, or not in THIS document).
+     * @param {string} ref @returns {{ id: string, data: Uint8Array, type: string, name: string } | null}
+     */
+    getAsset(ref) {
+        const id = assetIdOf(ref.startsWith(ASSET_PREFIX) ? ref : ASSET_PREFIX + ref);
+        if (id === null) return null;
+        const sub = /** @type {any} */ (this.assets.get(id));
+        if (!sub || typeof sub.get !== 'function') return null;
+        const data = sub.get('data');
+        if (!data || typeof data.length !== 'number') return null;
+        return { id, data, type: sub.get('type') || 'application/octet-stream', name: sub.get('name') || '' };
+    }
+
+    /**
+     * COPY: the bytes of every `nabu-asset:` media of `blocks`, for the `assets` map of the fragment. Nothing is
+     * embedded (and `nabu.warn` says so) when the total exceeds `maxInlineSize`; the blocks keep their ref either way.
+     * @param {any[]} blocks PasteBlocks about to be copied
+     * @returns {Record<string, EmbeddedAsset> | undefined} `undefined` when there is nothing to embed
+     */
+    embedAssets(blocks) {
+        const found = /** @type {NonNullable<ReturnType<Files['getAsset']>>[]} */ (collectAssetIds(blocks).map((id) => this.getAsset(id)).filter((a) => a !== null));
+        if (!found.length) return undefined;
+        const total = found.reduce((n, a) => n + a.data.length, 0);
+        if (total > this.maxInlineSize) {
+            this.#nabu.warn(`copy: ${found.length} embedded file(s) total ${(total / 1048576).toFixed(1)}MB > maxInlineSize (${(this.maxInlineSize / 1048576).toFixed(1)}MB): the bytes are not put on the clipboard, pasting in another document will show them as missing`);
+            return undefined;
+        }
+        /** @type {Record<string, EmbeddedAsset>} */
+        const assets = {};
+        for (const a of found) assets[a.id] = { mime: a.type, name: a.name, size: a.data.length, data: bytesToBase64(a.data) };
+        return assets;
+    }
+
+    /**
+     * COPY, `text/html` and `text/plain`: a copy of `blocks` where no `nabu-asset:` ref is left (it means nothing outside
+     * Nabu). With `inline` (HTML), a media of at most {@link HTML_INLINE_LIMIT} bytes whose type `sanitizeUrl(kind:'media')`
+     * accepts (image / video) becomes a `data:` URL; any other asset gets an empty ref, which the block serializers render
+     * as a label (alt / file name) rather than a broken `src`.
+     * @param {any[]} blocks @param {{ inline?: boolean }} [options]
+     * @returns {any[]}
+     */
+    externalize(blocks, { inline = false } = {}) {
+        return mapAssetBlocks(blocks, (_pb, id) => {
+            const asset = inline ? this.getAsset(id) : null;
+            if (asset && asset.data.length <= HTML_INLINE_LIMIT) {
+                const url = 'data:' + asset.type + ';base64,' + bytesToBase64(asset.data);
+                if (sanitizeUrl(url, { kind: 'media' }) !== null) return { ref: url };
+            }
+            return { ref: '' };
+        });
+    }
+
+    /**
+     * PASTE / import: make every `nabu-asset:` media of `blocks` valid in THIS document.
+     *  - the asset already exists here (same document, or pasted before): the ref is reused;
+     *  - the fragment carries its bytes: with no `onBeforePersist` host hook they are stored under the same id (synchronous,
+     *    part of the paste's own undo step); with a hook they are sent through {@link persist} (the host uploads them) and the
+     *    block shows a local preview (`status: 'pending'`) until the final ref replaces it;
+     *  - no bytes: the block is kept with `status: 'missing'` (media components render a "missing file" state).
+     * No commit; the caller commits. Never throws.
+     * @param {any[]} blocks PasteBlocks (already sanitized)
+     * @param {Record<string, EmbeddedAsset> | null | undefined} embedded the `assets` map of the fragment
+     * @returns {any[]}
+     */
+    adoptAssets(blocks, embedded) {
+        return mapAssetBlocks(blocks, (_pb, id) => {
+            if (this.assets.get(id)) return null; // already here: reuse
+            const known = this.#adopted.get(id);
+            if (known) return known.startsWith(PENDING_PREFIX) ? { ref: known, status: 'pending' } : { ref: known };
+            const e = embedded && typeof embedded === 'object' ? /** @type {any} */ (embedded)[id] : null;
+            const bytes = e && typeof e === 'object' && typeof e.data === 'string' ? base64ToBytes(e.data) : null;
+            if (!e || !bytes) return { status: 'missing' };
+            const type = typeof e.mime === 'string' && e.mime ? e.mime : 'application/octet-stream';
+            const name = typeof e.name === 'string' ? e.name : '';
+            if (!this.config.onBeforePersist) {
+                const sub = this.assets.setContainer(id, new LoroMap());
+                sub.set('data', bytes); sub.set('type', type); sub.set('name', name);
+                return null;
+            }
+            const tempRef = PENDING_PREFIX + (globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + Math.random().toString(36).slice(2));
+            this.#pendingUrls.set(tempRef, URL.createObjectURL(new Blob([/** @type {BlobPart} */ (bytes)], { type })));
+            this.#adopted.set(id, tempRef);
+            this.persist(new File([/** @type {BlobPart} */ (bytes)], name, { type })).then(
+                (ref) => this.#settle(id, tempRef, ref),
+                () => this.#settle(id, tempRef, null),
+            );
+            return { ref: tempRef, status: 'pending' };
+        });
+    }
+
+    /**
+     * End of a background re-creation: every block still holding `tempRef` gets the final ref (or the `error` status
+     * when the upload failed). Committed with a silent origin: not an undo step of its own, the paste stays ONE step.
+     * @param {string} id @param {string} tempRef @param {string | null} finalRef
+     */
+    async #settle(id, tempRef, finalRef) {
+        if (finalRef) this.#adopted.set(id, finalRef); else this.#adopted.delete(id);
+        const nabu = this.#nabu;
+        let touched = false;
+        for (const block of nabu.blocks.values()) {
+            const node = /** @type {any} */ (block.node);
+            if (node.isDeleted?.() || node.data.get('ref') !== tempRef) continue;
+            node.data.set('ref', finalRef ?? '');
+            node.data.set('status', finalRef ? 'ready' : 'error');
+            touched = true;
+        }
+        try {
+            if (touched) await nabu.commit({ origin: SILENT_ORIGIN });
+        } finally {
+            const url = this.#pendingUrls.get(tempRef);
+            this.#pendingUrls.delete(tempRef);
+            if (url) URL.revokeObjectURL(url);
+        }
     }
 }

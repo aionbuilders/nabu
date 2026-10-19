@@ -14,9 +14,12 @@
   class:selected={block.selected}
   class:pending={block.status === 'pending'}
   class:error={block.status === 'error'}
+  class:missing={block.status === 'missing'}
 >
   {#if block.status === 'error'}
     <div class="nabu-video-error">⚠️ Upload failed</div>
+  {:else if block.status === 'missing'}
+    <div class="nabu-video-error nabu-video-missing" data-nabu-missing>Missing file{block.alt ? ' — ' + block.alt : ''}</div>
   {:else if src}
     <!-- svelte-ignore a11y_media_has_caption -->
     <video src={src} controls draggable="false"></video>

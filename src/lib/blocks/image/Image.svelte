@@ -14,9 +14,12 @@
   class:selected={block.selected}
   class:pending={block.status === 'pending'}
   class:error={block.status === 'error'}
+  class:missing={block.status === 'missing'}
 >
   {#if block.status === 'error'}
     <div class="nabu-image-error">⚠️ Upload failed</div>
+  {:else if block.status === 'missing'}
+    <div class="nabu-image-error nabu-image-missing" data-nabu-missing>Missing file{block.alt ? ' — ' + block.alt : ''}</div>
   {:else if src}
     <img src={src} alt={block.alt} draggable="false" />
     {#if block.status === 'pending'}<div class="nabu-image-spinner">Uploading…</div>{/if}

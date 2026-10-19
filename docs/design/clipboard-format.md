@@ -21,6 +21,28 @@ Status: implemented (P-52). Complements `copy-paste.md` (§3.3 sketches the form
 - `blocks` (`PasteBlock[]`): `type`, `partial` (`"start" | "end" | "both" | false`), optional `props`, `delta` (Loro rich-text delta),
   `children` (nested blocks of a container / hybrid block).
 
+- `assets` (optional, added by P-51, same `version: 1`): `{ [assetId]: { mime, name, size, data } }`, the bytes (`data`, base64) of the
+  `nabu-asset:<assetId>` refs used by `blocks` (a media block's `props.ref`). Older readers ignore the unknown field. Absent when the
+  fragment has no such media, or when their total size exceeds `files.maxInlineSize` (then `nabu.warn`, and the blocks keep only the ref).
+
+## Media stored in the document (P-51)
+
+A media block whose ref is `nabu-asset:<id>` points into the `assets` map of the document it was copied from. The fragment therefore carries
+the bytes, and the receiving editor makes the ref valid (`Files#adoptAssets`, applied by `insertFragment` / `importFragment`):
+
+| In the target document | Result |
+|---|---|
+| the asset id already exists (same document, or pasted before) | ref reused, nothing duplicated |
+| the fragment carries the bytes, no `files.onBeforePersist` | stored under the same id, in the paste's own undo step |
+| the fragment carries the bytes, `files.onBeforePersist` set | `Files#persist(new File(...))`: the host uploads it and returns its ref. The block is created at once with `status: 'pending'` and a local preview (`nabu-pending:<uuid>` transient ref, resolved by `Files#resolve` to an object URL), then gets the final ref / `status: 'ready'` (`'error'` if the upload fails) in a silent commit (`Nabu#commit({ origin: 'nabu:silent:files' })`, excluded from the UndoManager): Ctrl+Z / redo see the paste as ONE step. Pasting the same asset again meanwhile reuses the same upload |
+| no bytes (older copy, over the size limit, hand-made fragment, corrupt `data`) | the block is kept with `status: 'missing'`, ref unchanged. Media components render a "Missing file" state (`[data-nabu-missing]`); a custom component should handle `block.status === 'missing'`. Never an exception |
+
+Hosted refs (`http(s):`, `blob:`, whatever a host returns) are not assets: they are not embedded and paste unchanged.
+
+`text/html` and `text/plain` never contain a `nabu-asset:` ref (`Files#externalize`): in HTML an image / video of at most 1 MB whose type
+`sanitizeUrl(kind: 'media')` accepts becomes a `data:` URL; anything else (larger, other file types) gets an empty source, which the block
+serializers render as a label (alt text / file name), never a broken `src`. In markdown the alt text / name only.
+
 ## Reading rules (the Nabu paste interpreter, `paste/nabu.paste.js`)
 
 | Fragment | Result |
