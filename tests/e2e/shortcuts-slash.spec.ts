@@ -29,8 +29,10 @@ function summarize(b: any): Summary {
   const content = b.content;
   const text = typeof content === 'string' ? content : (content ?? []).map((r: any) => r.text).join('');
   const s: Summary = { type: b.type, text };
-  if (b.props) s.props = b.props;
-  if (b.checked !== undefined) s.checked = b.checked;
+  // the `checked` of a to-do item is a prop of the JSON export (it used to sit next to `type`): shown apart here
+  const { checked, ...props } = b.props ?? {};
+  if (Object.keys(props).length) s.props = props;
+  if (checked !== undefined) s.checked = checked;
   if (b.children) s.children = b.children.map(summarize);
   return s;
 }

@@ -88,22 +88,15 @@ describe('markdown round trip', () => {
         expect(engine.serialize('markdown')).toBe(md1);
     });
 
-    it('the second generation has the same blocks, props and marks as the first (up to the toggle)', async () => {
+    it('the second generation has the same blocks, props and marks as the first, toggle included', async () => {
         const engine = await make();
         const strip = (b) => JSON.parse(JSON.stringify(b, (k, v) => (k === 'id' ? undefined : v)));
         const json = () => engine.serialize('json').blocks.map(strip);
         const before = json();
-        const toggleAt = before.findIndex((b) => b.type === 'toggle');
-        expect(toggleAt).toBeGreaterThan(0);
+        expect(before.some((b) => b.type === 'toggle')).toBe(true);
         await engine.importMarkdown(engine.serialize('markdown'));
-        const after = json();
-        expect(after.slice(0, toggleAt)).toEqual(before.slice(0, toggleAt));
-        // A toggle is exported as literal <details> text (no markdown rule reads it back): its summary, its body and the
-        // closing tag are plain paragraphs / blocks of the second generation.
-        const texts = after.slice(toggleAt).map((b) => b.type);
-        expect(texts.slice(0, 2)).toEqual(['paragraph', 'paragraph']);
-        expect(after[toggleAt].content).toEqual([{ text: '<details><summary>Toggle head</summary>' }]);
-        expect(after.slice(toggleAt).some((b) => b.type === 'paragraph' && JSON.stringify(b.content).includes('</details>'))).toBe(true);
+        // the exact <details> construct Nabu emits is read back as a Toggle (see roundtrip-structure.test.js for the rest)
+        expect(json()).toEqual(before);
     });
 
     it('a hand-written README (setext, tilde fence, nested quote, loose and tab-indented lists, table…) is stable after one pass', async () => {

@@ -71,7 +71,7 @@ describe('ListItem.toMarkdown (static)', () => {
   it('indents nested items', async () => {
     const { ListItem } = await import('$lib/blocks/list/list-item.svelte.js');
     const pb = { type: 'list-item', delta: [{ insert: 'nested' }] };
-    expect(ListItem.toMarkdown(pb, { recurse: () => '', listType: 'bullet', index: 0, depth: 2 })).toBe('    - nested');
+    expect(ListItem.toMarkdown(pb, { recurse: () => '', listType: 'bullet', index: 0, indent: '    ' })).toBe('    - nested');
   });
 });
 

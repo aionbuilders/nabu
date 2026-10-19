@@ -126,7 +126,7 @@ function markdownCodeSpan(/** @type {string} */ text) {
 }
 
 /** A link destination: raw when plain, `<…>` when it holds whitespace, angle brackets or unbalanced parentheses. */
-function markdownDestination(/** @type {string} */ href) {
+export function markdownDestination(/** @type {string} */ href) {
     let depth = 0;
     let balanced = true;
     for (const ch of href) {

@@ -1,5 +1,6 @@
 // @ts-ignore
 import { MediaBlock } from "../media/media-block.svelte.js";
+import { markdownMediaLink } from "../media/markdown.js";
 import VideoComponent from "./Video.svelte";
 import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 
@@ -17,11 +18,11 @@ export class VideoBlock extends MediaBlock {
     constructor(nabu, node) {
         super(nabu, node);
 
-        this.serializers.set('markdown', () => '[' + (this.alt || this.name || 'video') + '](' + this.ref + ')');
+        this.serializers.set('markdown', () => VideoBlock.toMarkdown({ type: 'video', partial: false, props: this.exportProps }));
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'video',
-            props: { ref: this.ref, alt: this.alt, name: this.name },
+            props: this.exportProps,
         }));
         this.serializers.set('application/x-nabu+json', () => ({
             type: 'video',
@@ -37,7 +38,7 @@ export class VideoBlock extends MediaBlock {
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
         if (!pb.props?.ref) return pb.props?.alt || pb.props?.name || ''; // no source: the label only
-        return '[' + (pb.props?.alt || pb.props?.name || 'video') + '](' + pb.props.ref + ')';
+        return markdownMediaLink(pb.props?.alt || pb.props?.name || 'video', pb.props.ref);
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */

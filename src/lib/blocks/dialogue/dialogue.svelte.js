@@ -16,7 +16,7 @@ export class Dialogue extends TextBlock {
     constructor(nabu, node) {
         super(nabu, node);
 
-        this.serializers.set('markdown', () => `${Dialogue.markdownMarker} ${this.behavior.toMarkdown()}`);
+        this.serializers.set('markdown', () => { const md = this.behavior.toMarkdown(); return md ? `${Dialogue.markdownMarker} ${md}` : ''; }); // an empty line has no markdown
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'dialogue',
@@ -44,7 +44,8 @@ export class Dialogue extends TextBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
-        return `${Dialogue.markdownMarker} ${deltaToMarkdown(pb.delta || [])}`;
+        const md = deltaToMarkdown(pb.delta || []);
+        return md ? `${Dialogue.markdownMarker} ${md}` : ''; // an empty line has no markdown
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */

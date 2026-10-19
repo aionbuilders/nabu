@@ -197,7 +197,13 @@ describe('lists', () => {
         ['- marker', '- a\n- b', 'ul[li(a), li(b)]'],
         ['* marker', '* a\n* b', 'ul[li(a), li(b)]'],
         ['+ marker', '+ a\n+ b', 'ul[li(a), li(b)]'],
-        ['mixed bullet characters stay one list', '- a\n* b\n+ c', 'ul[li(a), li(b), li(c)]'],
+        // CommonMark (P-30): a change of bullet character / ordered delimiter starts a NEW list (the List normalizer merges
+        // adjacent lists of the same type back when they are imported into a document)
+        ['a change of bullet character starts a new list', '- a\n* b\n+ c', 'ul[li(a)] ; ul[li(b)] ; ul[li(c)]'],
+        ['a change of delimiter starts a new list', '1. a\n2) b', 'ol[li(a)] ; ol@2[li(b)]'],
+        ['a change of bullet character, loose', '- a\n\n* b', 'ul[li(a)] ; ul[li(b)]'],
+        ['a change of bullet character in a sublist', '- a\n  - b\n  * c', 'ul[li(a)[ul[li(b)], ul[li(c)]]]'],
+        ['a to-do list then a bullet list', '- [ ] a\n* b', 'todo[li(a)-] ; ul[li(b)]'],
         ['1. marker', '1. a\n2. b', 'ol[li(a), li(b)]'],
         ['1) marker', '1) a\n2) b', 'ol[li(a), li(b)]'],
         ['start from the first number', '3. a\n4. b', 'ol@3[li(a), li(b)]'],

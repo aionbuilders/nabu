@@ -35,6 +35,19 @@ function isClosingFence(line, open) {
 }
 
 // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
+/**
+ * A fenced code block as markdown. The fence is longer than any run of backticks in the code (a code block that holds a
+ * fence round-trips); the info string is the language, without whitespace or backtick (it could not be read back).
+ * @param {string | null | undefined} language
+ * @param {string} text
+ * @returns {string}
+ */
+function codeToMarkdown(language, text) {
+    const longest = Math.max(0, ...(text.match(/`+/g) || []).map((run) => run.length));
+    const fence = '`'.repeat(Math.max(3, longest + 1));
+    return fence + String(language || '').replace(/[\s`]/g, '') + '\n' + text + '\n' + fence;
+}
+
 export class CodeBlock extends TextBlock {
     /** @param {Nabu} nabu @param {CodeNode} node */
     constructor(nabu, node) {
@@ -42,10 +55,7 @@ export class CodeBlock extends TextBlock {
 
         this.language = node.data.get('language') || null;
 
-        this.serializers.set('markdown', () => {
-            const lang = this.language || '';
-            return '```' + lang + '\n' + this.text + '\n```';
-        });
+        this.serializers.set('markdown', () => codeToMarkdown(this.language, this.text));
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'code',
@@ -143,8 +153,7 @@ export class CodeBlock extends TextBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
-        const lang = pb.props?.language || '';
-        return '```' + lang + '\n' + pbText(pb) + '\n```';
+        return codeToMarkdown(pb.props?.language, pbText(pb));
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */

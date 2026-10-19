@@ -253,7 +253,7 @@ const json = engine.serialize('json');
 
 // Import — replaces the entire document
 await engine.importMarkdown('# Title\n\nSome **bold** text.'); // requires MarkdownPasteExtension
-await engine.importJSON(json); // loads a serialize('json') export
+await engine.importJSON(json); // loads a serialize('json') export (exact tree; markdown is exact for text, lists, toggles, code… — see docs/design/import-export.md)
 
 // Links
 engine.exec('link:set', { href: 'https://example.com' }); // on the current selection

@@ -58,6 +58,22 @@ export class MediaBlock extends Block {
         return sanitizeUrl(Files.get(this.nabu).resolve(this.ref), { kind: 'media' }) ?? '';
     }
 
+    /**
+     * The props a DOCUMENT export (`serialize('json')` / `'markdown'`) writes: `ref`, `alt`, `name`, and `status` when it is
+     * not `ready`. A `pending` block (bytes still being stored / uploaded) has no durable ref yet: its transient
+     * `nabu-pending:` ref (or empty one) is NOT exported as if it were final, the block is exported as `missing` (label
+     * kept, no source) so the import shows the "Missing file" state instead of a block stuck pending forever.
+     * @returns {{ ref: string, alt: string, name: string, status?: string }}
+     */
+    get exportProps() {
+        const props = { ref: this.ref, alt: this.alt, name: this.name };
+        if (this.status === 'pending') {
+            if (!this.ref || this.ref.startsWith('nabu-pending:')) return { ...props, ref: '', status: 'missing' };
+            return props;
+        }
+        return this.status === 'ready' ? props : { ...props, status: this.status };
+    }
+
     /** @param {string} v */
     setAlt(v) { this.alt = v; /** @type {any} */ (this.node.data).set('alt', v); this.commit(); }
 

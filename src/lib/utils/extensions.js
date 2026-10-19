@@ -162,27 +162,45 @@ export function degradeUnknownBlocks(blocks, isKnown, fallbackType) {
     return walk(blocks);
 }
 
+/** Version written by `serialize('json')` (document export). `importJSON` reads this one (a missing version is read as it). */
+export const JSON_FORMAT_VERSION = '1';
+
+/**
+ * Whether `importJSON` can read a document export of this `version` (see {@link JSON_FORMAT_VERSION}). A missing version is
+ * read as the current one; the number `1` and the string `'1'` are the same version.
+ * @param {unknown} version
+ * @returns {boolean}
+ */
+export function isSupportedJsonVersion(version) {
+    return version === undefined || version === null || String(version) === JSON_FORMAT_VERSION;
+}
+
 /**
  * Convert a `serialize('json')` document export back into PasteBlocks.
- * The json format stores text as Slate-like runs (`{text, ...marks}`);
- * PasteBlocks store Loro deltas (`{insert, attributes}`).
- * @param {Array<{type: string, props?: Record<string, any>, content?: Array<{text: string, [mark: string]: any}>, children?: any[]}>} blocks
+ * The json format stores text as Slate-like runs (`{text, ...marks}`) or, for a code block, as a plain string;
+ * PasteBlocks store Loro deltas (`{insert, attributes}`). Top-level keys other than `id` / `type` / `props` / `content` /
+ * `children` are read as props (the `checked` of a to-do item in the first exports sat next to `type`).
+ * @param {Array<{type: string, props?: Record<string, any>, content?: Array<{text: string, [mark: string]: any}> | string, children?: any[], [key: string]: any}>} blocks
  * @returns {PasteBlock[]}
  */
 export function jsonToPasteBlocks(blocks) {
-    return (blocks || []).map(b => {
+    return (Array.isArray(blocks) ? blocks : []).filter(b => b && typeof b === 'object' && typeof b.type === 'string').map(b => {
+        const { id: _id, type, props, content, children, ...extra } = b;
         /** @type {PasteBlock} */
-        const pb = { type: b.type, partial: false };
-        if (b.props) pb.props = b.props;
-        if (Array.isArray(b.content)) {
-            pb.delta = b.content.map(run => {
+        const pb = { type, partial: false };
+        const merged = { ...extra, ...(props && typeof props === 'object' ? props : {}) };
+        if (Object.keys(merged).length) pb.props = merged;
+        if (typeof content === 'string') {
+            if (content) pb.delta = [{ insert: content }];
+        } else if (Array.isArray(content)) {
+            pb.delta = content.filter(run => run && typeof run.text === 'string').map(run => {
                 const { text, ...marks } = run;
                 return Object.keys(marks).length
                     ? { insert: text, attributes: marks }
                     : { insert: text };
             });
         }
-        if (Array.isArray(b.children)) pb.children = jsonToPasteBlocks(b.children);
+        if (Array.isArray(children)) pb.children = jsonToPasteBlocks(children);
         return pb;
     });
 }

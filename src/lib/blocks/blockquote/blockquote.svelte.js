@@ -30,7 +30,7 @@ export class BlockquoteBlock extends TextBlock {
     constructor(nabu, node) {
         super(nabu, node);
 
-        this.serializers.set('markdown', () => `> ${this.behavior.toMarkdown()}`);
+        this.serializers.set('markdown', () => { const md = this.behavior.toMarkdown(); return md ? `> ${md}` : ''; }); // an empty quote has no markdown
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'blockquote',
@@ -45,7 +45,8 @@ export class BlockquoteBlock extends TextBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
-        return `> ${deltaToMarkdown(pb.delta || [])}`;
+        const md = deltaToMarkdown(pb.delta || []);
+        return md ? `> ${md}` : ''; // an empty quote has no markdown
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */

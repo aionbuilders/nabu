@@ -3,7 +3,8 @@ import { ListBehavior } from "./list.behavior.svelte.js";
 import ListComponent from "./List.svelte";
 import { stepBack } from "./step-back.js";
 import { hasLeveledItems, docsEntries, docsSiblings, isWordListParagraph, wordEntries, wordSiblings, nestEntries } from "./html-flat.js";
-import { isListItem, interruptsParagraph, listLength, parseListLines } from "./markdown.js";
+import { isListItem, interruptsParagraph, listLength, parseListLines, renderList } from "./markdown.js";
+import { deltaToMarkdown } from "../../behaviors/text";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -27,6 +28,9 @@ export function listStart(listType, start) {
 
 
 
+/** What the list renderers (markdown.js) need from outside: the inline serializer and the `start` normalizer. */
+const markdownEnv = { toMarkdown: (/** @type {any[]} */ delta) => deltaToMarkdown(delta), listStart };
+
 export class List extends MegaBlock {
     /** @param {Nabu} nabu @param {ListNode} node */
     constructor(nabu, node) {
@@ -35,18 +39,37 @@ export class List extends MegaBlock {
         this.behavior = new ListBehavior(this);
         this.behaviors.set("list", this.behavior);
 
-        this.serializers.set('markdown', () =>
-            this.children
-                .map(child => child.serialize('markdown'))
-                .filter(Boolean)
-                .join('\n')
-        );
+        // Rendered from the PasteBlock tree, like the clipboard: ONE implementation of the list markdown (`renderList`).
+        this.serializers.set('markdown', () => renderList(this.toPasteBlock(), markdownEnv, { before: this.siblingsBefore() }));
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'list',
             props: this.clipboardProps,
             children: this.children.map(child => child.serialize('json')).filter(Boolean)
         }));
+    }
+
+    /**
+     * This list, its items and their sublists as PasteBlocks (the shape the static serializers read).
+     * @returns {import('../../utils/extensions.js').PasteBlock}
+     */
+    toPasteBlock() {
+        return {
+            type: 'list',
+            partial: false,
+            props: this.clipboardProps,
+            children: this.children.map(item => /** @type {any} */ (item).toPasteBlock()),
+        };
+    }
+
+    /**
+     * The siblings before this list (the lists right before it decide its marker, see `adjacentRun`).
+     * @returns {Array<{ type: string, props: { listType?: string } }>}
+     */
+    siblingsBefore() {
+        const siblings = /** @type {any[]} */ (this.parent?.children ?? this.nabu.children);
+        const at = siblings.indexOf(this);
+        return siblings.slice(0, at < 0 ? 0 : at).map(b => ({ type: b.type, props: { listType: b.listType } }));
     }
 
     listType = $derived(this.behavior.listType);
@@ -126,15 +149,12 @@ export class List extends MegaBlock {
     }
 
     /**
+     * Markdown of a list and its sublists. Adjacent lists alternate their marker (`-` / `*`, `.` / `)`), see `adjacentRun`.
      * @param {import('../../utils/extensions.js').PasteBlock} pb
-     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, depth?: number }} helpers
+     * @param {{ indent?: string, before?: import('../../utils/extensions.js').PasteBlock[] }} helpers  `before`: the siblings before the list
      */
-    static toMarkdown(pb, { recurse, depth = 0 }) {
-        const listType = pb.props?.listType ?? 'bullet';
-        const start = listStart(listType, pb.props?.start) ?? 1;
-        return (pb.children || [])
-            .map((child, i) => recurse(child, { listType, index: i, depth, start }))
-            .join('\n');
+    static toMarkdown(pb, { indent = '', before = [] }) {
+        return renderList(pb, markdownEnv, { indent, before });
     }
 
     /**

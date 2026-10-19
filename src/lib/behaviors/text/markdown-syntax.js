@@ -38,13 +38,16 @@ export function delimiterFlags(ch, prev, next) {
     return { canOpen: left, canClose: right };
 }
 
-/** A `<` that the inline parser would read as markup: `<u>`, `</u>`, an autolink `<scheme:…>` or `<a@b.c>`. */
-const MARKUP_START = /^<(?:\/?u>|[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>|[^\s<>@]+@[^\s<>]+>)/;
+/**
+ * A `<` that the inline parser would read as markup: `<u>`, `</u>`, an autolink `<scheme:…>` or `<a@b.c>`; and the tags of
+ * the toggle construct (`<details>`, `</summary>`…): a line of text must never read back as the start / end of a toggle.
+ */
+const MARKUP_START = /^<(?:\/?u>|\/?(?:details|summary)(?![A-Za-z0-9])|[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>|[^\s<>@]+@[^\s<>]+>)/i;
 
 /**
  * Escape the markdown-significant characters of a plain text run so that parsing it back gives the same text.
  * Only what can start something is escaped: `\ * ` [ ]`, a `_` that could be a delimiter (not intraword), a `~`
- * next to another `~`, a `<` that would open an autolink / `<u>` tag.
+ * next to another `~`, a `<` that would open an autolink / `<u>` / `<details>` tag.
  * @param {string} text
  * @returns {string}
  */

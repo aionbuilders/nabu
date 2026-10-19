@@ -45,11 +45,11 @@ describe('ToggleBlock.toHtml', () => {
 // ── ToggleBlock.toMarkdown ──────────────────────────────────────────────────
 
 describe('ToggleBlock.toMarkdown', () => {
-    it('wraps header in <details><summary>…</summary>', async () => {
+    it('wraps header in <details> + <summary>…</summary> (<details open> when expanded)', async () => {
         const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const pb = { delta: [{ insert: 'H' }], children: [] };
-        const result = ToggleBlock.toMarkdown(pb, { recurse: () => '' });
-        expect(result).toMatch(/^<details><summary>H<\/summary>/);
+        expect(ToggleBlock.toMarkdown({ ...pb, props: { collapsed: true } }, { recurse: () => '' })).toBe('<details>\n<summary>H</summary>\n\n</details>');
+        expect(ToggleBlock.toMarkdown({ ...pb, props: { collapsed: false } }, { recurse: () => '' })).toMatch(/^<details open>\n<summary>H<\/summary>/);
     });
 
     it('includes body children serialized by recurse', async () => {

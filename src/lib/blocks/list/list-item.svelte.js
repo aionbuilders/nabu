@@ -1,11 +1,12 @@
 import { MegaBlock } from "../megablock.svelte.js";
 import ListItemComponent from "./ListItem.svelte";
-import { List } from "./list.svelte.js";
+import { List, listStart } from "./list.svelte.js";
 import { moveItems, handleTab } from "./indent.js";
 import { retypeItem } from "./convert.js";
 import { pasteIntoItem } from "./paste.js";
 import { LoroText } from "loro-crdt";
 import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
+import { renderItem, adjacentRun, markerWidth } from "./markdown.js";
 
 /**
  * @import { Nabu, NabuNode, Block } from "..";
@@ -14,6 +15,9 @@ import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text
 /**
  * @typedef {NabuNode<{type: "list-item", text: LoroText}>} ListItemNode
  */
+
+/** What the list renderers (markdown.js) need from outside: the inline serializer and the `start` normalizer. */
+const markdownEnv = { toMarkdown: (/** @type {any[]} */ delta) => deltaToMarkdown(delta), listStart };
 
 /**
  * Indent a list item (Tab behavior): move under the previous sibling (into its last sublist when of the same type, else a new one).
@@ -60,23 +64,21 @@ export class ListItem extends MegaBlock {
             this.checked = !!this.node.data.get('checked');
         });
 
+        // One item (and its sublists), indented under the items that hold it. A whole list is rendered by the List.
         this.serializers.set('markdown', () => {
-            const depth = this.parents.filter(p => p.type === 'list-item').length;
-            const indent = '  '.repeat(depth);
-            const listType = /** @type {any} */ (this.parent)?.listType ?? 'bullet';
-            let prefix;
-            if (listType === 'todo') {
-                prefix = `- [${this.checked ? 'x' : ' '}]`;
-            } else {
-                prefix = listType === 'ordered' ? `${((/** @type {any} */ (this.parent)?.start ?? 1) + this.index)}.` : '-';
+            const list = /** @type {any} */ (this.parent);
+            let indent = '';
+            for (let item = /** @type {any} */ (this); item.parent?.parent?.type === 'list-item'; item = item.parent.parent) {
+                const outer = item.parent.parent;
+                indent = ' '.repeat(markerWidth(outer.parent?.listType, (outer.parent?.start ?? 1) + outer.index)) + indent;
             }
-            const lines = [`${indent}${prefix} ${this.behavior.toMarkdown()}`];
-            // Every sublist, in order (an item may hold several, of different types: P-28).
-            for (const sublist of this.sublists) {
-                const sublistMd = sublist.serialize('markdown');
-                if (sublistMd) lines.push(sublistMd);
-            }
-            return lines.join('\n');
+            return renderItem(this.toPasteBlock(), markdownEnv, {
+                listType: list?.listType ?? 'bullet',
+                index: this.index,
+                start: list?.start ?? 1,
+                run: list ? adjacentRun(list.listType, list.siblingsBefore()) : 0,
+                indent,
+            });
         });
         this.serializers.set('json', () => {
             /** @type {Record<string, any>} */
@@ -84,7 +86,7 @@ export class ListItem extends MegaBlock {
                 id: this.id,
                 type: 'list-item',
                 content: this.behavior.toJSON(),
-                ...(this.isTodo ? { checked: this.checked } : {})
+                ...(this.isTodo ? { props: { checked: this.checked } } : {})
             };
             const childrenJson = this.children.map(c => c.serialize('json')).filter(Boolean);
             if (childrenJson.length) result.children = childrenJson;
@@ -99,6 +101,16 @@ export class ListItem extends MegaBlock {
     checked = $state(false);
 
     isTodo = $derived(/** @type {any} */ (this.parent)?.listType === 'todo');
+
+    /**
+     * This item and its sublists as PasteBlocks (the shape the static serializers read).
+     * @returns {import('../../utils/extensions.js').PasteBlock}
+     */
+    toPasteBlock() {
+        const pb = this.behavior.toClipboardBlock({ props: this.clipboardProps });
+        const sublists = this.sublists;
+        return sublists.length ? { ...pb, children: sublists.map(sub => /** @type {any} */ (sub).toPasteBlock()) } : pb;
+    }
 
     /** A to-do item carries its `checked` state onto the clipboard. */
     get clipboardProps() {
@@ -256,19 +268,10 @@ export class ListItem extends MegaBlock {
 
     /**
      * @param {import('../../utils/extensions.js').PasteBlock} pb
-     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, listType?: string, index?: number, depth?: number, start?: number }} helpers
+     * @param {{ listType?: string, index?: number, start?: number, run?: number, indent?: string }} helpers  `run`: position of the list among adjacent lists (marker alternation), `indent`: what the item is nested under
      */
-    static toMarkdown(pb, { recurse, listType = 'bullet', index = 0, depth = 0, start = 1 }) {
-        const indent = '  '.repeat(depth);
-        let prefix;
-        if (listType === 'todo') {
-            prefix = `- [${pb.props?.checked ? 'x' : ' '}]`;
-        } else {
-            prefix = listType === 'ordered' ? `${start + index}.` : '-';
-        }
-        const text = deltaToMarkdown(pb.delta || []);
-        const sublists = (pb.children || []).map(sub => recurse(sub, { depth: depth + 1 })).join('\n');
-        return `${indent}${prefix} ${text}${sublists ? '\n' + sublists : ''}`;
+    static toMarkdown(pb, { listType = 'bullet', index = 0, start = 1, run = 0, indent = '' }) {
+        return renderItem(pb, markdownEnv, { listType, index, start, run, indent });
     }
 
     /**

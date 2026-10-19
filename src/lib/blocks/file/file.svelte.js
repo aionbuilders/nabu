@@ -1,5 +1,6 @@
 // @ts-ignore
 import { MediaBlock } from "../media/media-block.svelte.js";
+import { markdownMediaLink } from "../media/markdown.js";
 import FileComponent from "./File.svelte";
 import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 
@@ -17,11 +18,11 @@ export class FileBlock extends MediaBlock {
     constructor(nabu, node) {
         super(nabu, node);
 
-        this.serializers.set('markdown', () => '[' + (this.name || 'file') + '](' + this.ref + ')');
+        this.serializers.set('markdown', () => FileBlock.toMarkdown({ type: 'file', partial: false, props: this.exportProps }));
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'file',
-            props: { ref: this.ref, name: this.name },
+            props: this.exportProps,
         }));
         this.serializers.set('application/x-nabu+json', () => ({
             type: 'file',
@@ -37,7 +38,7 @@ export class FileBlock extends MediaBlock {
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
         if (!pb.props?.ref) return pb.props?.name || 'file'; // no source: the file name only
-        return '[' + (pb.props?.name || 'file') + '](' + pb.props.ref + ')';
+        return markdownMediaLink(pb.props?.name || 'file', pb.props.ref);
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */

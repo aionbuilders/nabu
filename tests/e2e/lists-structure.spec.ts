@@ -331,7 +331,7 @@ test.describe('B · Backspace / Delete in lists', () => {
     await undo(page);
     await expectOutline(page, original);
     await expectCaret(page, '|bb');
-    await expectMd(page, '1. a\n2. bb\n  - s1\n  - s2\n3. c');
+    await expectMd(page, '1. a\n2. bb\n   - s1\n   - s2\n3. c');
     expect(await typeAndOutline(page)).toBe('ol[a, Xbb > ul[s1, s2], c]');
     await expectValid(page);
 
@@ -693,12 +693,12 @@ test.describe('F · Todo lists', () => {
     await expectOutline(page, 'todo[[x] t1, [ ] t2]');
     // CURRENT: the checkbox mousedown is prevented, so the caret does not move.
     await expectCaret(page, 't|1');
-    expect((await getJson(page)).blocks[0].children[0].checked).toBe(true);
+    expect((await getJson(page)).blocks[0].children[0].props.checked).toBe(true);
     expect(await typeAndOutline(page)).toBe('todo[[x] tX1, [ ] t2]');
 
     await checkbox(page, 0).click();
     await expectOutline(page, 'todo[[ ] tX1, [ ] t2]');
-    expect((await getJson(page)).blocks[0].children[0].checked).toBe(false);
+    expect((await getJson(page)).blocks[0].children[0].props.checked).toBe(false);
     await expectCaret(page, 'tX|1');
     await expectValid(page);
   });
@@ -919,7 +919,7 @@ test.describe('H · Misc', () => {
       };
     });
     expect(styles).toEqual({ outerType: 'decimal', innerType: 'decimal', liDisplay: 'list-item' });
-    expect(await getMarkdown(page)).toBe('1. one\n2. two\n  1. x\n  2. y\n3. three');
+    expect(await getMarkdown(page)).toBe('1. one\n2. two\n   1. x\n   2. y\n3. three');
   });
 
   test('28a · transforming a bullet item to a paragraph (block:transform) splits the list around it', async ({ page }) => {
@@ -1036,7 +1036,7 @@ test.describe('H · Misc', () => {
     await expectOutline(page, 'ul[a] ; todo[[x] b > ul[b1, b2]] ; ul[c]');
     await exec(page, 'list:convert', { listType: 'bullet' });
     await expectOutline(page, 'ul[a, b > ul[b1, b2], c]');
-    expect((await getJson(page)).blocks[0].children[1].checked).toBeUndefined();
+    expect((await getJson(page)).blocks[0].children[1].props?.checked).toBeUndefined();
     await expectValid(page);
   });
 

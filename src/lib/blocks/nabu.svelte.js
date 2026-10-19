@@ -4,7 +4,7 @@ import { Block } from './block.svelte.js';
 import { MegaBlock } from './megablock.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf, findLCA } from './container.utils.js';
-import { jsonToPasteBlocks, degradeUnknownBlocks, CLIPBOARD_FORMAT_VERSION } from '../utils/extensions.js';
+import { jsonToPasteBlocks, degradeUnknownBlocks, CLIPBOARD_FORMAT_VERSION, JSON_FORMAT_VERSION, isSupportedJsonVersion } from '../utils/extensions.js';
 import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
 import { tick } from 'svelte';
 import { Files } from '../files/files.svelte.js';
@@ -345,18 +345,20 @@ export class Nabu {
      * Root-level serializers. Each function receives the Nabu instance and returns the serialized document.
      * @type {Map<string, (nabu: Nabu) => any>}
      */
-    serializers = new Map([
+    serializers = new Map(/** @type {Array<[string, (nabu: Nabu) => any]>} */ ([
         ['markdown', (nabu) =>
             nabu.children
                 .map(b => b.serialize('markdown'))
                 .filter(Boolean)
                 .join('\n\n')
         ],
-        ['json', (nabu) => ({
-            version: '1',
-            blocks: nabu.children.map(b => b.serialize('json')).filter(Boolean)
-        })]
-    ]);
+        ['json', (nabu) => {
+            const blocks = nabu.children.map(b => b.serialize('json')).filter(Boolean);
+            // The bytes of the `nabu-asset:` media travel with the document (same `assets` map as the clipboard format).
+            const assets = Files.get(nabu).embedAssets(blocks);
+            return { version: JSON_FORMAT_VERSION, blocks, ...(assets ? { assets } : {}) };
+        }]
+    ]));
 
     /** @type {Block[]} */
     children = $state([]);
@@ -1093,12 +1095,18 @@ export class Nabu {
         e.clipboardData.setData('application/x-nabu+json', JSON.stringify(fragment));
 
         // Recursive serializers — dispatch to each BlockClass's static toMarkdown/toHtml.
-        // helpers.recurse lets blocks serialize their children without knowing their types.
+        // helpers.recurse lets blocks serialize a child without knowing its type; helpers.recurseAll serializes a list of
+        // siblings in order, telling each one the siblings before it (`before`: a block may depend on its neighbours,
+        // e.g. adjacent lists must not read back as one).
         /** @param {import('../utils/extensions.js').PasteBlock} pb @param {Record<string,any>} [ctx] @returns {string} */
         const pbToMarkdown = (pb, ctx = {}) => {
             const BlockClass = /** @type {any} */ (this.registry.get(pb.type));
             if (BlockClass?.toMarkdown) {
-                return BlockClass.toMarkdown(pb, { ...ctx, recurse: (/** @type {any} */ child, /** @type {any} */ childCtx) => pbToMarkdown(child, { ...ctx, ...childCtx }) });
+                return BlockClass.toMarkdown(pb, {
+                    ...ctx,
+                    recurse: (/** @type {any} */ child, /** @type {any} */ childCtx) => pbToMarkdown(child, { ...ctx, before: [], ...childCtx }),
+                    recurseAll: (/** @type {any[]} */ children, /** @type {any} */ childCtx) => children.map((child, k) => pbToMarkdown(child, { ...ctx, ...childCtx, before: children.slice(0, k) })),
+                });
             }
             return (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
         };
@@ -1119,7 +1127,7 @@ export class Nabu {
             ? pasteBlocks[0] : null;
         const plain = single
             ? /** @type {any[]} */ (single.delta).map(op => typeof op.insert === 'string' ? op.insert : '').join('')
-            : files.externalize(pasteBlocks).map(pb => pbToMarkdown(pb)).join('\n\n');
+            : files.externalize(pasteBlocks).map((pb, k, all) => pbToMarkdown(pb, { before: all.slice(0, k) })).join('\n\n');
         e.clipboardData.setData('text/plain', plain);
         e.clipboardData.setData('text/html',  files.externalize(pasteBlocks, { inline: true }).map(pb => pbToHtml(pb)).join('\n'));
 
@@ -1596,18 +1604,24 @@ export class Nabu {
     }
 
     /**
-     * Replace the entire document with a `serialize('json')` export.
-     * @param {{version?: string, blocks: any[]} | string} json
+     * Replace the entire document with a `serialize('json')` export. An export of a version this editor does not know
+     * is refused with a warning (the document is left untouched), like the clipboard does; a block type that is not
+     * registered is degraded to the default text block (`degradeUnknownBlocks`), nothing is dropped.
+     * @param {{version?: string | number, blocks: any[], assets?: Record<string, any>} | string} json
      * @returns {Promise<void>}
      */
     async importJSON(json) {
         const doc = typeof json === 'string' ? JSON.parse(json) : json;
+        if (!isSupportedJsonVersion(doc?.version)) {
+            this.warn(`importJSON: unsupported export version ${JSON.stringify(doc.version)} (this editor reads version ${JSON_FORMAT_VERSION}): nothing imported`);
+            return;
+        }
         const blocks = jsonToPasteBlocks(doc?.blocks || []);
         if (!blocks.length) {
             this.warn('importJSON: nothing to import');
             return;
         }
-        await this.importFragment({ blocks });
+        await this.importFragment({ blocks, ...(doc.assets && typeof doc.assets === 'object' ? { assets: doc.assets } : {}) });
     }
 
     /** @param {number} globalOffset */

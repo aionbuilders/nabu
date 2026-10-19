@@ -74,7 +74,7 @@ test.describe('List start number', () => {
     await page.keyboard.type('b');
     await indent(page);
 
-    await expect.poll(async () => md(page)).toBe('3. a\n  1. b');
+    await expect.poll(async () => md(page)).toBe('3. a\n   1. b');
     expect((await getJson(page)).blocks[0].props).toEqual({ listType: 'ordered', start: 3 });
   });
 

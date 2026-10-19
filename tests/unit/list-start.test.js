@@ -112,7 +112,7 @@ describe('List block — start round trip', () => {
     expect(json.blocks[0].props).toEqual({ listType: 'ordered', start: 3 });
     expect(json.blocks[0].children[1].children[0].props).toEqual({ listType: 'ordered' });
 
-    expect(engine.serialize('markdown')).toBe('3. a\n4. b\n  1. sub');
+    expect(engine.serialize('markdown')).toBe('3. a\n4. b\n   1. sub');
   });
 
   it('JSON export -> import round-trips the start', async () => {

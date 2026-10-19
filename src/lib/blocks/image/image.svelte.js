@@ -1,4 +1,5 @@
 import { MediaBlock } from "../media/media-block.svelte.js";
+import { markdownImage } from "../media/markdown.js";
 import ImageComponent from "./Image.svelte";
 import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 
@@ -20,11 +21,11 @@ export class ImageBlock extends MediaBlock {
     constructor(nabu, node) {
         super(nabu, node);
 
-        this.serializers.set('markdown', () => '![' + this.alt + '](' + this.ref + ')');
+        this.serializers.set('markdown', () => ImageBlock.toMarkdown({ type: 'image', partial: false, props: this.exportProps }));
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'image',
-            props: { ref: this.ref, alt: this.alt },
+            props: this.exportProps,
         }));
         this.serializers.set('application/x-nabu+json', () => ({
             type: 'image',
@@ -40,7 +41,7 @@ export class ImageBlock extends MediaBlock {
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toMarkdown(pb) {
         if (!pb.props?.ref) return pb.props?.alt || ''; // no source (an embedded asset outside Nabu): the alt text only
-        return '![' + (pb.props?.alt || '') + '](' + pb.props.ref + ')';
+        return markdownImage(pb.props?.alt || '', pb.props.ref);
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */

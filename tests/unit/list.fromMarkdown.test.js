@@ -48,11 +48,14 @@ describe('List.fromMarkdown', () => {
     expect(List.fromMarkdown(['just text', 'no list here'], { parseInline })).toBeNull();
   });
 
-  it('accepts * and + as bullet markers', () => {
-    const lines = ['* star', '+ plus'];
-    const result = List.fromMarkdown(lines, { parseInline });
-    expect(result.children).toHaveLength(2);
-    expect(result.children[0].delta).toEqual([{ insert: 'star' }]);
-    expect(result.children[1].delta).toEqual([{ insert: 'plus' }]);
+  it('accepts * and + as bullet markers; a change of bullet character starts a new list (CommonMark, P-30)', () => {
+    const star = List.fromMarkdown(['* star', '* more'], { parseInline });
+    expect(star.children).toHaveLength(2);
+    expect(star.children[0].delta).toEqual([{ insert: 'star' }]);
+    const lists = List.fromMarkdown(['* star', '+ plus'], { parseInline });
+    expect(lists).toHaveLength(2);
+    expect(lists.map((l) => l.props.listType)).toEqual(['bullet', 'bullet']);
+    expect(lists[0].children[0].delta).toEqual([{ insert: 'star' }]);
+    expect(lists[1].children[0].delta).toEqual([{ insert: 'plus' }]);
   });
 });

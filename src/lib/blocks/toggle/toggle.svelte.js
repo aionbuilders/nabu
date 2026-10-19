@@ -2,6 +2,7 @@ import { MegaBlock } from "../megablock.svelte.js";
 import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 import { LoroText } from "loro-crdt";
 import ToggleComponent from "./Toggle.svelte";
+import { parseDetails, toggleMarkdown } from "./markdown.js";
 import { isEmptyLastParagraph, exitSubThread, dissolveToParagraph, insertParagraphAfter, pasteIntoHeader } from "../subthread.js";
 
 /**
@@ -32,11 +33,7 @@ export class ToggleBlock extends MegaBlock {
             this.collapsed = !!this.node.data.get('collapsed');
         });
 
-        this.serializers.set('markdown', () => {
-            const head = this.behavior.toMarkdown();
-            const body = this.children.map(c => c.serialize('markdown')).filter(Boolean).join('\n\n');
-            return '<details><summary>' + head + '</summary>\n\n' + body + '\n\n</details>';
-        });
+        this.serializers.set('markdown', () => toggleMarkdown(this.collapsed, this.behavior.toMarkdown(), /** @type {any} */ (this.children.map(c => c.serialize('markdown')))));
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'toggle',
@@ -242,13 +239,40 @@ export class ToggleBlock extends MegaBlock {
     // ── Statics ─────────────────────────────────────────────────────────────
 
     /**
+     * `<details>` / `<details open>` + `<summary>` + the body as markdown + `</details>` (see markdown.js).
      * @param {import('../../utils/extensions.js').PasteBlock} pb
-     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string }} helpers
+     * @param {{ recurse: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, recurseAll?: (children: import('../../utils/extensions.js').PasteBlock[], ctx?: object) => string[] }} helpers
      */
-    static toMarkdown(pb, { recurse }) {
-        const head = deltaToMarkdown(pb.delta || []);
-        const body = (pb.children || []).map(c => recurse(c)).join('\n\n');
-        return '<details><summary>' + head + '</summary>\n\n' + body + '\n\n</details>';
+    static toMarkdown(pb, { recurse, recurseAll }) {
+        const children = pb.children || [];
+        return toggleMarkdown(!!pb.props?.collapsed, deltaToMarkdown(pb.delta || []), recurseAll ? recurseAll(children) : children.map(c => recurse(c)));
+    }
+
+    /**
+     * Markdown (paste AND `importMarkdown`): the exact `<details>` construct Nabu emits, nothing else (see markdown.js).
+     * An opening line without a matching `</details>`, with attributes or without a `<summary>` is not a toggle: it stays text.
+     */
+    static markdownRules = [
+        {
+            priority: 20,
+            interruptsParagraph: true,
+            detect: (/** @type {string} */ line, /** @type {string[]} */ lines, /** @type {number} */ i) => line.startsWith('<details') && !!parseDetails(lines, i),
+            consume: (/** @type {string[]} */ lines, /** @type {number} */ i) => (parseDetails(lines, i)?.end ?? i) - i + 1,
+        }
+    ];
+
+    /**
+     * The toggle (header = the summary, parsed as inline markdown; body = the lines between the summary and `</details>`,
+     * parsed as a document of their own, nested toggles included).
+     * @param {string[]} lines
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], parseBlocks?: (lines: string[]) => import('../../utils/extensions.js').PasteBlock[] }} helpers
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromMarkdown(lines, { parseInline, parseBlocks }) {
+        const details = parseDetails(lines, 0);
+        if (!details || !parseBlocks) return null;
+        const children = parseBlocks(lines.slice(details.bodyStart, details.end));
+        return { type: 'toggle', props: { collapsed: !details.open }, delta: parseInline(details.summary), partial: false, ...(children.length ? { children } : {}) };
     }
 
     /**

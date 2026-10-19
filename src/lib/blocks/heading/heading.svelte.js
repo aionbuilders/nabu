@@ -39,7 +39,7 @@ export class Heading extends TextBlock {
 
         this.level = data.get("level") || 1;
 
-        this.serializers.set('markdown', () => `${'#'.repeat(this.level)} ${this.behavior.toMarkdown()}`);
+        this.serializers.set('markdown', () => { const md = this.behavior.toMarkdown(); return md ? `${'#'.repeat(this.level)} ${md}` : ''; }); // an empty heading has no markdown (`## ` would read back as text)
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'heading',
@@ -66,7 +66,8 @@ export class Heading extends TextBlock {
     static toMarkdown(pb) {
         const n = Math.trunc(Number(pb.props?.level));
         const level = n >= 1 && n <= 6 ? n : 1; // never interpolate an arbitrary value into a tag name
-        return `${'#'.repeat(level)} ${deltaToMarkdown(pb.delta || [])}`;
+        const md = deltaToMarkdown(pb.delta || []);
+        return md ? `${'#'.repeat(level)} ${md}` : ''; // an empty heading has no markdown (`## ` would read back as text)
     }
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
