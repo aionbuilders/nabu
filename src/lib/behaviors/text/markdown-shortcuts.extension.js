@@ -1,20 +1,19 @@
 import { Extension } from '../../utils/extensions.js';
 import { TextBehavior } from './text.behavior.svelte.js';
+import { WORD } from './markdown-syntax.js';
 
 // Flanking rules (CommonMark, simplified): an opening delimiter must be followed by a non-whitespace
 // char and a closing one preceded by a non-whitespace char, so `2 * 3 * 4` and `* not *` stay literal.
 // Only the whitespace half of CommonMark's flanking rules is implemented (no punctuation special case).
 // `_` / `__` additionally never open or close INTRAWORD (`snake_case_name` stays literal); `*`, `~~`
-// are allowed intraword (`a*b*c` → italic b, as in CommonMark / GFM).
+// are allowed intraword (`a*b*c` → italic b, as in CommonMark / GFM). The paste / import parser applies the same
+// rules (`markdown-syntax.js` `delimiterFlags`), so typing `*a*` and pasting `*a*` agree.
 
 /**
  * Inner content of a delimited span: no `d`, non-whitespace first AND last char (a single char is fine).
  * @param {string} d  the delimiter character
  */
 const inner = (d) => `[^${d}\\s](?:[^${d}]*[^${d}\\s])?`;
-
-/** A letter, digit or underscore: an `_` touching one of these is intraword. */
-const WORD = '\\p{L}\\p{N}_';
 
 /**
  * Build an inputRule that, when `closeChar` is typed and `pattern` matches the

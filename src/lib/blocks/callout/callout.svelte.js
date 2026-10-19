@@ -25,7 +25,7 @@ export class CalloutBlock extends TextBlock {
 
         this.serializers.set('markdown', () => {
             const header = '> [!' + this.variant.toUpperCase() + ']';
-            const body = this.behavior.toMarkdown();
+            const body = this.behavior.toMarkdown({ rawBreaks: true });
             if (!body) return header;
             return header + '\n' + body.split('\n').map(l => '> ' + l).join('\n');
         });
@@ -112,7 +112,7 @@ export class CalloutBlock extends TextBlock {
     static toMarkdown(pb) {
         const v = (pb.props?.variant || 'note').toUpperCase();
         const header = '> [!' + v + ']';
-        const body = deltaToMarkdown(pb.delta || []);
+        const body = deltaToMarkdown(pb.delta || [], { rawBreaks: true }); // the callout rule re-reads its own lines
         if (!body) return header;
         return header + '\n' + body.split('\n').map(l => '> ' + l).join('\n');
     }

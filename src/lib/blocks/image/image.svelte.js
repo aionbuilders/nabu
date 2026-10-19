@@ -78,16 +78,26 @@ export class ImageBlock extends MediaBlock {
     static markdownRules = [
         {
             priority: 25,
-            detect: /^!\[[^\]]*\]\([^)]+\)/,
+            // A line that starts with an image. `fromMarkdown` only accepts a line that IS an image; an image inside
+            // text is split out of the paragraph by the paragraph rule.
+            detect: /^!\[/,
             consume: () => 1,
         }
     ];
 
     /**
+     * A line that is only an image (`![alt](url "title")`, `![alt][ref]`) becomes an image block; anything else
+     * (text around it, unsafe URL) returns null and falls to the paragraph rule.
      * @param {string[]} lines
+     * @param {{ parseInlineSegments?: (text: string) => Array<{ image?: { alt: string, ref: string } }> }} [helpers]
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
-    static fromMarkdown(lines) {
+    static fromMarkdown(lines, helpers) {
+        if (helpers?.parseInlineSegments) {
+            const segments = helpers.parseInlineSegments(lines[0].trim());
+            const image = segments.length === 1 ? segments[0].image : undefined;
+            return image ? { type: 'image', props: { alt: image.alt, ref: image.ref }, partial: false } : null;
+        }
         const m = lines[0].match(/^!\[([^\]]*)\]\(([^)]+)\)/);
         if (!m) return null;
         if (sanitizeUrl(m[2].trim(), { kind: 'media' }) === null) return null; // falls back to a plain paragraph

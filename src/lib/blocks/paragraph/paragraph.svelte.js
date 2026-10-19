@@ -55,16 +55,41 @@ export class Paragraph extends TextBlock {
     ];
 
     /**
+     * Imported lines join into one paragraph: with a space (soft break), or with a newline when the line ends with a
+     * hard break (two trailing spaces or a backslash). An image inside the text splits the paragraph: text before,
+     * image block, text after (needs `helpers.parseInlineSegments`).
      * @param {string[]} lines
-     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], joinLines?: boolean }} helpers
-     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], parseInlineSegments?: (text: string) => Array<{ delta?: import('loro-crdt').Delta<string>[], image?: { alt: string, ref: string } }>, joinLines?: boolean }} helpers
+     * @returns {import('../../utils/extensions.js').PasteBlock | import('../../utils/extensions.js').PasteBlock[] | null}
      */
-    static fromMarkdown(lines, { parseInline, joinLines }) {
-        const delta = parseInline(lines.join(' '));
-        if (!delta.length) return null;
+    static fromMarkdown(lines, { parseInline, parseInlineSegments, joinLines }) {
+        let text = '';
+        lines.forEach((line, k) => {
+            if (k === 0) { text = line; return; }
+            text += (/(?: {2,}|\\)$/.test(lines[k - 1]) ? '\n' : ' ') + line.replace(/^\s+/, '');
+        });
         // Pasted, a bare paragraph is plain text ('both'): it must not retype an empty block
         // (heading, quote…). Imported, it is a whole block.
-        return { type: 'paragraph', delta, partial: joinLines ? false : 'both' };
+        const partial = joinLines ? false : 'both';
+        const segments = parseInlineSegments ? parseInlineSegments(text) : [{ delta: parseInline(text) }];
+        if (!segments.some((seg) => seg.image)) {
+            const delta = segments[0]?.delta ?? [];
+            return delta.length ? { type: 'paragraph', delta, partial } : null;
+        }
+        /** @type {import('../../utils/extensions.js').PasteBlock[]} */
+        const blocks = [];
+        segments.forEach((seg, k) => {
+            if (seg.image) { blocks.push({ type: 'image', props: { alt: seg.image.alt, ref: seg.image.ref }, partial: false }); return; }
+            // The block boundary replaces the space that touched the image.
+            const delta = (seg.delta ?? []).map((op) => ({ ...op }));
+            const first = /** @type {any} */ (delta[0]);
+            const last = /** @type {any} */ (delta[delta.length - 1]);
+            if (k > 0 && first) first.insert = first.insert.replace(/^\s+/, '');
+            if (k < segments.length - 1 && last) last.insert = last.insert.replace(/\s+$/, '');
+            const clean = delta.filter((op) => /** @type {any} */ (op).insert);
+            if (clean.length) blocks.push({ type: 'paragraph', delta: clean, partial });
+        });
+        return blocks.length ? blocks : null;
     }
 
     static htmlRules = [

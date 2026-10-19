@@ -1,64 +1,7 @@
 import { Extension } from '../utils/extensions.js';
+import { parseMarkdownInline, parseMarkdownSegments, extractLinkDefinitions } from './markdown-inline.js';
 
-// ── Inline mark patterns — ordered by specificity (longest patterns first) ───
-// Each entry: { re (non-global, used for leftmost-match search), marks }
-const INLINE_PATTERNS = [
-    { re: /\*\*\*(.+?)\*\*\*/s, marks: { bold: true, italic: true } },
-    { re: /\*\*(.+?)\*\*/s,     marks: { bold: true } },
-    { re: /\*(.+?)\*/s,         marks: { italic: true } },
-    { re: /~~(.+?)~~/s,         marks: { strikethrough: true } },
-    { re: /`([^`]+)`/,          marks: { code: true } },
-];
-
-/**
- * Parse inline markdown text into a Loro-compatible delta array.
- * Uses a leftmost-match recursive strategy so nested marks work naturally:
- *   **bold *italic* still bold** → [bold, bold+italic, bold]
- *
- * @param {string} text
- * @param {Record<string, true>} [marks]
- * @returns {import('loro-crdt').Delta<string>[]}
- */
-export function parseMarkdownInline(text, marks = {}) {
-    if (!text) return [];
-
-    // Find the leftmost (earliest index) pattern match across all patterns
-    let earliest = /** @type {RegExpExecArray | null} */ (null);
-    let earliestMarks = /** @type {Record<string, true>} */ ({});
-
-    for (const pat of INLINE_PATTERNS) {
-        const m = pat.re.exec(text);
-        if (m && (earliest === null || m.index < earliest.index)) {
-            earliest = m;
-            earliestMarks = pat.marks;
-        }
-    }
-
-    if (!earliest) {
-        // No marks — emit plain text (with inherited marks)
-        return [
-            Object.keys(marks).length
-                ? { insert: text, attributes: { ...marks } }
-                : { insert: text }
-        ];
-    }
-
-    const ops = /** @type {import('loro-crdt').Delta<string>[]} */ ([]);
-
-    // Plain text before the match
-    if (earliest.index > 0) {
-        ops.push(...parseMarkdownInline(text.slice(0, earliest.index), marks));
-    }
-
-    // The matched span — recurse with merged marks
-    ops.push(...parseMarkdownInline(earliest[1], { ...marks, ...earliestMarks }));
-
-    // Text after the match
-    const after = text.slice(earliest.index + earliest[0].length);
-    if (after) ops.push(...parseMarkdownInline(after, marks));
-
-    return ops;
-}
+export { parseMarkdownInline, parseMarkdownSegments } from './markdown-inline.js';
 
 /**
  * Build the ordered markdown ruleset from all BlockClasses registered in nabu.
@@ -92,11 +35,17 @@ export const MarkdownPasteExtension = new Extension('markdown-paste', {
              */
             interpret(raw, nabu, options) {
                 try {
-                    const lines = raw.split(/\r?\n/);
+                    // Link reference definitions (`[ref]: url`) are collected first and produce no block.
+                    const { lines, resolveRef } = extractLinkDefinitions(raw.split(/\r?\n/));
                     const ruleset = buildMarkdownRuleset(nabu);
                     if (!ruleset.length) return null;
 
-                    const helpers = { parseInline: parseMarkdownInline, joinLines: !!options?.joinLines };
+                    const inlineOptions = { resolveRef };
+                    const helpers = {
+                        parseInline: (/** @type {string} */ text) => parseMarkdownInline(text, {}, inlineOptions),
+                        parseInlineSegments: (/** @type {string} */ text) => parseMarkdownSegments(text, inlineOptions),
+                        joinLines: !!options?.joinLines,
+                    };
 
                     /** @type {import('../utils/extensions.js').PasteBlock[]} */
                     const blocks = [];
@@ -121,7 +70,8 @@ export const MarkdownPasteExtension = new Extension('markdown-paste', {
                             const pb = BlockClass.fromMarkdown(consumed, helpers, rule);
 
                             if (pb) {
-                                blocks.push(pb);
+                                if (Array.isArray(pb)) blocks.push(...pb); // a paragraph split around inline images
+                                else blocks.push(pb);
                                 i += count;
                                 matched = true;
                                 break;
