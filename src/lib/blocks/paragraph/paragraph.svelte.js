@@ -3,6 +3,7 @@ import { LoroText } from "loro-crdt";
 import ParagraphComponent from "./Paragraph.svelte";
 import { deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 import { tableToRowParagraphs } from "./table.html.js";
+import { isTableStart, tableLength, markdownTableToRowParagraphs } from "./table.markdown.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -40,33 +41,55 @@ export class Paragraph extends TextBlock {
         return `<p>${deltaToHtml(pb.delta || [])}</p>`;
     }
 
+    /**
+     * The paragraph is the catch-all (priority 0): every line no other rule claims, so also an indented line (4 spaces: NOT
+     * code, the indent is trimmed), a footnote (`[^1]`, `[^1]: text` stay literal text) and a line of HTML (`<div>`: literal
+     * text, never interpreted). The GFM pipe table is a rule just above it (see table.markdown.js).
+     */
     static markdownRules = [
         {
             priority: 0, // catch-all — must be lowest
             detect: () => true,
-            consume(/** @type {string[]} */ lines, /** @type {number} */ i, /** @type {{ joinLines?: boolean }} */ { joinLines } = {}) {
-                // Paste: one line = one block. Import (CommonMark): lines up to a blank one are one paragraph.
+            consume(/** @type {string[]} */ lines, /** @type {number} */ i, /** @type {any} */ { joinLines, interrupts } = {}) {
+                // Paste: one line = one block. Import (CommonMark): lines up to a blank one are one paragraph, unless a line
+                // starts a block of its own (a fence, a heading, a quote, a list, a divider, a table).
                 if (!joinLines) return 1;
-                let j = i;
-                while (j < lines.length && lines[j].trim()) j++;
-                return Math.max(1, j - i);
+                let j = i + 1;
+                while (j < lines.length && lines[j].trim() && !interrupts?.(lines, j)) j++;
+                return j - i;
             },
-        }
+        },
+        {
+            // Just above the catch-all, below every real block: a future table block (priority >= 10) takes over.
+            priority: 1,
+            table: true,
+            interruptsParagraph: true,
+            detect: (/** @type {string} */ line, /** @type {string[]} */ lines, /** @type {number} */ i) => isTableStart(lines, i),
+            consume: (/** @type {string[]} */ lines, /** @type {number} */ i, /** @type {any} */ helpers) => tableLength(lines, i, helpers),
+        },
     ];
 
     /**
-     * Imported lines join into one paragraph: with a space (soft break), or with a newline when the line ends with a
-     * hard break (two trailing spaces or a backslash). An image inside the text splits the paragraph: text before,
-     * image block, text after (needs `helpers.parseInlineSegments`).
+     * Imported lines join into one paragraph: with a space (soft break; `helpers.softBreak` overrides it), or with a newline
+     * when the line ends with a hard break (two trailing spaces or a backslash). An image inside the text splits the
+     * paragraph: text before, image block, text after (needs `helpers.parseInlineSegments`). The leading indent of every
+     * line is trimmed. With the table rule, the lines are a table: one paragraph per row.
      * @param {string[]} lines
-     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], parseInlineSegments?: (text: string) => Array<{ delta?: import('loro-crdt').Delta<string>[], image?: { alt: string, ref: string } }>, joinLines?: boolean }} helpers
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], parseInlineSegments?: (text: string) => Array<{ delta?: import('loro-crdt').Delta<string>[], image?: { alt: string, ref: string } }>, joinLines?: boolean, softBreak?: string }} helpers
+     * @param {{ table?: boolean }} [rule]
      * @returns {import('../../utils/extensions.js').PasteBlock | import('../../utils/extensions.js').PasteBlock[] | null}
      */
-    static fromMarkdown(lines, { parseInline, parseInlineSegments, joinLines }) {
+    static fromMarkdown(lines, { parseInline, parseInlineSegments, joinLines, softBreak }, rule) {
+        if (rule?.table) return markdownTableToRowParagraphs(lines, { parseInline });
         let text = '';
         lines.forEach((line, k) => {
-            if (k === 0) { text = line; return; }
-            text += (/(?: {2,}|\\)$/.test(lines[k - 1]) ? '\n' : ' ') + line.replace(/^\s+/, '');
+            if (k === 0) {
+                // A paste is a fragment of text (` pasted` keeps its space); on import, and for an indent that looks like code
+                // (4 columns or a TAB), the indent goes: indented text is a paragraph, not code.
+                text = joinLines || /^(?: {4}|\s*\t)/.test(line) ? line.replace(/^\s+/, '') : line;
+                return;
+            }
+            text += (/(?: {2,}|\\)$/.test(lines[k - 1]) ? '\n' : (softBreak ?? ' ')) + line.replace(/^\s+/, '');
         });
         // Pasted, a bare paragraph is plain text ('both'): it must not retype an empty block
         // (heading, quote…). Imported, it is a whole block.

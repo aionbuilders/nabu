@@ -126,6 +126,7 @@ export class CalloutBlock extends TextBlock {
     static markdownRules = [
         {
             priority: 20,
+            interruptsParagraph: true,
             detect: /^> \[!(note|tip|important|warning|caution)\]/i,
             /**
              * Consume the callout header line plus all subsequent ">" prefixed lines.

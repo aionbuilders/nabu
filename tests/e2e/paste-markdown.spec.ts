@@ -169,3 +169,115 @@ test('importMarkdown: a README round-trips (links, references, escapes, hard bre
   await page.evaluate(async (m) => { await (window as any).nabu.importMarkdown(m); }, md);
   expect(await dump(page)).toBe(model);
 });
+
+// ── P-59: markdown at the BLOCK level ────────────────────────────────────────
+
+/** Model outline with the block props: `h2(t) ; code[bash](a\nb) ; ol@3[li(a)[ul[li(b)]]] ; todo[li(a)+, li(b)-] ; q(t) ; hr`. */
+function outline(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const n = (window as any).nabu;
+    const fmt = (node: any) => {
+      const t = node.data.get('text');
+      if (!t) return '';
+      return t.toDelta().map((op: any) => {
+        const marks = Object.keys(op.attributes ?? {}).map((k) => ({ bold: 'b', italic: 'i', code: 'c' } as Record<string, string>)[k] ?? k).sort();
+        const s = String(op.insert).replace(/\n/g, '\\n').replace(/\t/g, '⇥');
+        return marks.length ? `[${marks.join(',')}:${s}]` : s;
+      }).join('');
+    };
+    const walk = (node: any): string => {
+      const type = node.data.get('type');
+      const kids: any[] = node.children() ?? [];
+      if (type === 'list') {
+        const lt = node.data.get('listType');
+        const start = node.data.get('start');
+        return `${lt === 'ordered' ? 'ol' : lt === 'todo' ? 'todo' : 'ul'}${start ? '@' + start : ''}[${kids.map(walk).join(', ')}]`;
+      }
+      if (type === 'list-item') {
+        const check = node.data.get('checked') === undefined ? '' : node.data.get('checked') ? '+' : '-';
+        const sub = kids.length ? `[${kids.map(walk).join(', ')}]` : '';
+        return `li(${fmt(node)})${check}${sub}`;
+      }
+      if (type === 'divider') return 'hr';
+      if (type === 'heading') return `h${node.data.get('level')}(${fmt(node)})`;
+      if (type === 'code') return `code[${node.data.get('language') ?? ''}](${fmt(node)})`;
+      const short = type === 'paragraph' ? 'p' : type === 'blockquote' ? 'q' : type;
+      return `${short}(${fmt(node)})`;
+    };
+    return n.tree.roots().map(walk).join(' ; ');
+  });
+}
+
+const README = [
+  'Project',
+  '=======',
+  'Intro with **bold**[^1] and <b>html</b>.',
+  '',
+  'Install',
+  '-------',
+  '~~~bash',
+  'npm i project',
+  '',
+  'npm test',
+  '~~~',
+  '1. Add it',
+  '\t- with npm',
+  '\t- with bun',
+  '2. Use it',
+  '- [x] done',
+  '- [ ] todo',
+  '',
+  '| name | type |',
+  '|:-----|-----:|',
+  '| `a`  | text |',
+  '',
+  '> quote',
+  '> > nested',
+  '',
+  '* * *',
+  '[^1]: The note.',
+].join('\n');
+
+const README_MODEL = [
+  'h1(Project)',
+  'p(Intro with [b:bold][^1] and <b>html</b>.)',
+  'h2(Install)',
+  'code[bash](npm i project\\n\\nnpm test)',
+  'ol[li(Add it)[ul[li(with npm), li(with bun)]], li(Use it)]',
+  'todo[li(done)+, li(todo)-]',
+  'p(name⇥type)',
+  'p([c:a]⇥text)',
+  'q(quote\\nnested)',
+  'hr',
+  'p([^1]: The note.)',
+].join(' ; ');
+
+test('paste: a README with setext headings, a ~~~ fence, tab-nested lists, tasks, a table, a footnote and inline HTML', async ({ page }) => {
+  await pasteText(page, README);
+  await expect.poll(() => outline(page)).toBe(README_MODEL);
+  expect(await violations(page)).toEqual([]);
+  // HTML stays text: nothing was rendered as markup
+  expect(await page.evaluate(() => document.querySelectorAll('[contenteditable] b, [contenteditable] div[align]').length)).toBe(0);
+  // ONE undo step
+  await undo(page);
+  await expect.poll(() => outline(page), { timeout: 3000, message: 'one undo' }).toBe('p()');
+  await redo(page);
+  await expect.poll(() => outline(page), { timeout: 3000, message: 'redo' }).toBe(README_MODEL);
+  expect(await violations(page)).toEqual([]);
+});
+
+test('importMarkdown: the README is stable (serialize -> import -> serialize), CRLF and BOM included', async ({ page }) => {
+  const crlf = '﻿' + README.replace(/\n/g, '\r\n');
+  await page.evaluate(async (md) => { await (window as any).nabu.importMarkdown(md); }, crlf);
+  const first = await outline(page);
+  // CommonMark joining: the quote's lines are one paragraph; the tab-indented sublist and the table are the same
+  expect(first).toBe(README_MODEL.replace('q(quote\\nnested)', 'q(quote nested)'));
+  expect(await violations(page)).toEqual([]);
+
+  const md1 = await page.evaluate(() => (window as any).nabu.serialize('markdown'));
+  await page.evaluate(async (m) => { await (window as any).nabu.importMarkdown(m); }, md1);
+  expect(await outline(page)).toBe(first);
+  const md2 = await page.evaluate(() => (window as any).nabu.serialize('markdown'));
+  expect(md2).toBe(md1);
+  expect(await violations(page)).toEqual([]);
+});

@@ -35,52 +35,82 @@ export const MarkdownPasteExtension = new Extension('markdown-paste', {
              */
             interpret(raw, nabu, options) {
                 try {
-                    // Link reference definitions (`[ref]: url`) are collected first and produce no block.
-                    const { lines, resolveRef } = extractLinkDefinitions(raw.split(/\r?\n/));
+                    // BOM stripped, CRLF / CR normalised to LF. Link reference definitions (`[ref]: url`) are collected
+                    // first and produce no block.
+                    const { lines, resolveRef } = extractLinkDefinitions(raw.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/));
                     const ruleset = buildMarkdownRuleset(nabu);
                     if (!ruleset.length) return null;
 
                     const inlineOptions = { resolveRef };
-                    const helpers = {
-                        parseInline: (/** @type {string} */ text) => parseMarkdownInline(text, {}, inlineOptions),
-                        parseInlineSegments: (/** @type {string} */ text) => parseMarkdownSegments(text, inlineOptions),
-                        joinLines: !!options?.joinLines,
+                    const joinLines = !!options?.joinLines;
+                    // The rules that start a block in the middle of a paragraph (CommonMark): a fence, a heading, a quote, a list…
+                    const interrupters = ruleset.filter(({ rule }) => rule.interruptsParagraph);
+
+                    /**
+                     * The helpers a rule receives. `overrides` change the parsing mode for a nested parse (`parseBlocks`).
+                     * @param {{ joinLines?: boolean, softBreak?: string }} overrides
+                     * @returns {any}
+                     */
+                    const makeHelpers = (overrides) => {
+                        /** @type {any} */
+                        const helpers = {
+                            parseInline: (/** @type {string} */ text) => parseMarkdownInline(text, {}, inlineOptions),
+                            parseInlineSegments: (/** @type {string} */ text) => parseMarkdownSegments(text, inlineOptions),
+                            joinLines,
+                            ...overrides,
+                        };
+                        // Does line `k` start a block that ends the paragraph above it?
+                        helpers.interrupts = (/** @type {string[]} */ ls, /** @type {number} */ k) => interrupters.some(({ rule }) =>
+                            rule.interruptsParagraph === true ? detects(rule, ls, k, helpers) : rule.interruptsParagraph(ls[k], ls, k, helpers));
+                        // Parse lines as a document of their own (the content of a quote…).
+                        helpers.parseBlocks = (/** @type {string[]} */ ls, /** @type {object} */ over = {}) => parseBlocks(ls, makeHelpers({ ...overrides, ...over }));
+                        return helpers;
                     };
 
-                    /** @type {import('../utils/extensions.js').PasteBlock[]} */
-                    const blocks = [];
-                    let i = 0;
+                    /** @returns {boolean} */
+                    const detects = (/** @type {any} */ rule, /** @type {string[]} */ ls, /** @type {number} */ k, /** @type {any} */ helpers) => {
+                        // Normalize detect: regex or function
+                        if (rule.detect instanceof RegExp) { rule.detect.lastIndex = 0; return rule.detect.test(ls[k]); }
+                        return !!rule.detect(ls[k], ls, k, helpers);
+                    };
 
-                    while (i < lines.length) {
-                        // Skip blank lines between blocks
-                        if (!lines[i].trim()) { i++; continue; }
+                    /**
+                     * @param {string[]} ls
+                     * @param {any} helpers
+                     * @returns {import('../utils/extensions.js').PasteBlock[]}
+                     */
+                    const parseBlocks = (ls, helpers) => {
+                        /** @type {import('../utils/extensions.js').PasteBlock[]} */
+                        const blocks = [];
+                        let i = 0;
 
-                        let matched = false;
-                        for (const { BlockClass, rule } of ruleset) {
-                            // Normalize detect: regex or function
-                            if (rule.detect instanceof RegExp) rule.detect.lastIndex = 0;
-                            const detects = rule.detect instanceof RegExp
-                                ? rule.detect.test(lines[i])
-                                : rule.detect(lines[i], lines, i);
+                        while (i < ls.length) {
+                            // Skip blank lines between blocks
+                            if (!ls[i].trim()) { i++; continue; }
 
-                            if (!detects) continue;
+                            let matched = false;
+                            for (const { BlockClass, rule } of ruleset) {
+                                if (!detects(rule, ls, i, helpers)) continue;
 
-                            const count = rule.consume(lines, i, helpers);
-                            const consumed = lines.slice(i, i + count);
-                            const pb = BlockClass.fromMarkdown(consumed, helpers, rule);
+                                const count = Math.max(1, rule.consume(ls, i, helpers));
+                                const consumed = ls.slice(i, i + count);
+                                const pb = BlockClass.fromMarkdown(consumed, helpers, rule);
 
-                            if (pb) {
-                                if (Array.isArray(pb)) blocks.push(...pb); // a paragraph split around inline images
-                                else blocks.push(pb);
-                                i += count;
-                                matched = true;
-                                break;
+                                if (pb) {
+                                    if (Array.isArray(pb)) blocks.push(...pb); // a paragraph split around inline images, a table, several lists
+                                    else blocks.push(pb);
+                                    i += count;
+                                    matched = true;
+                                    break;
+                                }
                             }
+
+                            if (!matched) i++; // safety: skip unrecognized line
                         }
+                        return blocks;
+                    };
 
-                        if (!matched) i++; // safety: skip unrecognized line
-                    }
-
+                    const blocks = parseBlocks(lines, makeHelpers({}));
                     return blocks.length ? { blocks } : null;
                 } catch {
                     return null;

@@ -55,6 +55,7 @@ export class Dialogue extends TextBlock {
     static markdownRules = [
         {
             priority: 10,
+            interruptsParagraph: true,
             detect: /^-- /,
             consume: () => 1,
         }

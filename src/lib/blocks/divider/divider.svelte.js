@@ -46,10 +46,15 @@ export class DividerBlock extends Block {
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) { return '<hr>'; }
 
+    /**
+     * Thematic break (CommonMark): 3+ `-`, `*` or `_` (the same one), spaces allowed between (`* * *`), up to 3 spaces of
+     * indent. A `---` right under a line of text is a setext heading underline, not a divider (see the heading block).
+     */
     static markdownRules = [
         {
             priority: 20,
-            detect: /^\s*(---+|\*\*\*+|___+)\s*$/,
+            interruptsParagraph: true,
+            detect: /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/,
             consume: () => 1,
         }
     ];
@@ -59,7 +64,7 @@ export class DividerBlock extends Block {
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromMarkdown(lines) {
-        if (!/^\s*(---+|\*\*\*+|___+)\s*$/.test(lines[0])) return null;
+        if (!/^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/.test(lines[0])) return null;
         return { type: 'divider', partial: false };
     }
 

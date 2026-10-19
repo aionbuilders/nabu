@@ -11,6 +11,26 @@ import { LoroText } from "loro-crdt";
  * @typedef {NabuNode<{type: "heading", text: LoroText, level: number}>} HeadingNode
  */
 
+const SETEXT_UNDERLINE = /^ {0,3}(?:=+|-+)[ \t]*$/;
+
+/**
+ * Index of the setext underline (`===` / `---`) that turns the text starting at line `i` into a heading, or -1. A paste
+ * heading text is the single line `i`; on import (`joinLines`) it is every line up to the underline, as long as none of
+ * them starts a block of its own.
+ * @param {string[]} lines
+ * @param {number} i
+ * @param {{ joinLines?: boolean, interrupts?: (lines: string[], k: number) => boolean }} [helpers]
+ * @returns {number}
+ */
+function setextEnd(lines, i, helpers) {
+    const last = helpers?.joinLines ? lines.length - 1 : Math.min(i + 1, lines.length - 1);
+    for (let j = i + 1; j <= last; j++) {
+        if (SETEXT_UNDERLINE.test(lines[j])) return j;
+        if (!lines[j].trim() || helpers?.interrupts?.(lines, j)) return -1;
+    }
+    return -1;
+}
+
 export class Heading extends TextBlock {
     /** @param {Nabu} nabu @param {HeadingNode} node */
     constructor(nabu, node) {
@@ -56,25 +76,54 @@ export class Heading extends TextBlock {
         return `<h${level}>${deltaToHtml(pb.delta || [])}</h${level}>`;
     }
 
+    /**
+     * Two rules: the ATX heading (`## Title`, up to 3 spaces of indent) and the setext heading (`Title` then `===` for a
+     * level 1, `---` for a level 2). The setext rule sits just ABOVE the paragraph catch-all and BELOW every block rule: a
+     * line that starts a list, a quote, a fence, a divider… never becomes a heading text, and a `---` after a blank line
+     * (nothing to underline) stays a divider. In a paste a heading text is ONE line (one line = one block); on import
+     * (`joinLines`) it is the whole paragraph above the underline (CommonMark).
+     */
     static markdownRules = [
         {
             priority: 10,
-            detect: /^#{1,6} /,
+            interruptsParagraph: true,
+            detect: /^ {0,3}#{1,6}[ \t]/,
             consume: () => 1,
+        },
+        {
+            priority: 5,
+            setext: true,
+            detect(/** @type {string} */ line, /** @type {string[]} */ lines, /** @type {number} */ i, /** @type {any} */ helpers) {
+                return setextEnd(lines, i, helpers) > i;
+            },
+            consume(/** @type {string[]} */ lines, /** @type {number} */ i, /** @type {any} */ helpers) {
+                return setextEnd(lines, i, helpers) - i + 1;
+            },
         }
     ];
 
     /**
      * @param {string[]} lines
      * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[] }} helpers
+     * @param {{ setext?: boolean }} [rule]
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
-    static fromMarkdown(lines, { parseInline }) {
-        const m = lines[0].match(/^(#{1,6})\s+(.*)/);
-        if (!m) return null;
-        const delta = parseInline(m[2]);
+    static fromMarkdown(lines, { parseInline }, rule) {
+        let level;
+        let text;
+        if (rule?.setext) {
+            const underline = lines[lines.length - 1].trim();
+            level = underline[0] === '=' ? 1 : 2;
+            text = lines.slice(0, -1).map((line) => line.trim().replace(/\\$/, '')).join(' ');
+        } else {
+            const m = lines[0].match(/^ {0,3}(#{1,6})[ \t]+(.*)/);
+            if (!m) return null;
+            level = m[1].length;
+            text = m[2];
+        }
+        const delta = parseInline(text);
         if (!delta.length) return null;
-        return { type: 'heading', props: { level: m[1].length }, delta, partial: false };
+        return { type: 'heading', props: { level }, delta, partial: false };
     }
 
     static htmlRules = [

@@ -21,6 +21,19 @@ function pbText(pb) {
     return (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
 }
 
+/** The opening fence of a code block: indent, fence characters, info string. */
+const FENCE_OPEN = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+
+/**
+ * Whether `line` closes the fence `open` (same character, at least as long, only spaces after it).
+ * @param {string} line
+ * @param {string} open
+ */
+function isClosingFence(line, open) {
+    const m = /^ {0,3}(`+|~+)[ \t]*$/.exec(line);
+    return !!m && m[1][0] === open[0] && m[1].length >= open.length;
+}
+
 // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
 export class CodeBlock extends TextBlock {
     /** @param {Nabu} nabu @param {CodeNode} node */
@@ -139,10 +152,17 @@ export class CodeBlock extends TextBlock {
         return `<pre><code>${escapeHtml(pbText(pb))}</code></pre>`;
     }
 
+    /**
+     * Fenced code (CommonMark): 3+ backticks or 3+ tildes (up to 3 spaces of indent), an optional info string (the first
+     * word is the language), closed by a fence of the SAME character at least as long. An unclosed fence runs to the end.
+     * The content is verbatim (no inline parsing, blank lines kept). An indented block (4 spaces) is NOT code.
+     */
     static markdownRules = [
         {
             priority: 30,
-            detect: /^```/,
+            interruptsParagraph: true,
+            // A backtick fence has no backtick in its info string (otherwise it is an inline code span: ```a```).
+            detect: /^ {0,3}(?:`{3,}[^`]*|~{3,}.*)$/,
             /**
              * Consume from the opening fence to the closing fence (or EOF).
              * @param {string[]} lines
@@ -150,8 +170,10 @@ export class CodeBlock extends TextBlock {
              * @returns {number}
              */
             consume(lines, i) {
+                const open = FENCE_OPEN.exec(lines[i]);
+                if (!open) return 1;
                 let j = i + 1;
-                while (j < lines.length && !/^```\s*$/.test(lines[j])) j++;
+                while (j < lines.length && !isClosingFence(lines[j], open[2])) j++;
                 return Math.min(lines.length, j + 1) - i;
             },
         }
@@ -162,15 +184,15 @@ export class CodeBlock extends TextBlock {
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromMarkdown(lines) {
-        const m = lines[0].match(/^```(\w*)/);
-        if (!m) return null;
-        const language = m[1] || null;
-        // Body is everything between first line and the trailing ``` line (if present)
+        const open = FENCE_OPEN.exec(lines[0]);
+        if (!open) return null;
+        const language = open[3].trim().split(/\s+/)[0] || null;
         let body = lines.slice(1);
-        // Strip trailing closing fence if present
-        if (body.length > 0 && /^```\s*$/.test(body[body.length - 1])) {
-            body = body.slice(0, -1);
-        }
+        // The closing fence is the last line, when it closes this fence (consume stops at the first closer).
+        if (body.length > 0 && isClosingFence(body[body.length - 1], open[2])) body = body.slice(0, -1);
+        // An indented opening fence removes up to that many spaces from the content lines.
+        const indent = open[1].length;
+        if (indent) body = body.map((line) => line.replace(new RegExp('^ {0,' + indent + '}'), ''));
         const bodyText = body.join('\n');
         // Empty body is still a valid code block
         if (!bodyText && body.length === 0 && lines.length === 1) return null;

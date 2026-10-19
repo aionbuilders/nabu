@@ -3,6 +3,7 @@ import { ListBehavior } from "./list.behavior.svelte.js";
 import ListComponent from "./List.svelte";
 import { stepBack } from "./step-back.js";
 import { hasLeveledItems, docsEntries, docsSiblings, isWordListParagraph, wordEntries, wordSiblings, nestEntries } from "./html-flat.js";
+import { isListItem, interruptsParagraph, listLength, parseListLines } from "./markdown.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -147,111 +148,29 @@ export class List extends MegaBlock {
         return `<${tag}${cls}${start === null ? '' : ` start="${start}"`}>${(pb.children || []).map(recurse).join('')}</${tag}>`;
     }
 
+    /**
+     * Markdown lists, see markdown.js: markers `-` `*` `+` `1.` `1)`, nesting by indentation (2 / 4 spaces, TAB), tasks,
+     * loose lists, continuation paragraphs of an item.
+     */
     static markdownRules = [
         {
             priority: 10,
-            detect: /^[ \t]*([-*+]|\d+[.)]) /,
-            consume(/** @type {string[]} */ lines, /** @type {number} */ i) {
-                const LIST_RE = /^[ \t]*([-*+]|\d+[.)]) /;
-                let j = i;
-                while (j < lines.length && lines[j].trim() && LIST_RE.test(lines[j])) j++;
-                return Math.max(1, j - i);
-            },
+            interruptsParagraph: (/** @type {string} */ line) => interruptsParagraph(line),
+            detect: (/** @type {string} */ line) => isListItem(line),
+            consume: (/** @type {string[]} */ lines, /** @type {number} */ i, /** @type {any} */ helpers) => listLength(lines, i, helpers),
         }
     ];
 
     /**
-     * Parse markdown list lines into a nested List/ListItem PasteBlock tree.
-     * Uses indent depth to reconstruct nesting recursively.
+     * Parse markdown list lines into a nested List/ListItem PasteBlock tree (an array when the marker type changes at
+     * the root: several lists).
      *
      * @param {string[]} lines
-     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[] }} helpers
-     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], joinLines?: boolean, softBreak?: string }} helpers
+     * @returns {import('../../utils/extensions.js').PasteBlock | import('../../utils/extensions.js').PasteBlock[] | null}
      */
-    static fromMarkdown(lines, { parseInline }) {
-        /** @typedef {{ depth: number, ordered: boolean, num: number, task: boolean, checked: boolean, text: string }} ListToken */
-
-        /** @type {ListToken[]} */
-        const tokens = lines.flatMap(/** @returns {ListToken[]} */ (line) => {
-            const m = line.match(/^([ \t]*)([-*+]|\d+[.)]) +(.*)/);
-            if (!m) return [];
-            const rawText = m[3];
-            const num = parseInt(m[2], 10); // NaN for bullets
-            const taskMatch = rawText.match(/^\[( |x|X)?\]\s*(.*)/);
-            if (taskMatch) {
-                const inner = taskMatch[1] ?? '';
-                const rest = taskMatch[2];
-                return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), num, task: true, checked: /[xX]/.test(inner), text: rest }];
-            }
-            return [{ depth: m[1].length, ordered: /^\d/.test(m[2]), num, task: false, checked: false, text: rawText }];
-        });
-
-        if (!tokens.length) return null;
-
-        /**
-         * Builds ONE List PasteBlock from a flat token array. Items at the shallowest depth become direct
-         * children; deeper tokens become the sublists of the item they follow.
-         * @param {ListToken[]} toks
-         * @returns {import('../../utils/extensions.js').PasteBlock}
-         */
-        function buildList(toks) {
-            const baseDepth = Math.min(...toks.map(t => t.depth));
-            const baseItems = toks.filter(t => t.depth === baseDepth);
-            // Task takes precedence: if ANY base-depth item is a task, list is todo
-            const hasTask = baseItems.some(t => t.task);
-            const listType = hasTask ? 'todo' : (baseItems.find(t => t.depth === baseDepth)?.ordered ? 'ordered' : 'bullet');
-            // CommonMark: an ordered list starts at the number of its first item (`3. a` / `4. b` -> start 3)
-            const start = listStart(listType, baseItems[0].num);
-            /** @type {import('../../utils/extensions.js').PasteBlock[]} */
-            const items = [];
-            let i = 0;
-
-            while (i < toks.length) {
-                if (toks[i].depth !== baseDepth) { i++; continue; }
-
-                // Collect all sub-tokens directly following this item (deeper indent)
-                const subToks = /** @type {ListToken[]} */ ([]);
-                let j = i + 1;
-                while (j < toks.length && toks[j].depth > baseDepth) {
-                    subToks.push(toks[j]);
-                    j++;
-                }
-
-                /** @type {import('../../utils/extensions.js').PasteBlock} */
-                const item = { type: 'list-item', delta: parseInline(toks[i].text), partial: false };
-                if (toks[i].task) item.props = { checked: toks[i].checked };
-                if (subToks.length) item.children = buildSublists(subToks);
-
-                items.push(item);
-                i = j;
-            }
-
-            return { type: 'list', props: start === null ? { listType } : { listType, start }, children: items, partial: false };
-        }
-
-        /**
-         * The sublists of an item (P-28): consecutive base-depth items of a different kind (numbered vs
-         * bulleted / to-do) are separate sublists, in order (`- a` / `  - s1` / `  1. s2` / `  - s3` gives
-         * ul[s1], ol[s2], ul[s3]). Each item keeps its own deeper tokens.
-         * @param {ListToken[]} toks
-         * @returns {import('../../utils/extensions.js').PasteBlock[]}
-         */
-        function buildSublists(toks) {
-            const baseDepth = Math.min(...toks.map(t => t.depth));
-            /** @type {ListToken[][]} */
-            const runs = [];
-            /** @type {boolean | null} */
-            let runOrdered = null;
-            for (const tok of toks) {
-                if (tok.depth === baseDepth) {
-                    if (tok.ordered !== runOrdered) { runs.push([]); runOrdered = tok.ordered; }
-                } else if (!runs.length) continue; // deeper tokens before any base item: dropped, as buildList does
-                runs[runs.length - 1].push(tok);
-            }
-            return runs.map(buildList);
-        }
-
-        return buildList(tokens);
+    static fromMarkdown(lines, helpers) {
+        return parseListLines(lines, helpers, listStart);
     }
 
     static htmlRules = [

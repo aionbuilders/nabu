@@ -31,7 +31,8 @@ import { ASCII_PUNCTUATION, delimiterFlags } from '../behaviors/text/markdown-sy
 // ── Link reference definitions ───────────────────────────────────────────────
 
 const DEFINITION_RE = /^ {0,3}\[((?:[^\[\]\\]|\\.)+)\]:[ \t]*(<(?:[^<>\n\\]|\\.)*>|[^\s<]\S*)(?:[ \t]+(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\)))?[ \t]*$/;
-const FENCE_RE = /^ {0,3}(```|~~~)/;
+/** An opening code fence: 3+ backticks (no backtick in the info string) or 3+ tildes. */
+const FENCE_OPEN_RE = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/;
 
 /** @param {string} s */
 export function normalizeLabel(s) {
@@ -56,13 +57,15 @@ export function extractLinkDefinitions(lines) {
     const kept = [];
     let fence = '';
     for (const line of lines) {
-        const f = FENCE_RE.exec(line);
-        if (f) {
-            if (!fence) fence = f[1];
-            else if (f[1] === fence) fence = '';
+        if (fence) {
+            // closing fence: the same character, at least as long, nothing but spaces after it
+            const close = /^ {0,3}(`+|~+)[ \t]*$/.exec(line);
+            if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = '';
             kept.push(line);
             continue;
         }
+        const open = FENCE_OPEN_RE.exec(line);
+        if (open) { fence = open[1]; kept.push(line); continue; }
         const m = !fence && line.includes(']:') ? DEFINITION_RE.exec(line) : null;
         if (!m || m[1].startsWith('^')) { kept.push(line); continue; }
         const key = normalizeLabel(m[1]);
