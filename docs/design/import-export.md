@@ -39,7 +39,9 @@ Zone / variables / Context are out of scope (parked).
   - `props`: the block's own state, per type (table below). A prop that has its default value may be absent.
   - `children`: nested blocks (items of a list, sublists of an item, body of a toggle).
 - `assets` (optional): `{ [assetId]: { mime, name, size, data } }`, the bytes (base64) of the `nabu-asset:<assetId>` media of the
-  document, exactly the map of the clipboard format (`Files#embedAssets`). Left out (with `nabu.warn`) when their total size exceeds
+  document, exactly the map of the clipboard format (`Files#embedAssets`); `assetId` is the content hash (`sha256-<hex>`, ADR 014), verified on
+  import (a mismatch is treated as missing, with `nabu.warn`); beta `<uuid>` keys are still accepted. The bytes come from the asset store
+  (files of at most `maxInlineSize`, read when the blocks load). Left out (with `nabu.warn`) when their total size exceeds
   `files.maxInlineSize`. `importJSON` re-creates them (`Files#adoptAssets`: reused when already there, sent through
   `onBeforePersist` when the host configured one); a `nabu-asset:` media whose bytes are absent is imported with `status: 'missing'`.
 

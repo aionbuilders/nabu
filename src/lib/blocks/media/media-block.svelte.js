@@ -18,9 +18,10 @@ export class MediaBlock extends Block {
         // so `displaySrc` — read inside a $derived during render — only READS it.
         // Lazily creating it in displaySrc would mutate nabu.systems (a SvelteMap)
         // during a derived → Svelte's state_unsafe_mutation error.
-        Files.get(nabu);
+        const files = Files.get(nabu);
         const data = node.data;
         this.ref = data.get('ref') || '';
+        files.warm(this.ref); // small files: bytes ready for a (synchronous) copy / export
         this.alt = data.get('alt') || '';
         this.status = data.get('status') || 'ready';
         this.name = data.get('name') || '';
@@ -29,6 +30,7 @@ export class MediaBlock extends Block {
             this.alt = node.data.get('alt') || '';
             this.status = node.data.get('status') || 'ready';
             this.name = node.data.get('name') || '';
+            files.warm(this.ref);
         });
     }
 
@@ -43,6 +45,23 @@ export class MediaBlock extends Block {
     /** Transient local objectURL while pending (not persisted). @type {string | null} */ previewUrl = $state(null);
 
     positions = $derived(1);
+
+    /**
+     * Whether the file cannot be shown: flagged `missing` (pasted without its bytes), or a `nabu-asset:` ref that neither the
+     * local store nor the document's index can provide (e.g. the document was opened on another device). Reactive.
+     * @returns {boolean}
+     */
+    get isMissing() {
+        if (this.status === 'missing') return true;
+        return this.status === 'ready' && Files.get(this.nabu).state(this.ref) === 'missing';
+    }
+
+    /**
+     * For the component's effect: keeps the display URL of this block alive while it is mounted (an unused objectURL is
+     * revoked). Returns the release function, so it can be used as `$effect(() => block.holdSource())`.
+     * @returns {() => void}
+     */
+    holdSource() { return Files.get(this.nabu).hold(this.ref); }
 
     /** @param {number} offset @returns {{node: Node, offset: number} | null} */
     getDOMPoint(offset) { return null; }

@@ -340,9 +340,9 @@ engine.exec('file:pick');
 
 ### Default (zero-config) mode
 
-When a local file is added without any configuration, its bytes are stored **inside the Loro document** itself (in a separate `assets` map). The block stores a `nabu-asset:<id>` reference internally. This works offline and requires no backend — the document is completely self-contained.
+When a local file is added without any configuration, its bytes go to a **separate file store**, never into the Loro document ([ADR 014](docs/adr/014-asset-storage.md)): an in-memory store for `createEditor()` / `new Nabu()` (lost with the page, like the document), an **IndexedDB** store for `createPersistedEditor()` (database `nabu`, shared by all the documents of the origin). The document only holds a content-hash reference (`nabu-asset:sha256-<hex>`, so the same image added twice is stored once) and a small metadata index (`assetIndex`: mime, name, size). This works offline and requires no backend, and the document history stays light.
 
-Above a configurable size threshold (~2 MB by default), Nabu emits a warning: the CRDT is not designed to carry large binary assets.
+A document alone is therefore no longer self-contained: its **export** (`serialize('json')`) and the **clipboard** still carry the bytes (keyed by hash, verified on import), so a copy / export is. Documents saved by the beta (bytes inside the document) are migrated automatically when opened. Pass `files: { store }` to plug your own store (`has`, `get`, `put`, `delete`, `keys`).
 
 ### Production mode (your storage)
 
@@ -353,19 +353,19 @@ import { createFullEditor } from '@aionbuilders/nabu';
 
 const engine = createFullEditor({
   files: {
-    // Called when a local file is added. Upload it and return a clean ref.
-    // Return nothing to fall back to the default (store bytes in Loro).
+    // Called when a local file is added (it is already in the local store). Upload it and return a clean ref.
+    // Return nothing to keep the local reference.
     onBeforePersist: async (file, { signal, onProgress }) => {
       const url = await uploadToYourCDN(file, { signal, onProgress });
       return { ref: url };
     },
 
     // Turn a stored ref into a display URL.
-    // Default: identity for https:// URLs, native decoder for nabu-asset: refs.
+    // Default: identity for https:// URLs, an object URL from the local store for nabu-asset: refs.
     // Override for private buckets or signed-URL storage.
     resolve: (ref) => ref,
 
-    // Byte threshold before the default (Loro) mode warns. Default ~2 MB.
+    // Largest file (and total) embedded in a copy / export. Default ~2 MB.
     maxInlineSize: 2 * 1024 * 1024,
 
     // Opt-in (default false): import the images of pasted web pages. See "Pasting images and files" below.
@@ -378,7 +378,7 @@ The `files` option is also accepted by the generic `createEditor({ preset, files
 
 ### Pasting images and files
 
-- **Files on the clipboard** (a screenshot, a file copied from the OS): each one becomes a block at the caret, in order. The image / video / file extensions decide by MIME type (`image/*` → Image, `video/*` → Video, anything else → File). The bytes go through `Files`: stored in the document in the default mode, or sent to your `onBeforePersist` (the block is `pending` with a local preview until you answer). Files win over the text payloads of the same clipboard, except an internal Nabu copy (`application/x-nabu+json`) and a spreadsheet range (an HTML table). One undo step. A pasted block lands at the caret: the text block is split around it.
+- **Files on the clipboard** (a screenshot, a file copied from the OS): each one becomes a block at the caret, in order. The image / video / file extensions decide by MIME type (`image/*` → Image, `video/*` → Video, anything else → File). The bytes go through `Files`: stored in the local asset store in the default mode, or sent to your `onBeforePersist` (the block is `pending` with a local preview until you answer). Files win over the text payloads of the same clipboard, except an internal Nabu copy (`application/x-nabu+json`) and a spreadsheet range (an HTML table). One undo step. A pasted block lands at the caret: the text block is split around it.
 - **Images of a pasted web page** (`<img src>` in the `text/html` of the clipboard) become image blocks that reference the **original URL** (hot-linked, nothing is downloaded); an `<img>` inside a paragraph splits it, and unsafe or missing sources are dropped. Set `files.importRemote: true` to **import** them instead: each remote `http(s)` image is fetched and stored through the same path as a local file (so `onBeforePersist` receives the downloaded `File`); the block shows the original URL while it is fetched, and **keeps the original URL if the fetch fails** (network error, CORS, HTTP error, not a media type). The swap to the stored ref is not an undo step. Remote servers must allow cross-origin reads (CORS) for the import to succeed; credentials are never sent.
 
 An extension can make a block of a pasted file with `pasteFileHandlers` (the engine names no block type):

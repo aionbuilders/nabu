@@ -127,14 +127,14 @@ describe('P-53 — a block without text pasted into a text block', () => {
 });
 
 describe('P-55 — files on the clipboard', () => {
-  it('a screenshot becomes an image block stored in the document; the text payloads are ignored', async () => {
+  it('a screenshot becomes an image block stored in the asset store (hash ref); the text payloads are ignored', async () => {
     const engine = await makeEditor();
     await caretIn(engine, '');
     paste(engine, clipboard({ files: [png()], data: { 'text/plain': 'shot.png', 'text/html': '<p>shot.png</p>' } }));
     await flush();
     expect(shape(engine)).toBe('image');
     const [img] = media(engine);
-    expect(img.ref).toMatch(/^nabu-asset:/);
+    expect(img.ref).toMatch(/^nabu-asset:sha256-[0-9a-f]{64}$/);
     expect(img.status).toBe('ready');
     expect(img.name).toBe('shot.png');
     expect(Files.get(engine).getAsset(img.ref)).toMatchObject({ type: 'image/png', name: 'shot.png' });
@@ -172,12 +172,13 @@ describe('P-55 — files on the clipboard', () => {
     expect(shape(engine)).toBe('p(Hello ) ; image ; image ; p(world)');
   });
 
-  it('is ONE undo step (the assets go with the blocks)', async () => {
+  it('is ONE undo step (the blocks; the files are stored outside the document, outside undo)', async () => {
     const engine = await makeEditor();
     await caretIn(engine, 'Hello world', 6);
     paste(engine, clipboard({ files: [png('1.png'), png('2.png')] }));
     await flush();
-    expect(Object.keys(Files.get(engine).assets.toJSON())).toHaveLength(2);
+    expect(Object.keys(Files.get(engine).index.toJSON())).toHaveLength(1); // the same bytes twice: one file
+    expect(Files.get(engine).store.size).toBe(1);
     engine.undo();
     await flush();
     expect(shape(engine)).toBe('p(Hello world)');
@@ -247,7 +248,8 @@ describe('P-55 — files on the clipboard', () => {
       expect(img.ref).toMatch(/^nabu-pending:/);
       expect(uploads).toHaveLength(1);
       expect(uploads[0]).toMatchObject({ name: 'up.png', type: 'image/png' });
-      expect(Object.keys(Files.get(engine).assets.toJSON())).toHaveLength(0); // nothing stored in the document
+      expect(Object.keys(Files.get(engine).assets.toJSON())).toHaveLength(0); // no bytes in the document
+      expect(Files.get(engine).store.size).toBe(1); // the local store has them first
       release();
       await flush();
       expect(media(engine)[0].status).toBe('ready');
@@ -291,7 +293,7 @@ describe('files.importRemote', () => {
     await flush();
     [img] = media(engine);
     expect(img.status).toBe('ready');
-    expect(img.ref).toMatch(/^nabu-asset:/);
+    expect(img.ref).toMatch(/^nabu-asset:sha256-/);
     expect(Files.get(engine).getAsset(img.ref)).toMatchObject({ type: 'image/png', name: 'cat.png' });
     // the swap is not an undo step: one undo removes the pasted content
     engine.undo();

@@ -1,6 +1,7 @@
 <script>
   /** @type {{ block: import('./image.svelte.js').ImageBlock }} */
   let { block } = $props();
+  $effect(() => block.holdSource());
   const src = $derived(block.displaySrc);
 </script>
 
@@ -14,11 +15,11 @@
   class:selected={block.selected}
   class:pending={block.status === 'pending'}
   class:error={block.status === 'error'}
-  class:missing={block.status === 'missing'}
+  class:missing={block.isMissing}
 >
   {#if block.status === 'error'}
     <div class="nabu-image-error">⚠️ Upload failed</div>
-  {:else if block.status === 'missing'}
+  {:else if block.isMissing}
     <div class="nabu-image-error nabu-image-missing" data-nabu-missing>Missing file{block.alt ? ' — ' + block.alt : ''}</div>
   {:else if src}
     <img src={src} alt={block.alt} draggable="false" />

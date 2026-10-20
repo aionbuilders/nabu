@@ -8,6 +8,7 @@ import { Nabu } from '$lib/blocks/nabu.svelte.js';
 import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
 import { ImageExtension } from '$lib/blocks/image/index.js';
 import { Files } from '$lib/files/files.svelte.js';
+import { sha256Id } from '$lib/files/assets.clipboard.js';
 import { FileExtension } from '$lib/blocks/file/index.js';
 import { VideoExtension } from '$lib/blocks/video/index.js';
 import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '$lib/paste/index.js';
@@ -54,6 +55,9 @@ const flush = async () => { for (let i = 0; i < 10; i++) await new Promise((r) =
 
 
 const b64 = (u8) => btoa(String.fromCharCode(...u8));
+/** The files the editor's store holds (ADR 014: bytes live in the store, never in the document). */
+const stored = (engine) => engine.systems.get('files').store.size;
+const indexed = (engine) => Object.keys(Files.get(engine).index.toJSON());
 
 describe('P-51 copy: the bytes travel in the fragment', () => {
   it('embeds the asset in `assets` (version 1 kept), the block keeps its ref', async () => {
@@ -63,6 +67,7 @@ describe('P-51 copy: the bytes travel in the fragment', () => {
     const frag = JSON.parse(data['application/x-nabu+json']);
     expect(frag.version).toBe(1);
     const id = block.ref.slice('nabu-asset:'.length);
+    expect(id).toBe(await sha256Id(PNG)); // ADR 014: the ref IS the content hash, and so is the key of `assets`
     expect(frag.blocks[0].props.ref).toBe(block.ref);
     expect(frag.assets[id]).toEqual({ mime: 'image/png', name: 'pic.png', size: PNG.length, data: b64(PNG) });
   });
@@ -124,12 +129,12 @@ describe('P-51 copy: the bytes travel in the fragment', () => {
 });
 
 describe('P-51 paste: the asset is re-created in the target document', () => {
-  it('another document: the bytes are restored (same id), the image resolves', async () => {
+  it('another document: the bytes are stored in ITS store (same hash ref), the image resolves', async () => {
     const a = await makeEditor();
     const b = await makeEditor();
     const block = await addImage(a);
     pasteInto(b, copyBlock(a, block));
-    await flush();
+    await Files.get(b).whenIdle();
     const [pasted] = images(b);
     expect(pasted.ref).toBe(block.ref);
     expect(pasted.status).toBe('ready');
@@ -137,7 +142,11 @@ describe('P-51 paste: the asset is re-created in the target document', () => {
     expect([...asset.data]).toEqual([...PNG]);
     expect(asset.type).toBe('image/png');
     expect(asset.name).toBe('pic.png');
-    expect(Files.get(b).resolve(pasted.ref)).toMatch(/^blob:/);
+    expect(stored(b)).toBe(1);
+    expect(Files.get(b).index.get(pasted.ref.slice('nabu-asset:'.length))).toEqual({ mime: 'image/png', name: 'pic.png', size: PNG.length });
+    expect(Files.get(b).resolve(pasted.ref)).toBe(''); // read from the store in the background...
+    await flush();
+    expect(Files.get(b).resolve(pasted.ref)).toMatch(/^blob:/); // ...then reactive
   });
 
   it('the same document: the ref is reused, no second asset', async () => {
@@ -147,7 +156,8 @@ describe('P-51 paste: the asset is re-created in the target document', () => {
     await flush();
     expect(images(a)).toHaveLength(2);
     expect(images(a).map((i) => i.ref)).toEqual([block.ref, block.ref]);
-    expect(Object.keys(Files.get(a).assets.toJSON())).toHaveLength(1);
+    expect(stored(a)).toBe(1);
+    expect(indexed(a)).toHaveLength(1);
   });
 
   it('pasting twice in another document stores the asset once', async () => {
@@ -159,7 +169,8 @@ describe('P-51 paste: the asset is re-created in the target document', () => {
     pasteInto(b, data);
     await flush();
     expect(images(b)).toHaveLength(2);
-    expect(Object.keys(Files.get(b).assets.toJSON())).toHaveLength(1);
+    expect(stored(b)).toBe(1);
+    expect(indexed(b)).toHaveLength(1);
   });
 
   it('paste is ONE undo step (the asset and the block go together)', async () => {
@@ -219,6 +230,7 @@ describe('P-51 paste: the asset is re-created in the target document', () => {
     const video = a.insert('video', { ref: vref, name: 'v.mp4' });
     await a.commit();
     pasteInto(b, copyBlock(a, video));
+    await flush();
     const pasted = [...b.blocks.values()].find((x) => x.type === 'video');
     expect(Files.get(b).getAsset(pasted.ref).type).toBe('video/mp4');
   });
@@ -253,7 +265,8 @@ describe('P-51 paste with a host onBeforePersist: re-uploaded, optimistic previe
     [pasted] = images(b);
     expect(pasted.status).toBe('ready');
     expect(pasted.ref).toBe('https://host.test/pic.png');
-    expect(Object.keys(Files.get(b).assets.toJSON())).toHaveLength(0);
+    expect(Object.keys(Files.get(b).assets.toJSON())).toHaveLength(0); // never bytes in the document
+    expect(stored(b)).toBe(1); // the local store got them first (ADR 014)
   });
 
   it('two pastes of the same asset upload it once and both blocks get the ref', async () => {

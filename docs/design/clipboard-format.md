@@ -22,20 +22,24 @@ Status: implemented (P-52). Complements `copy-paste.md` (§3.3 sketches the form
   `children` (nested blocks of a container / hybrid block).
 
 - `assets` (optional, added by P-51, same `version: 1`): `{ [assetId]: { mime, name, size, data } }`, the bytes (`data`, base64) of the
-  `nabu-asset:<assetId>` refs used by `blocks` (a media block's `props.ref`). Older readers ignore the unknown field. Absent when the
+  `nabu-asset:<assetId>` refs used by `blocks` (a media block's `props.ref`). Since ADR 014 `assetId` is the content hash, `sha256-<64 hex>`
+  (the ref is `nabu-asset:sha256-<hex>`); the beta used a `<uuid>` and such keys / refs are still read. Older readers ignore the unknown field. Absent when the
   fragment has no such media, or when their total size exceeds `files.maxInlineSize` (then `nabu.warn`, and the blocks keep only the ref).
 
 ## Media stored in the document (P-51)
 
-A media block whose ref is `nabu-asset:<id>` points into the `assets` map of the document it was copied from. The fragment therefore carries
-the bytes, and the receiving editor makes the ref valid (`Files#adoptAssets`, applied by `insertFragment` / `importFragment`):
+A media block whose ref is `nabu-asset:sha256-<hex>` points at a file held by the asset store of the document it was copied from (ADR 014; the
+document itself only has the ref and an `assetIndex` entry). The fragment therefore carries the bytes, and the receiving editor makes the ref
+valid (`Files#adoptAssets`, applied by `insertFragment` / `importFragment`). The ref is the hash, so it never changes: the paste is
+synchronous and the storage happens in the background (`Files#whenIdle`):
 
 | In the target document | Result |
 |---|---|
-| the asset id already exists (same document, or pasted before) | ref reused, nothing duplicated |
-| the fragment carries the bytes, no `files.onBeforePersist` | stored under the same id, in the paste's own undo step |
+| the document already indexes this hash (same document, or pasted before) | ref reused, nothing duplicated |
+| the fragment carries the bytes, no `files.onBeforePersist` | the bytes are hashed; if the hash is NOT the one in the ref, the file is treated as missing and `nabu.warn` says so (integrity check). Otherwise written to the local store (skipped when it already has them) and indexed in `assetIndex`; neither is an undo step |
+| a beta ref / key (`nabu-asset:<uuid>`) with its bytes | re-created through `Files#persist`: the block is `pending` with a local preview, then gets its `sha256` ref (silent commit) |
 | the fragment carries the bytes, `files.onBeforePersist` set | `Files#persist(new File(...))`: the host uploads it and returns its ref. The block is created at once with `status: 'pending'` and a local preview (`nabu-pending:<uuid>` transient ref, resolved by `Files#resolve` to an object URL), then gets the final ref / `status: 'ready'` (`'error'` if the upload fails) in a silent commit (`Nabu#commit({ origin: 'nabu:silent:files' })`, excluded from the UndoManager): Ctrl+Z / redo see the paste as ONE step. Pasting the same asset again meanwhile reuses the same upload |
-| no bytes (older copy, over the size limit, hand-made fragment, corrupt `data`) | the block is kept with `status: 'missing'`, ref unchanged. Media components render a "Missing file" state (`[data-nabu-missing]`); a custom component should handle `block.status === 'missing'`. Never an exception |
+| no bytes (older copy, over the size limit, hand-made fragment, corrupt `data`, hash mismatch) | unless the document's index or the local store already has the file, the block is flagged `status: 'missing'` (a moment after the paste), ref unchanged. Media components render a "Missing file" state (`[data-nabu-missing]`); a custom component should handle `block.status === 'missing'`. Never an exception |
 
 Hosted refs (`http(s):`, `blob:`, whatever a host returns) are not assets: they are not embedded and paste unchanged.
 

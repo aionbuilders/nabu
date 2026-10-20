@@ -1,6 +1,7 @@
 <script>
   /** @type {{ block: import('./file.svelte.js').FileBlock }} */
   let { block } = $props();
+  $effect(() => block.holdSource());
 </script>
 
 <div
@@ -13,11 +14,11 @@
   class:selected={block.selected}
   class:pending={block.status === 'pending'}
   class:error={block.status === 'error'}
-  class:missing={block.status === 'missing'}
+  class:missing={block.isMissing}
 >
   {#if block.status === 'error'}
     <div class="nabu-file-chip nabu-file-chip--error">⚠️ Upload failed</div>
-  {:else if block.status === 'missing'}
+  {:else if block.isMissing}
     <div class="nabu-file-chip nabu-file-chip--error nabu-file-chip--missing" data-nabu-missing>
       <span>📎</span>
       <span>{block.name || 'file'}</span>

@@ -228,6 +228,9 @@ export class Nabu {
             }
         }
         
+        // Files: the local asset store, and the migration of a beta document whose files are still inside it (ADR 014 §3.7).
+        Files.get(this);
+
         // this.doc.subscribe((event) => {
         //     // event.events contient un tableau listant TOUTES les opérations 
         //     // (texte ajouté, nœuds déplacés, etc.) qui viennent d'être commitées.
@@ -1227,9 +1230,9 @@ export class Nabu {
     }
 
     /**
-     * Insert the blocks made of pasted files, at the caret, in order. The bytes are read first (`Files#stage`), then ONE
-     * `insertFragment` does the rest like any other paste: stored in the document, or sent to the host's `onBeforePersist`
-     * with the optimistic `pending` block; a single undo step.
+     * Insert the blocks made of pasted files, at the caret, in order. The files are hashed and stored first (`Files#stage`),
+     * then ONE `insertFragment` does the rest like any other paste: the blocks hold the hash refs, or (with a host's
+     * `onBeforePersist`) the optimistic `pending` block; a single undo step.
      * @param {Array<{ file: File, block: import('../utils/extensions.js').PasteBlock }>} planned
      */
     async #pasteFiles(planned) {
@@ -1242,7 +1245,7 @@ export class Nabu {
             try {
                 const staged = await files.stage(file);
                 blocks.push({ ...block, props: { ...block.props, ref: staged.ref }, partial: false });
-                assets[staged.id] = staged.asset;
+                if (staged.asset) assets[staged.id] = staged.asset;
             } catch (error) {
                 this.warn(`paste: could not read file "${file.name}": ${error}`);
             }
@@ -1576,6 +1579,8 @@ export class Nabu {
         }
 
         await this.commit();
+        // The files of the import are verified and stored in the background: the import is complete once they are (a host upload is not waited for).
+        await Files.get(this).whenIdle();
     }
 
     /**

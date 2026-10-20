@@ -46,6 +46,9 @@
 		"@sveltejs/kit": "^2.50.2",
 		"@sveltejs/package": "^2.5.7",
 		"@sveltejs/vite-plugin-svelte": "^6.2.4",
+		"@vitest/coverage-v8": "^3.0.0",
+		"fake-indexeddb": "^6.2.6",
+		"happy-dom": "^16.0.0",
 		"playwright": "^1.58.2",
 		"publint": "^0.3.17",
 		"svelte": "^5.49.2",
@@ -53,9 +56,7 @@
 		"svelte-check": "^4.3.6",
 		"typescript": "^5.9.3",
 		"vite": "^7.3.1",
-		"vitest": "^3.0.0",
-		"@vitest/coverage-v8": "^3.0.0",
-		"happy-dom": "^16.0.0"
+		"vitest": "^3.0.0"
 	},
 	"description": "Modular, local-first block editor engine for Svelte 5, built on a single contenteditable architecture and Loro-CRDT.",
 	"author": {

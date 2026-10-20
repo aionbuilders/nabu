@@ -933,7 +933,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
 
       await expect.poll(async () => (await tree(page)).map(b => b.type)).toEqual(['paragraph', 'image']);
       // the file is persisted into the asset store and referenced by an opaque ref (the file name is not kept on the block)
-      await expect.poll(async () => ((await getJson(page)).blocks[1].props?.ref ?? '')).toMatch(/^nabu-asset:/);
+      await expect.poll(async () => ((await getJson(page)).blocks[1].props?.ref ?? '')).toMatch(/^nabu-asset:sha256-/);
       await expect(page.locator('[data-block-type="image"]')).toHaveCount(1);
     });
 

@@ -7,7 +7,6 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { LoroMap } from 'loro-crdt';
 import { Files } from '$lib/files/files.svelte.js';
 import { List } from '$lib/blocks/list/list.svelte.js';
 import { Nabu } from '$lib/blocks/nabu.svelte.js';
@@ -152,25 +151,37 @@ describe('JSON round trip (structure)', () => {
         expect(a.serialize('markdown')).not.toContain('nabu-pending');
     });
 
-    it('the bytes of a nabu-asset: media travel in the export (assets map) and are re-created on import; without them the block is missing', async () => {
+    it('the bytes of a nabu-asset: media travel in the export (assets map, keyed by hash) and are re-created on import; without them the block is missing', async () => {
         const a = new Nabu({ extensions });
-        const sub = Files.get(a).assets.setContainer('abc', new LoroMap());
-        sub.set('data', new Uint8Array([1, 2, 3, 250])); sub.set('type', 'image/png'); sub.set('name', 'p.png');
-        await a.importFragment({ blocks: [{ type: 'image', props: { ref: 'nabu-asset:abc', alt: 'embedded', name: 'p.png' } }] });
+        const ref = await Files.get(a).persist(new File([new Uint8Array([1, 2, 3, 250])], 'p.png', { type: 'image/png' }));
+        const id = ref.slice('nabu-asset:'.length);
+        expect(id).toMatch(/^sha256-[0-9a-f]{64}$/);
+        await a.importFragment({ blocks: [{ type: 'image', props: { ref, alt: 'embedded', name: 'p.png' } }] });
         const json = clone(a.serialize('json'));
-        expect(json.assets.abc).toMatchObject({ mime: 'image/png', name: 'p.png', size: 4 });
-        expect(json.blocks[0].props.ref).toBe('nabu-asset:abc');
+        expect(json.assets[id]).toMatchObject({ mime: 'image/png', name: 'p.png', size: 4 });
+        expect(json.blocks[0].props.ref).toBe(ref);
 
         const b = new Nabu({ extensions });
         await b.importJSON(json);
-        const asset = Files.get(b).getAsset('abc');
+        const asset = Files.get(b).getAsset(ref);
         expect([...asset.data]).toEqual([1, 2, 3, 250]);
-        expect(tree(b)[0].props).toMatchObject({ ref: 'nabu-asset:abc', status: 'ready', alt: 'embedded' });
+        expect(await Files.get(b).store.has(id)).toBe(true);
+        expect(tree(b)[0].props).toMatchObject({ ref, status: 'ready', alt: 'embedded' });
 
         const c = new Nabu({ extensions });
         const { assets: _dropped, ...withoutBytes } = json;
         await c.importJSON(withoutBytes);
+        await Files.get(c).whenIdle();
         expect(tree(c)[0].props.status).toBe('missing');
+    });
+
+    it('a beta export (nabu-asset:<uuid> keys) still imports: the file gets its hash ref', async () => {
+        const json = { version: '1', blocks: [{ id: 'x', type: 'image', props: { ref: 'nabu-asset:abc', alt: 'old', name: 'p.png' } }], assets: { abc: { mime: 'image/png', name: 'p.png', size: 4, data: btoa(String.fromCharCode(1, 2, 3, 250)) } } };
+        const b = new Nabu({ extensions });
+        await b.importJSON(clone(json));
+        expect(tree(b)[0].props).toMatchObject({ status: 'ready', alt: 'old' });
+        expect(tree(b)[0].props.ref).toMatch(/^nabu-asset:sha256-[0-9a-f]{64}$/);
+        expect([...Files.get(b).getAsset(tree(b)[0].props.ref).data]).toEqual([1, 2, 3, 250]);
     });
 
     it('an unknown export version is refused with a warning and leaves the document untouched', async () => {

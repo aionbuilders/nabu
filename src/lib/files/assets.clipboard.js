@@ -1,11 +1,13 @@
 /**
  * Pure helpers for moving `nabu-asset:` media through the clipboard (P-51): walking the PasteBlocks that reference
- * an asset, and base64 for the bytes carried in `application/x-nabu+json`. No document access here — `Files`
- * (files.svelte.js) does that.
+ * an asset, content hashing (ADR 014) and base64 for the bytes carried in `application/x-nabu+json`. No document
+ * access here — `Files` (files.svelte.js) does that.
  */
 
-/** Scheme of the refs that point into the document's own `assets` map. */
+/** Scheme of the refs that point to a file held by the asset store: `nabu-asset:sha256-<hex>` (ADR 014), or `nabu-asset:<uuid>` (beta). */
 export const ASSET_PREFIX = 'nabu-asset:';
+/** An asset id that is a content hash (what follows `nabu-asset:`). Anything else after the scheme is a legacy beta uuid. */
+export const HASH_ID_RE = /^sha256-[0-9a-f]{64}$/;
 /** Scheme of a ref whose bytes are being re-created in this document (local, transient — see Files#adopt). */
 export const PENDING_PREFIX = 'nabu-pending:';
 
@@ -16,6 +18,27 @@ export const PENDING_PREFIX = 'nabu-pending:';
  */
 export function assetIdOf(ref) {
     return typeof ref === 'string' && ref.startsWith(ASSET_PREFIX) && ref.length > ASSET_PREFIX.length ? ref.slice(ASSET_PREFIX.length) : null;
+}
+
+/**
+ * Whether `id` (the part after `nabu-asset:`) is a content hash.
+ * @param {unknown} id
+ * @returns {boolean}
+ */
+export function isHashId(id) {
+    return typeof id === 'string' && HASH_ID_RE.test(id);
+}
+
+/**
+ * SHA-256 of `bytes` as an asset id: `sha256-<64 hex>` (ADR 014 §3.1).
+ * @param {BufferSource} bytes
+ * @returns {Promise<string>}
+ */
+export async function sha256Id(bytes) {
+    const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+    let hex = '';
+    for (const byte of digest) hex += byte.toString(16).padStart(2, '0');
+    return 'sha256-' + hex;
 }
 
 /**

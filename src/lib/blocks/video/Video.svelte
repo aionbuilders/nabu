@@ -1,6 +1,7 @@
 <script>
   /** @type {{ block: import('./video.svelte.js').VideoBlock }} */
   let { block } = $props();
+  $effect(() => block.holdSource());
   const src = $derived(block.displaySrc);
 </script>
 
@@ -14,11 +15,11 @@
   class:selected={block.selected}
   class:pending={block.status === 'pending'}
   class:error={block.status === 'error'}
-  class:missing={block.status === 'missing'}
+  class:missing={block.isMissing}
 >
   {#if block.status === 'error'}
     <div class="nabu-video-error">⚠️ Upload failed</div>
-  {:else if block.status === 'missing'}
+  {:else if block.isMissing}
     <div class="nabu-video-error nabu-video-missing" data-nabu-missing>Missing file{block.alt ? ' — ' + block.alt : ''}</div>
   {:else if src}
     <!-- svelte-ignore a11y_media_has_caption -->

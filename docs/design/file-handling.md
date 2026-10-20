@@ -1,11 +1,16 @@
 # Design Document : Fichiers / Images / Médias — cycle de vie de la donnée
 
 > **Statut** : Décidé — Juin 2026. v1 = système fichier + bloc Image.
+> **Mise à jour 2026-10-20 — ADR 014** ([`docs/adr/014-asset-storage.md`](../adr/014-asset-storage.md)) : le « mode par défaut » décrit en §1 (octets DANS le
+> document Loro) est **remplacé** : les octets vivent dans un stockage de fichiers séparé (mémoire, ou IndexedDB pour l'éditeur persisté), le document ne
+> porte que des références par empreinte (`nabu-asset:sha256-<hex>`) et un index de métadonnées (`assetIndex`). Les documents de la beta sont migrés à
+> l'ouverture. Le contrat `onBeforePersist` / `resolve` ci-dessous reste valable (le fichier passe d'abord par le stockage local). Ce document reste la référence
+> du cycle de vie côté hôte (§3 et suivants) ; lots 2 et 3 de l'ADR (envoi en arrière-plan, reprise, modes d'historique) à venir.
 > **Le vrai sujet** n'est PAS l'affichage (un void block, comme Divider) — c'est le **cycle de vie de la donnée** et la **DX développeur** (provisioning, upload, download, qui possède quoi).
 
 ---
 
-## 1. Le principe central : durable in Loro par défaut, override par hook
+## 1. ~~Le principe central : durable in Loro par défaut, override par hook~~ (remplacé par l'ADR 014)
 
 Décision (contre-intuitive mais assumée) : **par défaut, les octets vivent DANS Loro** — pas dans l'arbre de blocs, mais dans un container `assets` séparé (`doc.getMap('assets')`), indexé par id. Le bloc ne stocke qu'une **ref** (`nabu-asset:<id>` ou une URL externe).
 

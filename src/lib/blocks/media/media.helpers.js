@@ -15,6 +15,8 @@ export async function insertMediaFromFile(nabu, type, file) {
     await nabu.commit();
     const id = block.id;
     try {
+        // TODO(ADR-014 lot 2): progress / retry / cancel (`block.progress`, `block.retry()`, `block.cancel()`) and outbox-based upload;
+        // lot 3: drag and drop calls this same path.
         const ref = await Files.get(nabu).persist(file);
         const fresh = nabu.blocks.get(id);
         if (fresh) { const d = /** @type {any} */ (fresh.node.data); d.set('ref', ref); d.set('status', 'ready'); /** @type {any} */ (fresh).previewUrl = null; await nabu.commit(); }

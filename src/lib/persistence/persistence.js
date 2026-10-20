@@ -1,8 +1,10 @@
 import { Nabu } from '../blocks/nabu.svelte.js';
 import { FullPreset } from '../presets.js';
+import { Files } from '../files/files.svelte.js';
 import { loadSnapshot, saveSnapshot, deleteSnapshot } from './indexeddb.js';
+import { IndexedDBAssetStore } from './asset-store.js';
 
-export { loadSnapshot, saveSnapshot, deleteSnapshot };
+export { loadSnapshot, saveSnapshot, deleteSnapshot, IndexedDBAssetStore };
 
 /**
  * @import { Extension } from '../utils/extensions.js';
@@ -17,6 +19,10 @@ export { loadSnapshot, saveSnapshot, deleteSnapshot };
  * On first call, the document is empty (only the default paragraph from ParagraphExtension).
  * On subsequent calls, the document state is restored from the last saved snapshot.
  *
+ * The bytes of the files (images, videos…) are NOT saved in the snapshot (ADR 014): they go to an `IndexedDBAssetStore`
+ * (base `nabu`, object store `assets`, shared by every document of the origin), unless `files.store` provides another one.
+ * The document only keeps references and a small metadata index; the store also records which files each document references.
+ *
  * The instance gains three extra methods:
  * - `nabu.saveNow()` — force an immediate save (returns a Promise)
  * - `nabu.clearPersistence()` — delete the stored snapshot (returns a Promise)
@@ -27,8 +33,9 @@ export { loadSnapshot, saveSnapshot, deleteSnapshot };
  * @param {Extension[]} [options.preset] - Extension preset (default: FullPreset)
  * @param {Extension[]} [options.extensions] - Additional extensions to append
  * @param {number} [options.debounce] - Auto-save debounce delay in ms (default: 2000)
+ * @param {import('../files/files.svelte.js').FilesConfig} [options.files] - File handling; `files.store` replaces the default IndexedDB asset store
  * @param {import('../utils/placeholders.js').PlaceholdersOption} [options.placeholders] - Forwarded to Nabu
- *   (any other Nabu init option, e.g. `files`, is forwarded too)
+ *   (any other Nabu init option, e.g. `files`, is forwarded too; `files.store` replaces the default IndexedDB asset store)
  * @returns {Promise<Nabu>}
  *
  * @example
@@ -51,21 +58,29 @@ export async function createPersistedEditor({
 	...init
 } = {}) {
 	const snapshot = await loadSnapshot(docId);
+	const store = init.files?.store ?? new IndexedDBAssetStore();
 
 	const nabu = new Nabu({
 		...init,
+		files: { ...init.files, store },
 		extensions: [...preset, ...extensions],
 		...(snapshot ? { snapshot } : {})
 	});
 
+	/** Save the snapshot, then record which files the document references (the store's `docRefs`, used by the future cleanup). */
+	const save = async () => {
+		const snap = nabu.doc.export({ mode: 'snapshot' });
+		await saveSnapshot(docId, snap);
+		const refs = /** @type {any} */ (store).setDocRefs;
+		if (typeof refs === 'function') await refs.call(store, docId, Files.get(nabu).indexedHashes());
+	};
+
 	// Auto-save: Loro fires doc.subscribe() after every committed change
+	/** @type {ReturnType<typeof setTimeout> | undefined} */
 	let saveTimer;
 	nabu.doc.subscribe(() => {
 		clearTimeout(saveTimer);
-		saveTimer = setTimeout(async () => {
-			const snap = nabu.doc.export({ mode: 'snapshot' });
-			await saveSnapshot(docId, snap);
-		}, debounce);
+		saveTimer = setTimeout(save, debounce);
 	});
 
 	/** Whether this instance was created from a fresh document (no prior snapshot). */
@@ -73,12 +88,17 @@ export async function createPersistedEditor({
 
 	/** Force an immediate save of the current document state. @returns {Promise<void>} */
 	nabu.saveNow = async () => {
-		const snap = nabu.doc.export({ mode: 'snapshot' });
-		await saveSnapshot(docId, snap);
+		clearTimeout(saveTimer);
+		await Files.get(nabu).whenIdle(); // files of a paste / import / migration in progress belong to this save
+		await save();
 	};
 
-	/** Delete the persisted snapshot for this document. @returns {Promise<void>} */
-	nabu.clearPersistence = () => deleteSnapshot(docId);
+	/** Delete the persisted snapshot for this document (the files stay in the shared store: other documents may use them). @returns {Promise<void>} */
+	nabu.clearPersistence = async () => {
+		await deleteSnapshot(docId);
+		const clear = /** @type {any} */ (store).clearDocRefs;
+		if (typeof clear === 'function') await clear.call(store, docId);
+	};
 
 	return nabu;
 }

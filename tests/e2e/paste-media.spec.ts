@@ -1,6 +1,7 @@
 /**
- * E2E — P-51 media across documents. An image uploaded in the default mode lives INSIDE the document (a Loro asset,
- * `nabu-asset:<id>` ref): copying it must carry the bytes, pasting it elsewhere must re-create the asset there.
+ * E2E — P-51 media across documents. An image uploaded in the default mode is held by the asset store (ADR 014) and the
+ * document only has its `nabu-asset:sha256-<hex>` ref: copying it must carry the bytes, pasting it elsewhere must re-create
+ * the file there (in that document's store).
  *
  * Two editors = two pages of one browser context (each /e2e page is its own in-memory document). The copied payloads are
  * read from the ClipboardEvent (helpers/clip-capture.ts) and replayed as a synthetic `paste` on the other page.
@@ -71,7 +72,13 @@ const imageInfo = (page: Page) => page.evaluate(() => {
   const n = (window as any).nabu;
   return [...n.blocks.values()].filter((b: any) => b.type === 'image' && !b.node.isDeleted?.()).map((b: any) => ({ ref: b.ref, status: b.status }));
 });
-const assetIds = (page: Page) => page.evaluate(() => Object.keys((window as any).nabu.doc.getMap('assets').toJSON()));
+/** Files the document knows (ADR 014: the `assetIndex` map holds metadata, the bytes live in the asset store). */
+const assetIds = (page: Page) => page.evaluate(() => Object.keys((window as any).nabu.doc.getMap('assetIndex').toJSON()));
+/** Binary values anywhere in the Loro document: ADR 014 says there must be none. */
+const bytesInDoc = (page: Page) => page.evaluate(() => {
+  const walk = (v: any): number => v instanceof Uint8Array ? 1 : Array.isArray(v) ? v.reduce((n, x) => n + walk(x), 0) : v && typeof v === 'object' ? Object.values(v).reduce((n: number, x: any) => n + walk(x), 0) : 0;
+  return walk((window as any).nabu.doc.toJSON());
+});
 /** Every <img> of the editor has decoded (naturalWidth > 0). */
 const imagesDisplay = (page: Page, count: number) => expect.poll(() => page.evaluate(() =>
   [...document.querySelectorAll('[data-block-type="image"] img')].map((i) => (i as HTMLImageElement).naturalWidth),
@@ -87,7 +94,7 @@ test.describe('A · the bytes travel with the copy', () => {
     await uploadImage(page);
     const ev = await copyAll(page);
     const [img] = await imageInfo(page);
-    expect(img.ref).toMatch(/^nabu-asset:/);
+    expect(img.ref).toMatch(/^nabu-asset:sha256-[0-9a-f]{64}$/);
 
     const id = img.ref.slice('nabu-asset:'.length);
     const frag = ev.nabu as any;
@@ -131,7 +138,7 @@ test.describe('B · paste', () => {
     await pasteInto(other, payload(ev));
     await expect.poll(() => tree(other)).toBe('p(before) ; image(∅) ; p(after)');
     expect(await imageInfo(other)).toEqual([{ ref: orig.ref, status: 'ready' }]);
-    expect(await assetIds(other)).toEqual([orig.ref.slice('nabu-asset:'.length)]);
+    await expect.poll(() => assetIds(other)).toEqual([orig.ref.slice('nabu-asset:'.length)]); // stored + indexed in the background
     await imagesDisplay(other, 1);
     expect(otherErrors.list()).toEqual([]);
   });
@@ -151,7 +158,7 @@ test.describe('B · paste', () => {
     const uploads = await host.evaluate(() => (window as any).__hostUploads);
     expect(uploads).toHaveLength(1);
     expect(uploads[0]).toMatchObject({ name: 'pixel.png', type: 'image/png', size: PNG.length });
-    expect(await assetIds(host)).toEqual([]);
+    expect(await bytesInDoc(host)).toBe(0); // the host has the file; the document never holds bytes (the local store has a copy first)
     await imagesDisplay(host, 1);
   });
 

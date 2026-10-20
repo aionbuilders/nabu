@@ -55,7 +55,8 @@ const media = (page: Page) => page.evaluate(() => {
   n.tree.roots().forEach(walk);
   return out;
 });
-const assetIds = (page: Page) => page.evaluate(() => Object.keys((window as any).nabu.doc.getMap('assets').toJSON()));
+/** Files the document knows (ADR 014: the `assetIndex` map holds metadata, the bytes live in the asset store). */
+const assetIds = (page: Page) => page.evaluate(() => Object.keys((window as any).nabu.doc.getMap('assetIndex').toJSON()));
 const imagesDisplay = (page: Page, count: number) => expect.poll(() => page.evaluate(() =>
   [...document.querySelectorAll('[data-block-type="image"] img')].map((i) => (i as HTMLImageElement).naturalWidth),
 )).toEqual(Array(count).fill(1));
@@ -86,7 +87,7 @@ test.describe('pasting files', () => {
     await pasteFiles(page, [png()], { 'text/plain': 'screenshot.png' });
     await expect.poll(() => tree(page)).toBe('image(∅)');
     const [img] = await media(page);
-    expect(img.ref).toMatch(/^nabu-asset:/);
+    expect(img.ref).toMatch(/^nabu-asset:sha256-[0-9a-f]{64}$/);
     expect(img.status).toBe('ready');
     expect(await assetIds(page)).toEqual([img.ref.slice('nabu-asset:'.length)]);
     await imagesDisplay(page, 1);
@@ -99,7 +100,7 @@ test.describe('pasting files', () => {
     await expect.poll(async () => (await media(page))[0]?.status).toBe('pending');
     expect((await media(page))[0].ref).toMatch(/^nabu-pending:/);
     await imagesDisplay(page, 1); // the local preview is shown meanwhile
-    expect(await assetIds(page)).toEqual([]); // nothing stored in the document
+    expect(await page.evaluate(() => Object.keys((window as any).nabu.doc.getMap('assets').toJSON()))).toEqual([]); // never bytes in the document
     await page.evaluate(() => (window as any).__hostRelease());
     await expect.poll(async () => (await media(page))[0]?.status).toBe('ready');
     const [img] = await media(page);
@@ -120,7 +121,7 @@ test.describe('pasting files', () => {
     await pasteFiles(page, [png('a.png'), { name: 'clip.mp4', type: 'video/mp4' }, { name: 'doc.pdf', type: 'application/pdf' }, png('b.png')]);
     await expect.poll(async () => (await media(page)).map((m) => m.type + ':' + m.name)).toEqual(['image:a.png', 'video:clip.mp4', 'file:doc.pdf', 'image:b.png']);
     await expect.poll(() => tree(page)).toBe('image(∅) ; video(∅) ; file(∅) ; image(∅)');
-    expect(await assetIds(page)).toHaveLength(4);
+    expect(await assetIds(page)).toHaveLength(1); // the four files are the same bytes: one hash, one stored file
   });
 
   test('4 · an internal copy (application/x-nabu+json) wins over the files on the clipboard', async ({ page }) => {
@@ -147,7 +148,7 @@ test.describe('pasting files', () => {
     await expect.poll(() => tree(page)).toBe('p(Hello ) ; image(∅) ; image(∅) ; p(world)');
     await undo(page);
     await expect.poll(() => tree(page)).toBe('p(Hello world)');
-    expect(await assetIds(page)).toEqual([]);
+    expect(await assetIds(page)).toHaveLength(1); // the file (same bytes twice) stays known: storing it is not an undo step
     await redo(page);
     await expect.poll(() => tree(page)).toBe('p(Hello ) ; image(∅) ; image(∅) ; p(world)');
     await imagesDisplay(page, 2);
@@ -197,7 +198,7 @@ test.describe('files.importRemote', () => {
     await expect.poll(async () => (await media(page))[0]?.status).toBe('pending');
     await expect.poll(async () => (await media(page))[0]?.status).toBe('ready');
     const [img] = await media(page);
-    expect(img.ref).toMatch(/^nabu-asset:/);
+    expect(img.ref).toMatch(/^nabu-asset:sha256-[0-9a-f]{64}$/);
     expect(await assetIds(page)).toHaveLength(1);
     await imagesDisplay(page, 1);
     await undo(page);

@@ -208,7 +208,7 @@ describe('Files system', () => {
         expect(files.resolve('images/photo.jpg')).toBe('https://cdn.example.com/images/photo.jpg');
     });
 
-    it('Files.persist stores bytes in Loro and returns nabu-asset: ref (if URL.createObjectURL available)', async () => {
+    it('Files.persist stores the bytes in the asset store (not in Loro) and returns a nabu-asset:sha256 ref (if URL.createObjectURL available)', async () => {
         const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
         const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
         const { Files } = await import('$lib/files/files.svelte.js');
@@ -225,11 +225,14 @@ describe('Files system', () => {
         const fakeFile = new File([new Uint8Array([1, 2, 3])], 'test.png', { type: 'image/png' });
         const ref = await files.persist(fakeFile);
 
-        expect(ref).toMatch(/^nabu-asset:/);
+        expect(ref).toMatch(/^nabu-asset:sha256-[0-9a-f]{64}$/);
+        expect(files.store.size).toBe(1);
+        expect(Object.keys(files.assets.toJSON())).toHaveLength(0);
 
-        // resolve should return a non-empty objectURL
+        // resolve reads the store in the background (reactive): '' first, then a non-empty objectURL
+        expect(files.resolve(ref)).toBe('');
+        await new Promise((r) => setTimeout(r, 10));
         const url = files.resolve(ref);
-        expect(url).toBeTruthy();
-        expect(typeof url).toBe('string');
+        expect(url).toMatch(/^blob:/);
     });
 });
