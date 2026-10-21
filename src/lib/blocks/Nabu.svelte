@@ -14,7 +14,7 @@
 <div
     contenteditable="true"
     class="nabu-editor"
-    spellcheck="false"
+    spellcheck="true"
     translate="no"
     data-nabu-root="true"
     onbeforeinput={(e) => engine.handleBeforeinput(e)}

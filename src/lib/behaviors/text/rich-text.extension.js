@@ -124,6 +124,45 @@ function onKeyDown(nabu, event) {
     return nabu.BREAK;
 }
 
+/** `beforeinput` format types (browser / OS formatting commands) -> the mark they toggle. Sub/superscript have no mark here: ignored. */
+const FORMAT_INPUT_MARKS = /** @type {Record<string, string>} */ ({
+    formatBold: 'bold',
+    formatItalic: 'italic',
+    formatUnderline: 'underline',
+    formatStrikeThrough: 'strikethrough',
+});
+
+/** Marks `formatRemove` clears (links are content, not formatting: they stay). */
+const FORMAT_REMOVE_MARKS = ['bold', 'italic', 'underline', 'strikethrough', 'code'];
+
+/**
+ * Native formatting commands (Cmd+B from the OS menu, "Format > Bold", Touch Bar, accessibility APIs…) arrive as
+ * `beforeinput` events of type `formatBold` etc. They go through the same actions as the keyboard shortcuts.
+ * @param {Nabu} nabu
+ * @param {InputEvent} event
+ */
+function onBeforeInput(nabu, event) {
+    const type = event.inputType;
+    if (typeof type !== 'string' || !type.startsWith('format')) return;
+    event.preventDefault();
+    const mark = FORMAT_INPUT_MARKS[type];
+    if (mark) {
+        nabu.exec('mark:toggle', { mark });
+    } else if (type === 'formatRemove') {
+        const targets = collectMarkTargets(nabu);
+        if (!targets.length) {
+            if (nabu.selection.anchorBlock?.behaviors?.has('text')) {
+                nabu.storedMarks = Object.fromEntries(FORMAT_REMOVE_MARKS.map((name) => [name, false]));
+            }
+        } else {
+            nabu.transact(() => {
+                for (const { behavior, sel } of targets) for (const name of FORMAT_REMOVE_MARKS) behavior.removeMark(name, sel);
+            });
+        }
+    }
+    return nabu.BREAK;
+}
+
 /**
  * A link href that may enter the model: http(s), mailto, tel, relative, `#fragment`. Anything else
  * (`javascript:`, `data:`, `vbscript:`…) is refused with a warning. Returns the href, or null.
@@ -177,5 +216,5 @@ export const RichTextExtension = new Extension('rich-text', {
         'code':          (nabu) => toggleMark(nabu, 'code'),
         'strikethrough': (nabu) => toggleMark(nabu, 'strikethrough'),
     },
-    hooks: { onKeyDown }
+    hooks: { onKeyDown, onBeforeInput }
 });

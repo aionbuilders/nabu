@@ -18,6 +18,7 @@
         bind:this={block.element}
         data-block-id={block.id}
         data-block-type="code"
+        spellcheck="false"
         data-placeholder={block.placeholder}
         class="nabu-code"
         class:debug={block.nabu.debugging}

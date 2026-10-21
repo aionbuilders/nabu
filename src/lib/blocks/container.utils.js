@@ -321,12 +321,14 @@ export function handleContainerBeforeInput(container, nabu, event) {
 
     const inputType = event.inputType;
     const typed = inputType === 'insertText' ? (event.data || '')
+        : (inputType === 'insertReplacementText' || inputType === 'insertFromYank') ? (event.data || event.dataTransfer?.getData?.('text/plain') || '')
         : (inputType === 'insertLineBreak' || inputType === 'insertSoftLineBreak') ? '\n'
         : null;
     const isDeletion = inputType.startsWith('delete');
     const isParagraph = inputType === 'insertParagraph';
     if (!isDeletion && !isParagraph && typed === null) {
         if (inputType.startsWith('history')) return true; // undo / redo go through the keydown handler
+        if (inputType.startsWith('format') || inputType === 'insertTranspose') return true; // formatting: extension hooks; transpose: meaningless across blocks
         nabu.warn('Unhandled input type in container:', inputType);
         return false;
     }

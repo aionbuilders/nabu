@@ -161,6 +161,23 @@ export function nextGraphemeLength(text, index) {
     return code >= 0xD800 && code <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF ? 2 : 1;
 }
 
+/**
+ * Length (UTF-16 units) of the user-perceived character ENDING at `index` — the unit one Backspace press removes.
+ * Mirror of {@link nextGraphemeLength}: `Intl.Segmenter` handles ZWJ sequences, flags and combining marks; without it a
+ * surrogate pair is kept whole. A caret inside a cluster deletes back to the start of that cluster. 0 at the start.
+ * @param {string} text @param {number} index
+ */
+export function prevGraphemeLength(text, index) {
+    if (index <= 0 || index > text.length) return 0;
+    if (graphemeSegmenter) {
+        const seg = graphemeSegmenter.segment(text).containing(index - 1);
+        if (seg) return index - seg.index;
+    }
+    const low = text.charCodeAt(index - 1);
+    const high = text.charCodeAt(index - 2);
+    return low >= 0xDC00 && low <= 0xDFFF && high >= 0xD800 && high <= 0xDBFF ? 2 : 1;
+}
+
 export class TextBehavior {
     /** @param {Block} block @param {LoroText} [container] */
     constructor(block, container) {
@@ -315,7 +332,32 @@ export class TextBehavior {
             case "deleteWordForward":
                 return this.handleDeleteWordForward(event, selection);
             case "deleteSoftLineBackward":
+            case "deleteHardLineBackward":
                 return this.handleDeleteSoftLineBackward(event, selection);
+            case "deleteSoftLineForward":
+            case "deleteHardLineForward":
+                return this.handleDeleteSoftLineForward(event, selection);
+            case "deleteEntireSoftLine":
+            case "deleteEntireHardLine":
+                return this.handleDeleteEntireLine(event, selection);
+            case "deleteContent":
+                return this.handleDeleteContent(event, selection);
+            case "insertReplacementText":
+                return this.handleInsertReplacementText(event, selection);
+            case "insertFromYank":
+                return this.handleInsertFromYank(event, selection);
+            case "insertTranspose":
+                return this.handleInsertTranspose(event, selection);
+            case "formatBold":
+            case "formatItalic":
+            case "formatUnderline":
+            case "formatStrikeThrough":
+            case "formatSubscript":
+            case "formatSuperscript":
+            case "formatRemove":
+                // Formatting is the rich-text extension's business (its `onBeforeInput` hook already ran); without it: nothing.
+                event.preventDefault();
+                return true;
             case "insertParagraph":
                 return this.handleInsertParagraph(event, selection);
             case "historyUndo":
@@ -404,8 +446,11 @@ export class TextBehavior {
             }
         } else {
             event.preventDefault();
-            const length = sel.isCollapsed ? 1 : sel.to - sel.from;
-            const index = sel.isCollapsed ? sel.from - 1 : sel.from;
+            // A collapsed caret deletes the PREVIOUS grapheme cluster (a ZWJ emoji, a flag, a letter + combining accent,
+            // a surrogate pair — never half of one); a selection inside the block is deleted whole.
+            const length = sel.isCollapsed ? prevGraphemeLength(this.text, sel.from) : sel.to - sel.from;
+            const index = sel.isCollapsed ? sel.from - length : sel.from;
+            if (length <= 0) return true;
             this.delete({index, length});
             this.block.commit();
             
@@ -521,19 +566,175 @@ export class TextBehavior {
     }
 
     /**
-     * Deletes from the start of the current soft line to the cursor
-     * (Cmd+Backspace on Mac).
+     * Start of the line holding `index` (after the previous "\n", or 0). A model line is a "\n"-delimited run: soft and
+     * hard lines are the same thing here (the model knows no visual wrapping).
+     * @param {number} index
+     */
+    #lineStart(index) {
+        return index <= 0 ? 0 : this.text.lastIndexOf('\n', index - 1) + 1;
+    }
+
+    /** End of the line holding `index` (the next "\n", or the end of the text). @param {number} index */
+    #lineEnd(index) {
+        const nl = this.text.indexOf('\n', index);
+        return nl === -1 ? this.text.length : nl;
+    }
+
+    /**
+     * Deletes `[from, to)` as ONE edit (one commit), caret at `from`. Always returns true (the event is handled).
+     * @param {number} from @param {number} to
+     */
+    #deleteSpan(from, to) {
+        if (to > from) {
+            this.delete({ index: from, length: to - from });
+            this.block.commit();
+            tick().then(() => this.nabu.selection.setCursor(this.block, from));
+        }
+        return true;
+    }
+
+    /**
+     * Deletes from the start of the current line to the cursor (Cmd+Backspace on Mac; `deleteHardLineBackward`).
+     * A selection inside the block is deleted whole.
      * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
      */
     handleDeleteSoftLineBackward(event, sel = this.selection) {
         if (!sel) return;
-        const lastNL = this.text.lastIndexOf('\n', sel.from - 1);
-        const deleteFrom = lastNL === -1 ? 0 : lastNL + 1;
-        if (deleteFrom < sel.from) {
-            this.delete({ index: deleteFrom, length: sel.from - deleteFrom });
-            this.block.commit();
-            tick().then(() => this.nabu.selection.setCursor(this.block, deleteFrom));
+        if (!sel.isCollapsed) return this.#deleteSpan(sel.from, sel.to);
+        return this.#deleteSpan(this.#lineStart(sel.from), sel.from);
+    }
+
+    /**
+     * Deletes from the cursor to the end of the current line (Cmd+Fn+Delete, Ctrl+K style; `deleteHardLineForward`).
+     * At the end of a line (before a "\n") or of the block nothing is deleted. A selection is deleted whole.
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleDeleteSoftLineForward(event, sel = this.selection) {
+        if (!sel) return;
+        if (!sel.isCollapsed) return this.#deleteSpan(sel.from, sel.to);
+        return this.#deleteSpan(sel.from, this.#lineEnd(sel.from));
+    }
+
+    /**
+     * Deletes the whole line(s) touched by the selection (`deleteEntireSoftLine`): the text between the surrounding "\n"
+     * (or block edges), the line breaks themselves are kept. Caret at the start of the emptied line.
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleDeleteEntireLine(event, sel = this.selection) {
+        if (!sel) return;
+        return this.#deleteSpan(this.#lineStart(sel.from), this.#lineEnd(sel.to));
+    }
+
+    /**
+     * `deleteContent`: delete the selection (no direction). A collapsed caret deletes nothing.
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleDeleteContent(event, sel = this.selection) {
+        if (!sel) return;
+        return this.#deleteSpan(sel.from, sel.to);
+    }
+
+    /**
+     * The attributes (marks) of the run holding the character at `index`, or null.
+     * @param {number} index
+     * @returns {Record<string, any> | null}
+     */
+    #marksAt(index) {
+        let offset = 0;
+        for (const op of this.container.toDelta()) {
+            if (typeof op.insert !== 'string') continue;
+            const end = offset + op.insert.length;
+            if (index >= offset && index < end) return op.attributes ? { ...op.attributes } : null;
+            offset = end;
         }
+        return null;
+    }
+
+    /**
+     * Inserts `text` at `index` carrying `marks` (the inserted run only; marks are exact, they never leak to neighbours).
+     * @param {number} index @param {string} text @param {Record<string, any> | null} marks
+     */
+    #insertWithMarks(index, text, marks) {
+        if (!text) return;
+        this.insert(index, text);
+        if (!marks) return;
+        const range = { from: index, to: index + text.length, isCollapsed: false, direction: /** @type {const} */ ('none') };
+        for (const [name, value] of Object.entries(marks)) if (value) this.applyMark(name, value, range);
+    }
+
+    /**
+     * `insertReplacementText`: a spellcheck / autocorrect replacement. The replacement text comes in
+     * `dataTransfer` (`text/plain`) or `data`; the range to replace in `getTargetRanges()` (mapped to model offsets), else
+     * the selection. The replaced run's marks are kept on the new text. One edit (one undo step), caret after it.
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleInsertReplacementText(event, sel = this.selection) {
+        const text = event.dataTransfer?.getData?.('text/plain') || event.data || '';
+        const element = this.block.element;
+        const target = typeof event.getTargetRanges === 'function' ? event.getTargetRanges()[0] : null;
+        let from;
+        let to;
+        if (target && element && element.contains(target.startContainer) && element.contains(target.endContainer)) {
+            from = this.calculateOffset(target.startContainer, target.startOffset);
+            to = this.calculateOffset(target.endContainer, target.endOffset);
+        } else if (sel) {
+            from = sel.from;
+            to = sel.to;
+        } else {
+            return true;
+        }
+        if (to < from) [from, to] = [to, from];
+        from = Math.max(0, Math.min(from, this.text.length));
+        to = Math.max(from, Math.min(to, this.text.length));
+        if (from === to && !text) return true;
+        const marks = from < to ? this.#marksAt(from) : null;
+        if (to > from) this.delete({ index: from, length: to - from });
+        this.#insertWithMarks(from, text, marks);
+        this.nabu.storedMarks = null;
+        this.block.commit();
+        tick().then(() => this.nabu.selection.setCursor(this.block, from + text.length));
+        return true;
+    }
+
+    /**
+     * `insertFromYank` (Emacs-style yank on macOS): the text is inserted as plain text at the caret, replacing the selection.
+     * No input rule runs (it is a paste, not typing).
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleInsertFromYank(event, sel = this.selection) {
+        if (!sel) return;
+        const text = event.data || event.dataTransfer?.getData?.('text/plain') || '';
+        if (!text) return true;
+        if (!sel.isCollapsed) this.delete({ index: sel.from, length: sel.to - sel.from });
+        this.insert(sel.from, text);
+        this.nabu.storedMarks = null;
+        this.block.commit();
+        tick().then(() => this.nabu.selection.setCursor(this.block, sel.from + text.length));
+        return true;
+    }
+
+    /**
+     * `insertTranspose` (macOS Ctrl+T): swaps the two graphemes around the caret; at the end of the text, the last two.
+     * Marks travel with their character. No-op with a selection, at the start, with a single character or across a line break.
+     * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
+     */
+    handleInsertTranspose(event, sel = this.selection) {
+        if (!sel || !sel.isCollapsed) return true;
+        const text = this.text;
+        const end = sel.from >= text.length ? text.length : sel.from + nextGraphemeLength(text, sel.from);
+        const middle = end - prevGraphemeLength(text, end); // boundary between the two graphemes
+        const start = middle - prevGraphemeLength(text, middle);
+        if (middle <= start || end <= middle) return true;
+        const left = text.slice(start, middle);
+        const right = text.slice(middle, end);
+        if (left === '\n' || right === '\n') return true;
+        const leftMarks = this.#marksAt(start);
+        const rightMarks = this.#marksAt(middle);
+        this.delete({ index: start, length: end - start });
+        this.#insertWithMarks(start, right, rightMarks);
+        this.#insertWithMarks(start + right.length, left, leftMarks);
+        this.block.commit();
+        tick().then(() => this.nabu.selection.setCursor(this.block, end));
         return true;
     }
 
