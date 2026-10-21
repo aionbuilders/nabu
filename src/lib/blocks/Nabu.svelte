@@ -11,10 +11,16 @@
     });
 </script>
 
+<!-- With spellcheck off, the data-gramm* attributes are the documented opt-out hints of the Grammarly extension (it would
+     otherwise inject its own DOM into the editor, which Nabu does not support). Code blocks set spellcheck="false" themselves. -->
 <div
     contenteditable="true"
     class="nabu-editor"
-    spellcheck="true"
+    spellcheck={engine.spellcheck ? 'true' : 'false'}
+    lang={engine.lang}
+    data-gramm={engine.spellcheck ? undefined : 'false'}
+    data-gramm_editor={engine.spellcheck ? undefined : 'false'}
+    data-enable-grammarly={engine.spellcheck ? undefined : 'false'}
     translate="no"
     data-nabu-root="true"
     onbeforeinput={(e) => engine.handleBeforeinput(e)}

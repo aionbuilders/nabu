@@ -10,6 +10,7 @@ import { tick } from 'svelte';
 import { Files } from '../files/files.svelte.js';
 import { Pulse } from '@aionbuilders/pulse';
 import { normalizePlaceholders } from '../utils/placeholders.js';
+import { normalizeLang } from '../utils/spellcheck.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection } from './undo-selection.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
@@ -34,6 +35,11 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 * @property {import('../utils/placeholders.js').PlaceholdersOption} [placeholders] - Hint text of empty blocks.
 *   `false`: none. `true` / omitted: defaults (shown on the empty block holding the cursor).
 *   Object: `{ show?: 'focus' | 'empty', text?: Record<blockType, string | false | ((block) => string | false)> }`.
+* @property {boolean} [spellcheck] - Browser spellcheck on the editor (default `true`). `false` turns it off and adds the opt-out
+*   hints of the Grammarly extension (`data-gramm="false"`, ...). Code blocks are never spellchecked. Reactive: `nabu.spellcheck`.
+* @property {string} [lang] - Language of the content, a BCP 47 tag (`'fr'`, `'en-GB'`). Set on the root as `lang`, so the browser's
+*   spellchecker, hyphenation and screen readers use it. Unset: inherits the page language. An invalid tag is ignored (warning).
+*   Reactive: `nabu.lang`.
 */
 
 /**
@@ -153,6 +159,8 @@ export class Nabu {
         this.extensions = init.extensions || [];
         this.fileConfig = init.files || {};
         this.placeholders = normalizePlaceholders(init.placeholders);
+        this.spellcheck = init.spellcheck !== false;
+        this.lang = init.lang;
         
         if (this.extensions?.length) {
             for (const ext of this.extensions) {
@@ -323,6 +331,27 @@ export class Nabu {
      * @type {import('../utils/placeholders.js').ResolvedPlaceholders}
      */
     placeholders = $state.raw(normalizePlaceholders());
+
+    /**
+     * Resolved `spellcheck` option (see NabuInit). Reactive: assign to change it at runtime.
+     * @type {boolean}
+     */
+    spellcheck = $state.raw(true);
+
+    /** @type {string | undefined} */
+    #lang = $state.raw(undefined);
+
+    /**
+     * Resolved `lang` option (see NabuInit): a valid BCP 47 tag, or `undefined` (inherit the page language).
+     * Reactive: assign to change it at runtime; an invalid value is ignored (warning) and leaves it unchanged.
+     * @type {string | undefined}
+     */
+    get lang() { return this.#lang; }
+    set lang(value) {
+        const { lang, valid } = normalizeLang(value);
+        if (!valid) { this.warn(`Ignoring invalid "lang" (not a BCP 47 tag): ${String(value)}`); return; }
+        this.#lang = lang;
+    }
 
     /**
      * Pending inline formatting for the next typed character (active marks at a

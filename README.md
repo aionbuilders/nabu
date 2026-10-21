@@ -173,6 +173,21 @@ createFullEditor({
 - Defaults live on the block classes: a custom block declares `static placeholder = 'My hint'` (string, `false` or `(block) => string | false`). The resolved value is exposed as `block.placeholder` and rendered through `data-placeholder` (custom block components: `data-placeholder={block.placeholder}`).
 - Style: it is drawn with a `::after` pseudo-element (never selectable, never affects the caret or the text). Set the color with the `--nb-text-placeholder` CSS variable (default: the text color at 35% opacity, so it works on light and dark backgrounds).
 
+### Spellcheck & language
+
+```js
+createFullEditor({ spellcheck: false });   // browser spellcheck off (default: true)
+createFullEditor({ lang: 'fr' });          // BCP 47 tag; default: inherit the page language
+
+nabu.spellcheck = false;                   // both are reactive at runtime
+nabu.lang = 'en-GB';
+```
+
+- `spellcheck` drives the `spellcheck` attribute of the editor root. Code blocks are never spellchecked. When it is `false`, the root also gets `data-gramm="false"`, `data-gramm_editor="false"` and `data-enable-grammarly="false"`, the opt-out hints honored by the Grammarly extension.
+- `lang` sets `lang` on the root, so the browser's spellchecker, hyphenation and screen readers use that language. An invalid tag is ignored (with `nabu.warn`); unset means no attribute.
+- Privacy: Chrome's enhanced spell check may send the text you type to Google. If your integrators handle sensitive documents, set `spellcheck: false`.
+- Browser extensions such as Grammarly inject their own DOM into editable areas. This is not supported; the opt-out attributes above are only a hint, set when spellcheck is off.
+
 ## Extensions
 
 All block types and behaviors are provided as extensions. Pass them to the `Nabu` constructor:

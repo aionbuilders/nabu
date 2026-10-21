@@ -47,6 +47,9 @@ export const FullPreset =     [
  * @param {typeof ParagraphExtension[]} [options.preset] - Base preset (default: FullPreset)
  * @param {typeof ParagraphExtension[]} [options.extensions] - Extra extensions to append
  * @param {import('./files/files.svelte.js').FilesConfig} [options.files] - File/upload config (forwarded to Nabu)
+ * @param {import('./utils/placeholders.js').PlaceholdersOption} [options.placeholders] - Forwarded to Nabu
+ * @param {boolean} [options.spellcheck] - Forwarded to Nabu (default `true`)
+ * @param {string} [options.lang] - Forwarded to Nabu (BCP 47 tag of the content)
  * @returns {Nabu}
  *
  * @example

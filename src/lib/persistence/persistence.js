@@ -54,6 +54,8 @@ export { loadSnapshot, saveSnapshot, deleteSnapshot, IndexedDBAssetStore, Indexe
  *   `{ mode: 'compact', retain, onBeforeCompact }`: compact at open (`retain`: ms, `'30d'`, `'12h'`, or `0` = keep no past history).
  * @param {import('../utils/placeholders.js').PlaceholdersOption} [options.placeholders] - Forwarded to Nabu
  *   (any other Nabu init option, e.g. `files`, is forwarded too; `files.store` replaces the default IndexedDB asset store)
+ * @param {boolean} [options.spellcheck] - Forwarded to Nabu (default `true`)
+ * @param {string} [options.lang] - Forwarded to Nabu (BCP 47 tag of the content)
  * @returns {Promise<Nabu>}
  *
  * @example

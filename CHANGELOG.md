@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Editor options — `spellcheck` and `lang`
+- New init options (accepted by `new Nabu()`, `createEditor` / the factories and `createPersistedEditor`), both reactive at runtime (`nabu.spellcheck`, `nabu.lang`). `spellcheck` (default `true`) drives the root's `spellcheck` attribute; when `false` the root also gets `data-gramm="false"`, `data-gramm_editor="false"` and `data-enable-grammarly="false"` (opt-out hints of the Grammarly extension). Code blocks always stay `spellcheck="false"`. `lang` (BCP 47 tag, invalid -> ignored with `nabu.warn`) sets `lang` on the root for the browser's spellchecker / hyphenation / screen readers; unset = inherit the page language. See the README ("Spellcheck & language", including a privacy note about Chrome's enhanced spell check).
+
 ### Files — behavior change (ADR 014, lot 1)
 - **Files are no longer stored inside the Loro document.** The bytes of an image / video / file go to a separate **asset store**; the document only holds a reference and a small metadata index. Ref format: `nabu-asset:sha256-<64 hex>` (SHA-256 of the bytes), so the same file added twice (picker, paste, import) is stored ONCE and gets the same ref. The Loro map `assetIndex` holds `hash -> { mime, name, size, url? }` (never bytes; `url` is reserved for the host location, lot 2). Before, every upload stayed forever in the saved snapshot (Loro keeps history), even after the block was deleted.
 - Stores (`files/store.js`, `persistence/asset-store.js`): `MemoryAssetStore` for `createEditor()` / `new Nabu()` (lost with the page, like the document); `IndexedDBAssetStore` for `createPersistedEditor()` (database `nabu`, object store `assets`, shared by all the documents of the origin). New option `files.store` to plug your own (`has`, `get`, `put`, `delete`, `keys`, optional `stat`). The IndexedDB store also keeps `docRefs[docId] -> hashes`, refreshed on every save (used by the later cleanup).
