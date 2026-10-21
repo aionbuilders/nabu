@@ -141,6 +141,26 @@ export function markdownDestination(/** @type {string} */ href) {
 * @typedef {NabuNode<{type: "paragraph", text: LoroText}>} TextNode
 */
 
+/** @type {Intl.Segmenter | null} */
+const graphemeSegmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+
+/**
+ * Length (UTF-16 units) of the user-perceived character starting at `index` — the unit one Delete press removes.
+ * `Intl.Segmenter` handles ZWJ sequences, flags and combining marks; without it a surrogate pair is kept whole.
+ * A caret inside a cluster deletes up to the end of that cluster. 0 at the end of the text.
+ * @param {string} text @param {number} index
+ */
+export function nextGraphemeLength(text, index) {
+    if (index < 0 || index >= text.length) return 0;
+    if (graphemeSegmenter) {
+        const seg = graphemeSegmenter.segment(text).containing(index);
+        if (seg) return seg.index + seg.segment.length - index;
+    }
+    const code = text.charCodeAt(index);
+    const low = text.charCodeAt(index + 1);
+    return code >= 0xD800 && code <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF ? 2 : 1;
+}
+
 export class TextBehavior {
     /** @param {Block} block @param {LoroText} [container] */
     constructor(block, container) {
@@ -415,7 +435,19 @@ export class TextBehavior {
                 
                 tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
             }
+            return;
         }
+        // Everywhere else the native mutation is prevented, so the key must be handled here or it is swallowed:
+        // a selection inside the block is deleted whole, a collapsed caret deletes the NEXT grapheme cluster
+        // (a ZWJ emoji, a flag, a letter + combining accent, a surrogate pair — never half of one).
+        event.preventDefault();
+        const index = sel.from;
+        const length = sel.isCollapsed ? nextGraphemeLength(this.text, sel.from) : sel.to - sel.from;
+        if (length <= 0) return true;
+        this.delete({ index, length });
+        this.block.commit();
+        tick().then(() => this.nabu.selection.setCursor(this.block, index));
+        return true;
     }
 
     /**

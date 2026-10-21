@@ -14,6 +14,16 @@ export class NabuSelection extends SvelteSelection {
         super();
         this.nabu = nabu;
 
+        // Every caret the editor itself places (after an action, an undo…) is remembered for undo / redo (ADR 015): it is
+        // where that action ended. `setBaseAndExtent` is an own-property arrow function of the base class: wrap it.
+        const placeSelection = this.setBaseAndExtent;
+        /** @param {Node} anchorNode @param {number} anchorOffset @param {Node} focusNode @param {number} focusOffset */
+        this.setBaseAndExtent = (anchorNode, anchorOffset, focusNode, focusOffset) => {
+            const done = placeSelection(anchorNode, anchorOffset, focusNode, focusOffset);
+            this.nabu.captureUndoSelection?.('settle');
+            return done;
+        };
+
         $effect.root(() => {
             $effect(() => {
                 if (this.blocks) {
@@ -40,6 +50,7 @@ export class NabuSelection extends SvelteSelection {
                     // (root handler, slash menu…): make sure they read the CURRENT caret,
                     // not the one from a not-yet-delivered `selectionchange`.
                     this.sync();
+                    this.nabu.captureUndoSelection?.(); // the selection an undo step pushed by this key gives back
                     if (e.isComposing || e.keyCode === 229) return; // IME composition: hands off the caret
                     // A caret left on a dead position by the PREVIOUS key is fixed (with that key's direction)
                     // before this one acts on it.
@@ -72,13 +83,17 @@ export class NabuSelection extends SvelteSelection {
                     this.#arrowStart = null;
                     if (start && start.key === e.key) this.#openTrailingIfStuck(start);
                 };
-                const onMousedown = () => { this.nabu.storedMarks = null; this.#pendingDirection = null; };
+                const onMousedown = () => { this.nabu.storedMarks = null; this.#pendingDirection = null; this.nabu.sealUndoEnd?.(); };
+                // Fires after every selection move, the user's and the editor's: the freshest "selection before the next change".
+                const onSelectionChange = () => this.nabu.captureUndoSelection?.();
+                document.addEventListener('selectionchange', onSelectionChange);
                 document.addEventListener('keydown', onKeydown, true);
                 document.addEventListener('keyup', onKeyup, true);
                 document.addEventListener('mousedown', onMousedown, true);
                 return () => {
                     document.removeEventListener('keyup', onKeyup, true);
                     document.removeEventListener('keydown', onKeydown, true);
+                    document.removeEventListener('selectionchange', onSelectionChange);
                     document.removeEventListener('mousedown', onMousedown, true);
                 };
             });

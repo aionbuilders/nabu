@@ -10,6 +10,7 @@ import { tick } from 'svelte';
 import { Files } from '../files/files.svelte.js';
 import { Pulse } from '@aionbuilders/pulse';
 import { normalizePlaceholders } from '../utils/placeholders.js';
+import { captureSelection, explicitSelection, legacySelection, restoreSelection } from './undo-selection.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
 
@@ -55,27 +56,6 @@ function inheritedMarkAt(behavior, pos, name) {
 }
 
 /**
- * @typedef {Object} UndoCursor  Caret stored with an undo step.
- * @property {string} blockId
- * @property {number} offset
- * @property {number[]} [path]  child index at each level, root first (see blockPath)
- */
-
-/**
- * Tree path of a block: the child index at each level, root first. Read from the Block's own
- * `parent` / `index` — still valid for a block destroyed in the very transaction being recorded,
- * whose Loro node can no longer tell (a deleted node has no index).
- * @param {Block} block
- * @returns {number[]}
- */
-function blockPath(block) {
-    /** @type {number[]} */
-    const path = [];
-    for (let b = /** @type {any} */ (block); b; b = b.parent) path.unshift(b.index);
-    return path;
-}
-
-/**
  * True for the input types that can trigger a block transform (typing / Enter), as opposed to
  * deletions.
  * @param {Event | { inputType?: string }} e
@@ -118,6 +98,20 @@ export class Nabu {
      * @type {{ block: Block, offset: number } | null}
      */
     #undoCursor = null;
+    /**
+     * The selection as it was before the change now being recorded, kept as Loro cursors (see undo-selection.js): refreshed by
+     * {@link Nabu#captureUndoSelection} while the model and the DOM agree, handed to the UndoManager when it pushes a step.
+     * @type {import('./undo-selection.js').UndoSelection | null}
+     */
+    #undoSel = null;
+    /** Commits and undo / redo whose render is still pending: the DOM lags the model, so the selection must not be captured. */
+    #busy = 0;
+    /** Counter end of the undo step just pushed: the next settled selection is where that action ENDED (what redo restores). */
+    #endKey = /** @type {number | null} */ (null);
+    /** Counter end of the step being undone (set by its pop, read by the redo step pushed right after). */
+    #undoneEnd = /** @type {number | null} */ (null);
+    /** Selection where each recent action ended, by the counter end of its undo step. @type {Map<number, import('./undo-selection.js').UndoSelection>} */
+    #actionEnds = new Map();
 
     /** @param {NabuInit} init */
     constructor(init = {}) {
@@ -136,30 +130,23 @@ export class Nabu {
             // Background completions (e.g. a pasted file finishing its upload) are not undo steps of their own.
             excludeOriginPrefixes: ['nabu:silent'],
             mergeInterval: this.#mergeInterval,
-            onPush: () => {
+            onPush: (isUndo, range) => {
                 if (this.#isolatedSteps > 0) this.#isolatedSteps--;
-                // Save cursor position for restoration on undo/redo
+                // The selection to give back when this step is popped. An undo step: the selection right BEFORE the change
+                // (it is pushed after the commit, but the captured selection predates the change). The redo step pushed by
+                // an undo: where the undone action ENDED. A caret decided by the caller (block shortcut) wins.
                 const explicit = this.#undoCursor;
                 this.#undoCursor = null;
-                const sel = this.selection;
-                const block = explicit ? explicit.block : sel?.anchorBlock;
-                if (!block) return { value: null, cursors: [] };
-
-                return {
-                    value: {
-                        blockId: block.id,
-                        offset: explicit ? explicit.offset : sel.startOffset,
-                        // Tree path (child index at each level): Loro gives a block RESTORED by undo
-                        // (after a delete) a new id, so the id alone can't find it again.
-                        path: blockPath(block),
-                    },
-                    cursors: []
-                };
+                const ended = !isUndo && this.#undoneEnd !== null ? this.#actionEnds.get(this.#undoneEnd) : undefined;
+                const stored = (explicit ? explicitSelection(explicit.block, explicit.offset) : ended ?? this.#undoSel) ?? legacySelection(this);
+                this.#endKey = isUndo ? range?.end ?? null : null;
+                return { value: /** @type {any} */ (stored), cursors: [] };
             },
-            onPop: (_, storedValue) => {
-                // Restore cursor position after undo/redo
-                const value = /** @type {UndoCursor | null} */ (storedValue?.value);
-                if (value && typeof value === 'object' && 'blockId' in value) this.#restoreCursor(value);
+            onPop: (isUndo, storedValue, range) => {
+                this.#undoneEnd = isUndo ? range?.end ?? null : null;
+                this.#endKey = null;
+                const value = /** @type {any} */ (storedValue?.value);
+                if (value && typeof value === 'object' && 'anchor' in value) restoreSelection(this, value);
             }
         });
 
@@ -461,7 +448,13 @@ export class Nabu {
                 this.#isolateNextCommits();
             }
         }
-        this.doc.commit(typeof origin === 'string' ? { origin } : undefined);
+        this.#busy++; // until the render: the DOM lags the model, no selection capture meanwhile (see captureUndoSelection)
+        try {
+            this.doc.commit(typeof origin === 'string' ? { origin } : undefined);
+        } catch (err) {
+            this.#busy--;
+            throw err;
+        }
         if (continuation && this.#isolating) {
             // The merge above must not leak: the typing after the operation stays isolated
             // (a merged commit may still call onPush, so don't count it as a pushed step).
@@ -473,6 +466,9 @@ export class Nabu {
             this.undoManager.setMergeInterval(this.#mergeInterval);
         }
         await tick();
+        this.#busy--;
+        // Rendered: the selection is where the action left it (the caller may still move it, which is captured again).
+        this.captureUndoSelection('settle');
     }
 
     /**
@@ -617,56 +613,6 @@ export class Nabu {
     }
 
     /**
-     * Put the caret back after an undo / redo. The stored block may have been destroyed and restored
-     * under a new id (Loro), so resolve it by id when it is still alive, else by its tree path,
-     * else the nearest text block; the offset is clamped to the block's text.
-     * @param {UndoCursor} value
-     * @param {number} [attempt]  retries while the (re)created block is not rendered yet
-     */
-    #restoreCursor(value, attempt = 0) {
-        tick().then(() => {
-            const target = this.#resolveCursor(value);
-            if (!target) return;
-            if (!target.block.element && attempt < 3) return this.#restoreCursor(value, attempt + 1);
-            this.selection.setCursor(target.block, target.offset);
-        });
-    }
-
-    /**
-     * @param {UndoCursor} value
-     * @returns {{ block: Block, offset: number } | null}
-     */
-    #resolveCursor(value) {
-        /** @param {Block | undefined | null} b */
-        const alive = (b) => !!b && !b.node.isDeleted?.() && this.tree.has(b.node.id);
-        /** @param {Block} b */
-        const withText = (b) => b.behaviors?.has('text');
-        /** @param {Block} b */
-        const clamp = (b) => Math.max(0, Math.min(value.offset, b.behaviors.get('text')?.text?.length ?? 0));
-
-        const byId = this.blocks.get(value.blockId);
-        if (alive(byId) && withText(/** @type {Block} */ (byId))) {
-            return { block: /** @type {Block} */ (byId), offset: clamp(/** @type {Block} */ (byId)) };
-        }
-
-        // Walk the stored path as far as it still exists…
-        /** @type {Block | null} */
-        let found = null;
-        /** @type {any} */
-        let level = this;
-        for (const i of value.path ?? []) {
-            const next = level.children?.[i];
-            if (!next) break;
-            found = next;
-            level = next;
-        }
-        // …then settle on a text block: that one, else its first text descendant / following block.
-        if (found && !withText(found)) found = found.findForward(withText);
-        if (!found) found = this.children.find(withText) ?? this.children[0]?.findForward(withText) ?? null;
-        return found ? { block: found, offset: clamp(found) } : null;
-    }
-
-    /**
      * True when every selected text run carries the given mark.
      * Reactive: reads block.selected and the behaviors' selections/deltas,
      * so it can be used directly in component templates (e.g. FloatingToolbar).
@@ -688,22 +634,49 @@ export class Nabu {
     }
 
     /**
-     * Undo the last operation
+     * Undo the last operation. The selection as it was before that operation comes back (see ADR 015).
      */
     undo() {
-        if (this.undoManager.canUndo()) {
-            this.undoManager.undo();
-        }
+        if (this.undoManager.canUndo()) this.#whileRendering(() => this.undoManager.undo());
     }
 
     /**
-     * Redo the last undone operation
+     * Redo the last undone operation. The selection comes back where that operation ended.
      */
     redo() {
-        if (this.undoManager.canRedo()) {
-            this.undoManager.redo();
+        if (this.undoManager.canRedo()) this.#whileRendering(() => this.undoManager.redo());
+    }
+
+    /**
+     * Run `fn` (an undo / redo, whose render is asynchronous) with the selection capture off until it is rendered.
+     * @param {() => void} fn
+     */
+    #whileRendering(fn) {
+        this.#busy++;
+        try { fn(); } finally { tick().then(() => { this.#busy--; }); }
+    }
+
+    /**
+     * Remember the live selection as the one an undo step pushed from now on gives back (ADR 015). Called wherever the selection
+     * changes or an input starts (selection change, key down, programmatic caret placement), always while the model and the DOM
+     * agree: it does nothing during a composition, while a commit / undo is rendering, and while a transaction is pending (the
+     * Loro cursors have to bind to the text as it was BEFORE the change).
+     * @param {'user' | 'settle'} [source]  'settle' = the editor itself placed the selection after an action: it is where that
+     *   action ended (what a redo gives back). 'user' = the user moved it.
+     */
+    captureUndoSelection(source = 'user') {
+        if (this.#composing || this.#busy > 0 || this.doc.getPendingTxnLength() > 0) return;
+        const snap = captureSelection(this);
+        if (!snap) return;
+        this.#undoSel = snap;
+        if (source === 'settle' && this.#endKey !== null) {
+            this.#actionEnds.set(this.#endKey, snap);
+            if (this.#actionEnds.size > 200) this.#actionEnds.delete(/** @type {number} */ (this.#actionEnds.keys().next().value));
         }
     }
+
+    /** A pointer interaction starts: the selection that follows is the user's, no longer where the last action ended. */
+    sealUndoEnd() { this.#endKey = null; }
 
     /** Clear the pending stored marks. */
     clearStoredMarks() { this.storedMarks = null; }

@@ -26,6 +26,7 @@ const CORE_FILES = [
   'blocks/megablock.svelte.js',
   'blocks/container.utils.js',
   'blocks/selection.svelte.js',
+  'blocks/undo-selection.js',
   'utils/extensions.js',
   'blocks/block.extension.js',
   'ui/slash-menu.svelte.js',
