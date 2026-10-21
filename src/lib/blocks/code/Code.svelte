@@ -22,7 +22,7 @@
         class="nabu-code"
         class:debug={block.nabu.debugging}
         class:selected={block.selected}
-    ><code>{block.text || '\n'}</code></pre>
+    ><code>{block.text || '\n'}{#if block.text.endsWith('\n')}<br data-nabu-filler>{/if}</code></pre>
 </div>
 
 <style>

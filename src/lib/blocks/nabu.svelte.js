@@ -946,6 +946,7 @@ export class Nabu {
         const sel = behavior?.selection;
         this.#compositionStartBlock = anchor;
         this.#compositionStartOffset = sel?.from ?? 0;
+        /** @type {any} */ (behavior)?.snapshotForComposition?.();
     }
 
     /**
@@ -962,6 +963,8 @@ export class Nabu {
      */
     handleCompositionEnd(e) {
         this.#composing = false;
+        const composedIn = this.#compositionStartBlock?.behaviors?.get('text');
+        /** @type {any} */ (composedIn)?.restoreAfterComposition?.(e.data || ''); // before the model catches up: no duplicate of the composed text
         this.#syncComposition(e);
         this.selection.normalize(); // a dead caret must not survive the composition
     }

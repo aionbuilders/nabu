@@ -215,6 +215,49 @@ export class TextBehavior {
         return range.toString().length;
     }
 
+    /** Svelte's own nodes around a trailing render filler when an IME composition started: its text nodes and the filler with its place. @type {{ texts: Set<Node>, filler: Element, parent: Node, next: Node | null } | null} */
+    #compositionSnapshot = null;
+
+    /**
+     * IME composition starts. With a trailing render filler (`<br data-nabu-filler>`, the empty last line after a "\n")
+     * the browser puts the composed text in a NEW text node before the filler (and may swap the filler for a `<br>` of
+     * its own) — nodes Svelte does not know, which would stay next to the ones it updates once the model catches up
+     * (text shown twice). Remember Svelte's nodes so {@link TextBehavior#restoreAfterComposition} can undo the browser's
+     * additions at the end. No filler: nothing to do.
+     */
+    snapshotForComposition() {
+        const element = this.block.element;
+        this.#compositionSnapshot = null;
+        const filler = element?.querySelector('[data-nabu-filler]');
+        if (!element || !filler?.parentNode) return;
+        const texts = new Set();
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.add(n);
+        this.#compositionSnapshot = { texts, filler, parent: filler.parentNode, next: filler.nextSibling };
+    }
+
+    /**
+     * End of a composition begun next to a filler, BEFORE the composed text reaches the model: remove the text nodes and
+     * `<br>` the browser created meanwhile (the composed text is committed to the model, which the next render shows
+     * through Svelte's own nodes); a canceled composition (`composedText` empty) gets its filler back.
+     * @param {string} composedText
+     */
+    restoreAfterComposition(composedText) {
+        const snap = this.#compositionSnapshot;
+        this.#compositionSnapshot = null;
+        const element = this.block.element;
+        if (!snap || !element) return;
+        /** @type {Node[]} */
+        const stray = [];
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!snap.texts.has(n)) stray.push(n);
+        for (const br of element.querySelectorAll('br')) if (br !== snap.filler) stray.push(br);
+        for (const n of stray) n.parentNode?.removeChild(n);
+        if (!composedText && !snap.filler.isConnected) {
+            snap.parent.insertBefore(snap.filler, snap.next?.parentNode === snap.parent ? snap.next : null);
+        }
+    }
+
     /** @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [selection] */
     handleBeforeInput(event, selection = this.selection) {
         // Hook system (Markdown shortcuts, de-transformation, structural guards…).

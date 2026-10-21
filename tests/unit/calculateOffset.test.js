@@ -125,3 +125,40 @@ describe('TextBehavior.getDOMPoint', () => {
     expect(result.node).toBe(el);
   });
 });
+
+// ── with the trailing render filler (<br data-nabu-filler>) ────────────────
+
+describe('offset mapping with a trailing filler', () => {
+  it('calculateOffset ignores the filler: caret at the end of "abc\\n" is 4, before or after the <br>', () => {
+    const el = makeElement('abc\n<br data-nabu-filler>');
+    const b = makeBehavior(el);
+    const text = el.firstChild;
+    expect(b.calculateOffset(text, 4, el)).toBe(4);
+    expect(b.calculateOffset(el, 1, el)).toBe(4); // (element, before <br>)
+    expect(b.calculateOffset(el, 2, el)).toBe(4); // (element, after <br>)
+  });
+
+  it('calculateOffset counts text after a marked span + filler the same way', () => {
+    const el = makeElement('<span>ab</span>c\n<br data-nabu-filler>');
+    const b = makeBehavior(el);
+    expect(b.calculateOffset(el, el.childNodes.length, el)).toBe(4);
+  });
+
+  it('getDOMPoint(length) lands on the end of the last TEXT node, never on the filler', () => {
+    const el = makeElement('abc\n<br data-nabu-filler>');
+    const b = makeBehavior(el);
+    const point = b.getDOMPoint(4, el);
+    expect(point.node).toBe(el.firstChild);
+    expect(point.offset).toBe(4);
+    expect(b.getDOMPoint(3, el)).toEqual({ node: el.firstChild, offset: 3 });
+  });
+
+  it('round-trips every offset of "ab\\n\\n" with its filler', () => {
+    const el = makeElement('ab\n\n<br data-nabu-filler>');
+    const b = makeBehavior(el);
+    for (let i = 0; i <= 4; i++) {
+      const p = b.getDOMPoint(i, el);
+      expect(b.calculateOffset(p.node, p.offset, el)).toBe(i);
+    }
+  });
+});

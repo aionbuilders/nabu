@@ -138,6 +138,17 @@ export class NabuSelection extends SvelteSelection {
             return false;
         }
 
+        // A caret the browser put right beside a render filler (`<br data-nabu-filler>`, the empty last line after a
+        // trailing "\n") is an element position: bring it back onto the end of the block's text, same model offset.
+        const anchorFix = this.#fillerEndpoint(anchor, anchorOffset);
+        const focusFix = focus ? this.#fillerEndpoint(focus, focusOffset) : null;
+        if (anchorFix || focusFix) {
+            const a = anchorFix ?? { node: anchor, offset: anchorOffset };
+            const f = focusFix ?? { node: /** @type {Node} */ (focus), offset: focusOffset };
+            this.setBaseAndExtent(a.node, a.offset, f.node, f.offset);
+            return true;
+        }
+
         const anchorInvalid = this.#isDead(anchor);
         const focusInvalid = !!focus && this.#isDead(focus);
 
@@ -169,6 +180,27 @@ export class NabuSelection extends SvelteSelection {
             return true;
         }
         return false;
+    }
+
+    /**
+     * If `(node, offset)` is an element position adjacent to a block's trailing render filler, the equivalent text
+     * position (end of the block's text); else null.
+     * @param {Node} node
+     * @param {number} offset
+     * @returns {{ node: Node, offset: number } | null}
+     */
+    #fillerEndpoint(node, offset) {
+        if (node.nodeType !== Node.ELEMENT_NODE) return null;
+        const kids = node.childNodes;
+        const isFiller = (/** @type {Node | undefined} */ n) => n instanceof Element && n.hasAttribute('data-nabu-filler');
+        if (!isFiller(kids[offset]) && !isFiller(kids[offset - 1])) return null;
+        const id = /** @type {Element} */ (node).closest('[data-block-id]')?.getAttribute('data-block-id');
+        const block = id ? this.nabu.blocks.get(id) : null;
+        const text = block?.behaviors?.get('text');
+        if (!block || !text || !block.element?.contains(node)) return null;
+        const point = /** @type {any} */ (block).getDOMPoint?.(text.text.length);
+        // Only a real text point is an improvement (an element fallback would be dead again).
+        return point && point.node.nodeType === Node.TEXT_NODE ? point : null;
     }
 
     /**
