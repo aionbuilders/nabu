@@ -1,4 +1,4 @@
-import { ASSETS_STORE, DOC_REFS_STORE, withStore } from './indexeddb.js';
+import { ASSETS_STORE, DOC_REFS_STORE, withStore, openDB } from './indexeddb.js';
 
 /** @import { AssetStore, AssetMeta } from '../files/store.js' */
 
@@ -6,7 +6,7 @@ import { ASSETS_STORE, DOC_REFS_STORE, withStore } from './indexeddb.js';
  * The {@link AssetStore} of a persisted editor (ADR 014 §3.3): database `nabu`, object store `assets` (`{ hash, blob, mime,
  * name, size, savedAt }`), SHARED by every document of the origin — the same image used in two documents is stored once.
  * A second object store, `docRefs` (`{ docId, hashes }`), records which files each document references; the persisted
- * editor refreshes it on every save, and the future cleanup only deletes a file no document references.
+ * editor refreshes it on every save, and the cleanup (compaction, `clearPersistence()`) only deletes a file no document references.
  *
  * Bytes are stored as `Blob`s (the browser keeps them on disk, not in memory).
  * @implements {AssetStore}
@@ -45,7 +45,31 @@ export class IndexedDBAssetStore {
 		return record ? { mime: record.mime, name: record.name, size: record.size } : null;
 	}
 
-	// TODO(ADR-014 lot 3): cleanup of unreferenced files (delete a file no document lists in `docRefs`; `history: 'compact'`).
+	/**
+	 * When the file was last stored or re-added (`touch`), `null` if unknown (no record, or a record without `savedAt`).
+	 * @param {string} hash @returns {Promise<number | null>}
+	 */
+	async savedAt(hash) {
+		const record = await withStore(ASSETS_STORE, 'readonly', (s) => s.get(hash));
+		return typeof record?.savedAt === 'number' ? record.savedAt : null;
+	}
+
+	/**
+	 * A file that is already stored is added again (deduplication): refresh its `savedAt`, so that a release in another tab keeps
+	 * it during the grace period even though that tab does not see the new reference yet. One transaction.
+	 * @param {string} hash @returns {Promise<void>}
+	 */
+	async touch(hash) {
+		const db = await openDB();
+		await new Promise((resolve, reject) => {
+			const tx = db.transaction(ASSETS_STORE, 'readwrite');
+			const store = tx.objectStore(ASSETS_STORE);
+			const get = store.get(hash);
+			get.onsuccess = () => { if (get.result) store.put({ ...get.result, savedAt: Date.now() }); };
+			tx.oncomplete = () => { db.close(); resolve(undefined); };
+			tx.onabort = tx.onerror = () => { db.close(); reject(tx.error); };
+		});
+	}
 
 	// ── docRefs: which files each document references ─────────────────────────────────────────
 

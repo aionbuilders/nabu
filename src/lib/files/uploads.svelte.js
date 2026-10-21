@@ -82,6 +82,9 @@ export class Uploads {
     /** Progress (0–1) of the running upload of `hash`, `null` when none runs. Reactive. @param {string} hash @returns {number | null} */
     progress(hash) { return this.#progress.get(hash) ?? null; }
 
+    /** Whether any upload is running (not reactive). @returns {boolean} */
+    busy() { return this.#jobs.size > 0; }
+
     /** Whether an upload of `hash` is running. Reactive. @param {string} hash @returns {boolean} */
     isUploading(hash) { return this.#progress.has(hash); }
 

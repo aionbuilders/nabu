@@ -369,3 +369,92 @@ test.describe('host mode (ADR 014 lot 2): background upload, outbox, resume', ()
     expect((await idb(page, id)).assets).toHaveLength(0);
   });
 });
+
+test.describe('history modes (ADR 014 lot 3): full keeps everything, compact releases', () => {
+  const compactOptions = (extra = '') => '&options=' + encodeURIComponent(JSON.stringify({ history: { mode: 'compact', retain: 0 }, files: { releaseGraceMs: 0 } })) + extra;
+
+  async function bootWith(page: Page, id: string, query = '') {
+    await page.goto('/e2e?persist=' + encodeURIComponent(id) + query);
+    await page.waitForFunction(() => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0, null, { timeout: 20000 });
+  }
+
+  /** Session 1 (default full history): an image added then deleted, a lot of editing, saved. Returns the saved snapshot size. */
+  async function writeHistory(page: Page, id: string) {
+    await bootWith(page, id);
+    await uploadImage(page);
+    await page.evaluate(async () => {
+      const n = (window as any).nabu;
+      const image = [...n.blocks.values()].find((b: any) => b.type === 'image');
+      n.tree.delete(image.node.id);
+      await n.commit();
+      for (let i = 0; i < 40; i++) {
+        const b = n.insert('paragraph', { text: `draft ${i} ` + 'lorem ipsum dolor sit amet '.repeat(6) });
+        await n.commit();
+        n.tree.delete(b.node.id);
+        await n.commit();
+      }
+      n.insert('paragraph', { text: 'the essential sentence' });
+      await n.commit();
+      await n.saveNow();
+    });
+    const state = await idb(page, id);
+    expect(state.assets).toHaveLength(1);
+    return state;
+  }
+
+  test('13 · full (the default): reopening never compacts: the deleted image stays stored and the snapshot does not shrink', async ({ page }) => {
+    const id = docId();
+    const first = await writeHistory(page, id);
+    for (let i = 0; i < 2; i++) {
+      await bootWith(page, id);
+      await page.evaluate(() => (window as any).nabu.saveNow());
+    }
+    const state = await idb(page, id);
+    expect(state.assets).toHaveLength(1);
+    expect(state.docRefs).toEqual(first.docRefs);
+    expect(state.snapshotBytes).toBe(first.snapshotBytes);
+    expect(await page.evaluate(() => (window as any).nabu.doc.isShallow())).toBe(false);
+  });
+
+  test('14 · compact (retain 0): the archive receives the full snapshot, the snapshot shrinks, the unreferenced file leaves the store; content intact', async ({ page }) => {
+    const id = docId();
+    const first = await writeHistory(page, id);
+    await bootWith(page, id, compactOptions('&archive=1'));
+    expect(await page.evaluate(() => (window as any).__archived)).toEqual([first.snapshotBytes]);
+    const state = await idb(page, id);
+    expect(state.snapshotBytes).toBeLessThan(first.snapshotBytes / 2);
+    expect(state.assets).toHaveLength(0);
+    expect(state.docRefs).toEqual([]);
+    expect(await page.evaluate(() => (window as any).nabu.doc.isShallow())).toBe(true);
+    expect(await page.evaluate(() => JSON.stringify((window as any).nabu.doc.toJSON()))).toContain('the essential sentence');
+    await expect(page.locator('[data-block-type="paragraph"]').filter({ hasText: 'the essential sentence' })).toHaveCount(1);
+    // editing goes on, and a reopen in the default mode keeps the compacted document
+    await page.evaluate(async () => { const n = (window as any).nabu; n.insert('paragraph', { text: 'written after' }); await n.commit(); await n.saveNow(); });
+    await bootWith(page, id);
+    expect(await page.evaluate(() => (window as any).nabu.doc.isShallow())).toBe(true);
+    expect(await page.evaluate(() => JSON.stringify((window as any).nabu.doc.toJSON()))).toContain('written after');
+  });
+
+  test('16 · compact with the default grace period: the file just added is released from the document but its bytes are kept for now', async ({ page }) => {
+    const id = docId();
+    const first = await writeHistory(page, id);
+    await bootWith(page, id, '&options=' + encodeURIComponent(JSON.stringify({ history: { mode: 'compact', retain: 0 } })));
+    const state = await idb(page, id);
+    expect(state.snapshotBytes).toBeLessThan(first.snapshotBytes / 2); // compacted
+    expect(state.assets).toHaveLength(1); // too recent to delete from the shared store (another tab may use it)
+    expect(state.docRefs).toEqual(first.docRefs); // tracked in this document's docRefs, reconsidered next time
+    expect(await page.evaluate(() => Object.keys((window as any).nabu.doc.getMap('assetIndex').toJSON()))).toEqual([]);
+  });
+
+  test('15 · compact with an archive that fails: the compaction is aborted, nothing is lost', async ({ page }) => {
+    const id = docId();
+    const first = await writeHistory(page, id);
+    await bootWith(page, id, compactOptions('&archive=fail'));
+    expect(await page.evaluate(() => (window as any).__archived)).toEqual([first.snapshotBytes]);
+    const state = await idb(page, id);
+    expect(state.snapshotBytes).toBe(first.snapshotBytes);
+    expect(state.assets).toHaveLength(1);
+    expect(state.docRefs).toEqual(first.docRefs);
+    expect(await page.evaluate(() => (window as any).nabu.doc.isShallow())).toBe(false);
+  });
+});

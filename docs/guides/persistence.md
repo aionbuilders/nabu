@@ -35,12 +35,13 @@ const engine = await createPersistedEditor({
 | `preset` | `Extension[]` | `FullPreset` | Preset de base |
 | `extensions` | `Extension[]` | `[]` | Extensions additionnelles |
 | `debounce` | `number` | `2000` | Délai en ms entre la dernière modif et la sauvegarde |
+| `history` | `'full' \| { mode: 'compact', retain, onBeforeCompact }` | `'full'` | Mode d'historique (voir « Historique » plus bas) : par défaut **rien n'est jamais compacté** |
 
 ---
 
 ## Méthodes ajoutées à l'instance
 
-`createPersistedEditor` enrichit l'instance `Nabu` retournée avec trois membres supplémentaires.
+`createPersistedEditor` enrichit l'instance `Nabu` retournée avec quatre membres supplémentaires (`isNew`, `saveNow()`, `compact()`, `clearPersistence()`).
 
 ### `nabu.isNew`
 
@@ -77,9 +78,83 @@ Retourne une `Promise<void>` qui se résout quand l'écriture IndexedDB est term
 await engine.clearPersistence();
 ```
 
-Supprime le snapshot stocké pour ce `docId`. La prochaine instanciation avec le même `docId` repartira sur un document vide (`isNew === true`).
+Supprime le snapshot stocké pour ce `docId` **et libère ses fichiers** : un fichier n'est supprimé du stockage partagé que si aucun autre document ne le référence ; en mode hôte, `files.onAssetReleased(url)` est appelé pour chaque fichier hébergé (Nabu ne supprime rien chez l'hôte). La prochaine instanciation avec le même `docId` repartira sur un document vide (`isNew === true`).
 
 Utile pour implémenter un bouton "Réinitialiser le document".
+
+---
+
+## Historique : `full` (défaut) ou `compact` (opt-in)
+
+Loro garde **tout** l'historique d'un document : c'est ce qui permet de suivre toute son évolution (un romancier qui relit un livre version après version) mais aussi ce qui le fait grossir. Nabu ne choisit jamais à votre place.
+
+```js
+// Défaut : historique complet. Rien n'est jamais compacté, élagué ni supprimé.
+await createPersistedEditor({ docId: 'book' });                 // = history: 'full'
+
+// Opt-in : compactage à l'ouverture, en gardant 30 jours d'historique
+await createPersistedEditor({
+  docId: 'notes',
+  history: {
+    mode: 'compact',
+    retain: '30d',                       // ms, '12h', '30d', '2w'... ou 0 = aucun historique passé
+    onBeforeCompact: async (fullSnapshot) => {   // Uint8Array : le snapshot COMPLET
+      await archive(fullSnapshot);       // si ça jette une erreur, le compactage est ANNULÉ
+    },
+  },
+});
+```
+
+| | `full` (défaut) | `compact` |
+|---|---|---|
+| Historique du texte | conservé intégralement, sans limite | conservé sur la fenêtre `retain` (rien si `retain: 0`) |
+| Fichiers du stockage | **jamais supprimés** (aucun ménage pour ce document) | libérés quand ni l'état courant ni l'historique conservé ne les référencent |
+| Quand | jamais | **à l'ouverture** (après chargement, migration et reprise des envois), jamais en cours de session |
+
+`retain` est strict : un nombre de millisecondes, `0`, ou `'<nombre><s|m|h|d|w>'` (`'30d'`, `'12h'`). Obligatoire en mode `compact` (aucune valeur par défaut qui détruirait des données). Les versions plus récentes que le point de rétention restent atteignables (`doc.checkout(...)`) ; les plus anciennes disparaissent. Un document dont l'historique n'a pas de dates (écrit avant l'enregistrement des horodatages) n'est jamais élagué par fenêtre : seul `retain: 0` le compacte.
+
+### `nabu.compact({ retain, onBeforeCompact })`
+
+```js
+await engine.saveNow();                                   // sinon : refus « unsaved-changes »
+const result = await engine.compact({ retain: '90d', onBeforeCompact: (snap) => upload(snap) });
+// { compacted: true, bytesBefore, bytesAfter, released: ['sha256-…'], deleted: [...], snapshot }
+// { compacted: false, reason: 'pending-uploads' | 'unsaved-changes' | 'archive-failed' | 'detached' | 'busy' | 'nothing-to-compact' | ... }
+```
+
+Pour les intégrateurs qui synchronisent et veulent choisir le moment. Il ne **lève jamais** pour un refus (seulement pour un argument invalide) : un refus signifie que **rien n'a été supprimé**.
+
+**Garde-fous** (tous testés) :
+
+1. jamais sans opt-in (`history: { mode: 'compact' }`) ni appel explicite ;
+2. `onBeforeCompact(fullSnapshot)` est attendu **avant** que quoi que ce soit soit modifié ou écrit ; une erreur l'annule (`archive-failed`) ;
+3. refus (pas d'exception) si un envoi de fichier est en attente ou en cours (`pending-uploads` : la copie locale est alors la seule), s'il y a des modifications non sauvegardées ou non validées (`unsaved-changes`), ou si le document est « checkout » sur une ancienne version (`detached`) ;
+4. la rétention est respectée ; le snapshot compacté est vérifié (réimporté et comparé à l'état courant) avant d'être écrit ;
+5. la pile d'annulation (undo) est **vidée** après un compactage (ses pas pourraient ressusciter des blocs dont le fichier est libéré) ; elle repart normalement ensuite.
+
+**Comment ça marche** : un snapshot Loro *shallow* est écrit à la version de rétention. À l'ouverture, une nouvelle instance est construite depuis ce snapshot (l'historique disparaît aussi de la mémoire). Avec `nabu.compact()` sur un éditeur déjà ouvert, le snapshot sauvegardé est compacté immédiatement et toutes les sauvegardes suivantes le restent, mais le document **en mémoire** garde son historique jusqu'à la prochaine ouverture. Un pair de synchronisation resté sur une version antérieure ne peut plus fusionner par mises à jour incrémentales.
+
+### Ménage des fichiers
+
+- Mode `full` : aucun fichier du document n'est jamais supprimé.
+- Mode `compact` : après le compactage, les fichiers que plus aucune version conservée ne référence sont retirés de `assetIndex` et de la liste `docRefs` du document ; ils ne sont supprimés du stockage IndexedDB (partagé entre les documents de l'origine) que si **aucun** document ne les référence. Un `files.store` personnalisé sans l'API `docRefs` n'est jamais vidé par Nabu.
+- **Délai de grâce multi-onglets** : `files.releaseGraceMs` (défaut **10 minutes**, `0` pour le désactiver). Un autre onglet peut venir d'ajouter un fichier (ou de réutiliser un fichier déjà stocké) sans avoir encore sauvegardé ses références ; un ménage ne supprime donc jamais du stockage partagé un fichier dont l'enregistrement date de moins de ce délai, ni un fichier dont l'âge est inconnu (ancien enregistrement sans `savedAt`). Il est simplement ignoré (`result.skipped`), garde sa place dans les `docRefs` du document et sera réexaminé au prochain compactage (ou au prochain `clearPersistence()` du même `docId`). Un `files.store` personnalisé doit offrir `savedAt(hash)` (et idéalement `touch(hash)`) pour que ses fichiers puissent être supprimés.
+- Mode hôte : Nabu ne supprime **jamais** rien chez l'hôte. Il appelle `files.onAssetReleased(url)` (attendu ; une erreur est ignorée avec un `nabu.warn`) pour chaque fichier hébergé libéré, et vous décidez :
+
+```js
+await createPersistedEditor({
+  docId,
+  history: { mode: 'compact', retain: '30d' },
+  files: {
+    onBeforePersist: async (file) => ({ ref: await uploadToMyServer(file) }),
+    onAssetReleased: async (url) => { await deleteFromMyServer(url); },
+  },
+});
+```
+
+Les horodatages des modifications sont enregistrés (`doc.setRecordTimestamp(true)`) pour que la fenêtre puisse être honorée ; une fenêtre a la granularité d'un « changement » Loro (les commits à moins de 1000 s sont regroupés), une marge de 1000 s joue en faveur de la conservation.
+
+Détails : [ADR 014](../adr/014-asset-storage.md) §3.6 et §7.
 
 ---
 
@@ -104,7 +179,7 @@ Utile pour implémenter un bouton "Réinitialiser le document".
                     saveSnapshot(docId, snapshot)  →  IndexedDB
 ```
 
-Le snapshot est le **format binaire natif de Loro** : il encode l'intégralité du document, y compris l'historique CRDT (ce qui permet de conserver l'undo/redo après rechargement).
+Le snapshot est le **format binaire natif de Loro** : il encode l'intégralité du document, y compris l'historique CRDT (ce qui permet de conserver l'undo/redo après rechargement). Avec `history: 'full'` (défaut) c'est toujours un snapshot complet ; après un compactage, un snapshot *shallow* (voir plus haut). Les octets des fichiers n'y sont pas : ils vivent dans le stockage de fichiers (ADR 014).
 
 ---
 

@@ -55,6 +55,21 @@
       };
     }
 
+    // Test-only: `?archive=1` gives `history: { mode: 'compact' }` an `onBeforeCompact` that records the size of the snapshot it receives
+    // in `window.__archived` (`?archive=fail` makes it throw: the compaction must be aborted).
+    const archive = page.url.searchParams.get('archive');
+    if (archive && options.history?.mode === 'compact') {
+      const w = /** @type {any} */ (window);
+      w.__archived = [];
+      options.history = {
+        ...options.history,
+        onBeforeCompact: (/** @type {Uint8Array} */ snapshot) => {
+          w.__archived.push(snapshot.length);
+          if (archive === 'fail') throw new Error('archive down');
+        },
+      };
+    }
+
     (async () => {
       // No `persist` param: fresh in-memory editor. Otherwise: persisted under that docId (no seeding).
       const eng = docId

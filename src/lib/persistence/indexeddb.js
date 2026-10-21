@@ -3,7 +3,7 @@ const DB_NAME = 'nabu';
 const STORE = 'snapshots';
 /** Object store of the file bytes, shared by every document of the origin (keyPath `hash`) — ADR 014 §3.3. */
 export const ASSETS_STORE = 'assets';
-/** Object store of the files each document references (keyPath `docId`, `hashes: string[]`) — used by the future cleanup. */
+/** Object store of the files each document references (keyPath `docId`, `hashes: string[]`) — used by the cleanup (ADR 014 lot 3). */
 export const DOC_REFS_STORE = 'docRefs';
 /**
  * Object store of the upload outbox (keyPath `[docId, hash]`, index `docId`): the files of a document still to send to the

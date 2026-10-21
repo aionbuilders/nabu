@@ -344,6 +344,24 @@ When a local file is added without any configuration, its bytes go to a **separa
 
 A document alone is therefore no longer self-contained: its **export** (`serialize('json')`) and the **clipboard** still carry the bytes (keyed by hash, verified on import), so a copy / export is. Documents saved by the beta (bytes inside the document) are migrated automatically when opened. Pass `files: { store }` to plug your own store (`has`, `get`, `put`, `delete`, `keys`).
 
+### History modes and cleanup of files
+
+`createPersistedEditor` keeps the **complete history by default** (`history: 'full'`): nothing is ever compacted, trimmed or deleted, however many times the document is opened (think of a novelist following the evolution of a whole book). Compaction is an explicit opt-in:
+
+```js
+await createPersistedEditor({
+  docId: 'notes',
+  history: {
+    mode: 'compact',            // compacts when the document is OPENED, never mid-session
+    retain: '30d',              // ms, '12h', '30d'... or 0 = keep no past history
+    onBeforeCompact: async (fullSnapshot) => archive(fullSnapshot), // awaited BEFORE anything is dropped; a throw aborts
+  },
+});
+const result = await engine.compact({ retain: 0 }); // explicit, e.g. for integrators that sync: { compacted, reason?, bytesBefore, bytesAfter, released }
+```
+
+A compaction (Loro shallow snapshot at the retention point) **refuses** (no exception, nothing dropped) while an upload is pending or changes are unsaved, clears the undo stack, and afterwards releases the files no kept version references: they leave the shared IndexedDB store only when no other document uses them; with a host, `files.onAssetReleased(url)` tells you which hosted files to delete (Nabu never deletes at the host). `clearPersistence()` releases a deleted document's files the same way. See the [persistence guide](docs/guides/persistence.md) and [ADR 014](docs/adr/014-asset-storage.md) §3.6 / §7.
+
 ### Production mode (your storage)
 
 To also keep the files on your own infrastructure, pass a `files` config to the `Nabu` constructor:

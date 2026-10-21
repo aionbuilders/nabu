@@ -23,6 +23,15 @@
  * @property {(hash: string) => Promise<void>} delete
  * @property {() => AsyncIterable<string>} keys
  * @property {(hash: string) => Promise<AssetMeta | null>} [stat] optional: the metadata stored with `put`
+ * @property {(docId: string, hashes: Iterable<string>) => Promise<void>} [setDocRefs] optional, with the three below: which files
+ *   each document references. Only a store that offers them lets a compaction / `clearPersistence()` DELETE bytes (a file is
+ *   deleted only when no document references it any more); without them Nabu never deletes bytes from this store.
+ * @property {(docId: string) => Promise<Set<string>>} [getDocRefs]
+ * @property {(docId: string) => Promise<void>} [clearDocRefs]
+ * @property {() => Promise<Set<string>>} [referencedHashes] every file referenced by at least one document
+ * @property {(hash: string) => Promise<number | null>} [savedAt] optional: epoch ms when the file was last stored or re-added; with
+ *   `touch`, lets a release keep a recent file (`files.releaseGraceMs`). Without it, a release skips every file (grace on).
+ * @property {(hash: string) => Promise<void>} [touch] optional: refresh `savedAt` (called when a file already stored is added again)
  */
 
 /**

@@ -47,8 +47,14 @@ const EMBED_CACHE_BUDGET = 32 * 1024 * 1024;
  *   have shown it is created with `status: 'rejected'`, no ref, and a readable `reason` (`too-large`).
  * @property {Outbox} [outbox] Where the uploads still to do are listed (ADR 014 §3.4), scoped to this document. Default: in
  *   memory (`createPersistedEditor`: an `IndexedDBOutbox`, next to the asset store).
- * @property {(ref: string) => void} [onAssetReleased] TODO(ADR-014 lot 3): declared only. Will be called with the host
- *   `url` of a file no document version references any more, so the integrator can delete it. NOT called yet.
+ * @property {(ref: string) => void | Promise<void>} [onAssetReleased] Host mode, called with the host `url` (the `ref` your
+ *   `onBeforePersist` returned) of a file that THIS document no longer references in any version it keeps: after a compaction
+ *   (`history: { mode: 'compact' }` / `nabu.compact()`) released it, or when `clearPersistence()` deleted the document. Nabu NEVER
+ *   deletes anything at the host: you decide (another document may still use the same host file). Awaited; an error is swallowed
+ *   and reported with `nabu.warn`. Never called in the default `history: 'full'` mode (nothing is released).
+ * @property {number} [releaseGraceMs] Default 10 minutes. A release (compaction, `clearPersistence()`) never deletes from the shared store
+ *   a file whose record is newer than this, nor one whose age is unknown: another tab may have just added it without having saved
+ *   its references yet. Such a file is skipped and reconsidered at the next compaction / clear. `0` disables the grace period.
  * @property {(ref: string) => string} [resolve] Turn a stored ref into a display URL.
  * @property {number} [maxInlineSize] Byte threshold for embedding files in a COPY / export (`application/x-nabu+json`,
  *   `serialize('json')`): above it (total, or for one file) the bytes are not embedded. Default 2MB.
@@ -195,6 +201,46 @@ export class Files {
     /** Ids (`sha256-<hex>`) of every file the document knows (its `assetIndex`): what a persisted document references. @returns {string[]} */
     indexedHashes() { return Object.keys(this.index.toJSON()); }
 
+    /**
+     * The host location (`assetIndex[hash].url`) of each of `hashes` that has one (lot 3: what `onAssetReleased` receives).
+     * @param {Iterable<string>} hashes @returns {Map<string, string>}
+     */
+    hostUrls(hashes) {
+        /** @type {Map<string, string>} */
+        const urls = new Map();
+        for (const hash of hashes) {
+            const url = /** @type {any} */ (this.index.get(hash))?.url;
+            if (typeof url === 'string' && url) urls.set(hash, url);
+        }
+        return urls;
+    }
+
+    /**
+     * How many uploads are still to do or running (the outbox of the document, plus any running job). A compaction refuses to run
+     * while this is not 0 (ADR 014 §3.6): the local copy is the only copy of such a file. Waits for the resume pass first.
+     * @returns {Promise<number>}
+     */
+    async pendingUploads() {
+        await this.#uploads.ready();
+        const entries = await this.#uploads.outbox.list().catch(() => []);
+        return entries.length || (this.#uploads.busy() ? 1 : 0);
+    }
+
+    /**
+     * Remove the index entries of files a compaction released (silent commit, not an undo step). The entries stay readable in the
+     * history that was archived / retained; only the live index forgets them.
+     * @param {Iterable<string>} hashes @returns {Promise<void>}
+     */
+    async releaseIndex(hashes) {
+        const ids = [...hashes].filter((id) => this.index.get(id) !== undefined);
+        if (!ids.length) return;
+        await this.#silent(() => { for (const id of ids) this.index.delete(id); });
+        for (const id of ids) {
+            const cached = this.#embed.get(id);
+            if (cached) { this.#embedBytes -= cached.data.length; this.#embed.delete(id); }
+        }
+    }
+
     /** @param {string} id @param {AssetMeta} meta @returns {void} */
     #setIndex(id, meta) {
         if (!this.index.get(id)) this.index.set(id, { mime: meta.mime, name: meta.name, size: meta.size });
@@ -212,6 +258,11 @@ export class Files {
             this.#embed.delete(key);
             this.#embedBytes -= entry.data.length;
         }
+    }
+
+    /** A file already in the store is used again: refresh its `savedAt` (release grace period, multi-tab safety). Never throws. @param {string} id */
+    async #touch(id) {
+        try { await this.store.touch?.(id); } catch { /* a stale savedAt only makes a release less cautious */ }
     }
 
     /**
@@ -239,6 +290,7 @@ export class Files {
         const id = await sha256Id(bytes);
         const meta = { mime: file.type || 'application/octet-stream', name: file.name || '', size: bytes.length };
         if (await this.store.has(id)) {
+            await this.#touch(id);
             this.#remember(id, bytes, meta);
             if (!this.index.get(id)) await this.#silent(() => this.#setIndex(id, meta));
         } else {
@@ -662,6 +714,7 @@ export class Files {
     /** @param {string} id @param {EmbeddedBytes | null} emb @param {boolean} omitted */
     async #ensureStored(id, emb, omitted) {
         if (await this.store.has(id).catch(() => false)) {
+            await this.#touch(id);
             if (!this.index.get(id)) {
                 const stat = emb ? null : await this.store.stat?.(id);
                 const blob = emb || stat ? null : await this.store.get(id);
@@ -721,6 +774,7 @@ export class Files {
             try {
                 const id = await sha256Id(/** @type {BufferSource} */ (bytes));
                 if (!(await this.store.has(id))) await this.store.put(id, new Blob([/** @type {BlobPart} */ (bytes)], { type: meta.mime }), meta);
+                else await this.#touch(id);
                 this.#remember(id, bytes, meta);
                 done.push({ uuid, id, meta });
             } catch (error) {
