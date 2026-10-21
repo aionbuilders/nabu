@@ -346,27 +346,31 @@ A document alone is therefore no longer self-contained: its **export** (`seriali
 
 ### Production mode (your storage)
 
-To keep binary data out of Loro and host assets on your own infrastructure, pass a `files` config to the `Nabu` constructor:
+To also keep the files on your own infrastructure, pass a `files` config to the `Nabu` constructor:
 
 ```js
 import { createFullEditor } from '@aionbuilders/nabu';
 
 const engine = createFullEditor({
   files: {
-    // Called when a local file is added (it is already in the local store). Upload it and return a clean ref.
-    // Return nothing to keep the local reference.
+    // The file is ALREADY in the local store when this is called, and its block shows it at once (status `pending`).
+    // Upload it in the background and return where you keep it. The block keeps its `nabu-asset:sha256-…` ref forever;
+    // your ref is recorded as `assetIndex[hash].url` (used to display the file where the local copy is not available).
+    // Honour `signal` (cancel, last block deleted) and report `onProgress(0..1)`. Throw to fail (status `error`).
+    // The upload is re-run from the local copy after a reload, so make it idempotent.
     onBeforePersist: async (file, { signal, onProgress }) => {
       const url = await uploadToYourCDN(file, { signal, onProgress });
       return { ref: url };
     },
 
-    // Turn a stored ref into a display URL.
-    // Default: identity for https:// URLs, an object URL from the local store for nabu-asset: refs.
-    // Override for private buckets or signed-URL storage.
+    // Turn a stored ref (the host url of the index) into a display URL. Override for private buckets or signed URLs.
     resolve: (ref) => ref,
 
     // Largest file (and total) embedded in a copy / export. Default ~2 MB.
     maxInlineSize: 2 * 1024 * 1024,
+
+    // Largest file accepted (bytes). Default: none. A bigger file gives a block with status `rejected` and a readable reason.
+    maxFileSize: 25 * 1024 * 1024,
 
     // Opt-in (default false): import the images of pasted web pages. See "Pasting images and files" below.
     importRemote: false,
@@ -374,7 +378,23 @@ const engine = createFullEditor({
 });
 ```
 
-The `files` option is also accepted by the generic `createEditor({ preset, files })` and the bare `new Nabu({ extensions, files })` constructor.
+The `files` option is also accepted by the generic `createEditor({ preset, files })` and the bare `new Nabu({ extensions, files })` constructor. Documents whose blocks already hold plain host URLs (`https://…`) keep working unchanged.
+
+**Lifecycle of a file with a host** ([ADR 014](docs/adr/014-asset-storage.md) §3.4): the bytes are hashed and written to the local store first, the block (`pending`) appears with its final `nabu-asset:sha256-…` ref, the upload runs in the background, and on success the block becomes `ready` in a silent commit (not an undo step). On failure it becomes `error` and the local copy is kept. Deleting the last block that shows a file aborts its upload (`signal`); an undo that brings the block back restarts it. The list of uploads still to do (the **outbox**) is kept next to the local store, never in the document: with `createPersistedEditor` it lives in IndexedDB, so an upload interrupted by a closed tab **resumes when the document is opened again**. A document opened on another device before the upload ended (no local bytes, no host url) shows the block as `missing` with the reason `interrupted`.
+
+**State of a media block** (no built-in UI for these yet — they are the API an interface builds on):
+
+```js
+block.status      // stored: 'ready' | 'pending' | 'error' | 'missing' | 'rejected'
+block.displayStatus // shown: 'missing' when the file cannot be displayed (incl. an interrupted upload)
+block.reason      // { code, message } for error / rejected / missing, else null.
+                  // codes: too-large, upload-failed, cancelled, interrupted, unavailable, not-embedded, corrupt
+block.progress    // 0..1 while uploading (reactive), null otherwise
+block.retry()     // run a failed / cancelled upload again from the local copy -> Promise<boolean>
+block.cancel()    // abort the running upload (status 'error', reason 'cancelled') -> boolean
+```
+
+A copy or `serialize('json')` never ships a file silently without its bytes: the preload at open reads the files up to `maxInlineSize`, and when bytes are still missing the entry is marked `omitted` (with a `nabu.warn`), so the receiving document shows the block as `missing` with the reason `not-embedded`. Declared for the cleanup of the next lot: `files.onAssetReleased(ref)` (not called yet).
 
 ### Pasting images and files
 

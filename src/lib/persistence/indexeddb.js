@@ -6,10 +6,15 @@ export const ASSETS_STORE = 'assets';
 /** Object store of the files each document references (keyPath `docId`, `hashes: string[]`) — used by the future cleanup. */
 export const DOC_REFS_STORE = 'docRefs';
 /**
- * Schema version. 1: `snapshots`. 2 (ADR 014): + `assets` and `docRefs`. The upgrade only ADDS the missing stores, so the
- * snapshots of a version 1 database are untouched.
+ * Object store of the upload outbox (keyPath `[docId, hash]`, index `docId`): the files of a document still to send to the
+ * host (`files.onBeforePersist`) — ADR 014 lot 2.
  */
-const DB_VERSION = 2;
+export const OUTBOX_STORE = 'outbox';
+/**
+ * Schema version. 1: `snapshots`. 2 (ADR 014): + `assets` and `docRefs`. 3 (ADR 014 lot 2): + `outbox`. An upgrade only ADDS
+ * the missing stores, so the data of an older database (snapshots, files, docRefs) is untouched.
+ */
+const DB_VERSION = 3;
 
 /**
  * Open (and upgrade if needed) the `nabu` database. The connection closes itself when another context (a newer
@@ -30,6 +35,9 @@ export function openDB() {
 			}
 			if (!db.objectStoreNames.contains(DOC_REFS_STORE)) {
 				db.createObjectStore(DOC_REFS_STORE, { keyPath: 'docId' });
+			}
+			if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
+				db.createObjectStore(OUTBOX_STORE, { keyPath: ['docId', 'hash'] }).createIndex('docId', 'docId');
 			}
 		};
 

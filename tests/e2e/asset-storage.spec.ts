@@ -14,8 +14,8 @@ const HASH_REF = /^nabu-asset:sha256-[0-9a-f]{64}$/;
 
 const docId = () => `e2e-assets-${test.info().testId}-${Date.now()}`;
 
-async function boot(page: Page, id: string) {
-  await page.goto('/e2e?persist=' + encodeURIComponent(id));
+async function boot(page: Page, id: string, hostFiles?: '1' | 'gated' | 'fail') {
+  await page.goto('/e2e?persist=' + encodeURIComponent(id) + (hostFiles ? '&hostFiles=' + hostFiles : ''));
   await page.waitForFunction(() => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0, null, { timeout: 20000 });
 }
 
@@ -27,7 +27,7 @@ async function addEmptyParagraph(page: Page) {
 }
 
 /** Upload through the slash menu's native file chooser. */
-async function uploadImage(page: Page, buffer: Buffer = PNG, name = 'pixel.png') {
+async function uploadImage(page: Page, buffer: Buffer = PNG, name = 'pixel.png', settled = 'ready') {
   await focusEmpty(page);
   const chooserP = new Promise<any>((res) => page.once('filechooser', res));
   await page.keyboard.type('/image');
@@ -35,11 +35,25 @@ async function uploadImage(page: Page, buffer: Buffer = PNG, name = 'pixel.png')
   await page.keyboard.press('Enter');
   const chooser = await chooserP;
   await chooser.setFiles({ name, mimeType: 'image/png', buffer });
-  await expect.poll(() => images(page).then((l) => l[0]?.status)).toBe('ready');
+  await expect.poll(() => images(page).then((l) => l[0]?.status)).toBe(settled);
+  // the block is created `pending` BEFORE the file is hashed and stored: wait for its final hash ref
+  await expect.poll(() => images(page).then((l) => l[0]?.ref)).toMatch(HASH_REF);
 }
 
 const images = (page: Page) => page.evaluate(() => [...(window as any).nabu.blocks.values()]
   .filter((b: any) => b.type === 'image' && !b.node.isDeleted?.()).map((b: any) => ({ ref: b.ref, status: b.status })));
+
+/** The live image blocks with their lot-2 state: progress, reason, what is shown. */
+const imageState = (page: Page) => page.evaluate(() => [...(window as any).nabu.blocks.values()]
+  .filter((b: any) => b.type === 'image' && !b.node.isDeleted?.())
+  .map((b: any) => ({ ref: b.ref, status: b.status, progress: b.progress, reason: b.reason?.code ?? null, shown: b.displayStatus })));
+
+/** `assetIndex[hash].url` of the first image. */
+const hostedUrl = (page: Page) => page.evaluate(() => {
+  const n = (window as any).nabu;
+  const b = [...n.blocks.values()].find((x: any) => x.type === 'image' && !x.node.isDeleted?.());
+  return n.doc.getMap('assetIndex').toJSON()[b.ref.slice('nabu-asset:'.length)]?.url ?? null;
+});
 
 const displayed = (page: Page) => page.evaluate(() => [...document.querySelectorAll('[data-block-type="image"] img')].map((i) => (i as HTMLImageElement).naturalWidth));
 
@@ -49,10 +63,11 @@ const idb = (page: Page, id: string) => page.evaluate((docId) => new Promise<any
   open.onerror = () => reject(open.error);
   open.onsuccess = () => {
     const db = open.result;
-    const tx = db.transaction(['snapshots', 'assets', 'docRefs'], 'readonly');
+    const tx = db.transaction(['snapshots', 'assets', 'docRefs', 'outbox'], 'readonly');
     const snap = tx.objectStore('snapshots').get(docId);
     const assets = tx.objectStore('assets').getAll();
     const refs = tx.objectStore('docRefs').get(docId);
+    const outbox = tx.objectStore('outbox').index('docId').getAll(docId);
     tx.oncomplete = () => {
       db.close();
       resolve({
@@ -60,6 +75,7 @@ const idb = (page: Page, id: string) => page.evaluate((docId) => new Promise<any
         snapshotBytes: snap.result?.snapshot?.length ?? null,
         assets: assets.result.map((a: any) => ({ hash: a.hash, size: a.blob?.size, mime: a.mime, name: a.name })),
         docRefs: refs.result?.hashes ?? null,
+        outbox: outbox.result.map((e: any) => ({ hash: e.hash, attempts: e.attempts, state: e.state })),
       });
     };
     tx.onerror = () => reject(tx.error);
@@ -108,7 +124,7 @@ test.describe('asset storage (persisted editor)', () => {
     await page.evaluate(() => (window as any).nabu.saveNow());
     const [img] = await images(page);
     const state = await idb(page, id);
-    expect(state.version).toBe(2);
+    expect(state.version).toBe(3);
     expect(state.snapshotBytes).toBeLessThan(10 * 1024);
     expect(state.assets).toHaveLength(1);
     expect(state.assets[0]).toMatchObject({ hash: img.ref.slice('nabu-asset:'.length), size: big.length, mime: 'image/png', name: 'big.png' });
@@ -182,7 +198,7 @@ test.describe('migration of a beta document', () => {
     await expect.poll(() => displayed(page)).toEqual([1]);
   });
 
-  test('6 · a version 1 IndexedDB (snapshots only) upgrades to 2 without losing the saved documents', async ({ page }) => {
+  test('6 · a version 1 IndexedDB (snapshots only) upgrades to 3 without losing the saved documents', async ({ page }) => {
     const id = docId();
     // an in-memory editor writes a snapshot the way the beta did: base `nabu` created at version 1 with only `snapshots`
     await page.goto('/e2e');
@@ -216,7 +232,140 @@ test.describe('migration of a beta document', () => {
     await uploadImage(page); // the new stores work on the upgraded database
     await page.evaluate(() => (window as any).nabu.saveNow());
     const state = await idb(page, id);
-    expect(state.version).toBe(2);
+    expect(state.version).toBe(3);
     expect(state.assets).toHaveLength(1);
+  });
+});
+
+test.describe('host mode (ADR 014 lot 2): background upload, outbox, resume', () => {
+  test('7 · pending (progress, hash ref) → release → ready; the ref never changes, the host location is the index url, the outbox is emptied', async ({ page }) => {
+    const id = docId();
+    await boot(page, id, 'gated');
+    await uploadImage(page, PNG, 'pixel.png', 'pending');
+    const [pending] = await imageState(page);
+    expect(pending.ref).toMatch(HASH_REF);
+    await expect.poll(async () => (await imageState(page))[0].progress).toBe(0.5);
+    await expect(page.locator('.nabu-image-spinner')).toBeVisible();
+    await expect.poll(() => displayed(page)).toEqual([1]); // the local copy is shown while it is sent
+    await page.evaluate(() => (window as any).nabu.saveNow());
+    expect((await idb(page, id)).outbox).toEqual([{ hash: pending.ref.slice('nabu-asset:'.length), attempts: 1, state: 'pending' }]);
+
+    await page.evaluate(() => (window as any).__hostRelease());
+    await expect.poll(async () => (await imageState(page))[0].status).toBe('ready');
+    expect(await imageState(page)).toEqual([{ ref: pending.ref, status: 'ready', progress: null, reason: null, shown: 'ready' }]);
+    expect(await hostedUrl(page)).toBe(await page.evaluate(() => (window as any).__hostUploads[0].ref));
+    await expect.poll(async () => (await idb(page, id)).outbox).toEqual([]);
+    expect(await bytesInDoc(page)).toBe(0);
+  });
+
+  test('8 · reload (close) during a gated upload → reopen: the upload resumes by itself and completes', async ({ page }) => {
+    const id = docId();
+    await boot(page, id, 'gated');
+    await uploadImage(page, PNG, 'pixel.png', 'pending');
+    const [before] = await imageState(page);
+    await page.evaluate(() => (window as any).nabu.saveNow());
+    expect((await idb(page, id)).outbox).toHaveLength(1);
+    expect((await idb(page, id)).assets).toHaveLength(1); // the local copy is the outbox payload
+
+    await page.reload();
+    await page.waitForFunction(() => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0, null, { timeout: 20000 });
+    await expect.poll(() => page.evaluate(() => (window as any).__hostUploads.length)).toBe(1); // resumed, nobody asked
+    expect(await page.evaluate(() => (window as any).__hostUploads[0])).toMatchObject({ name: 'pixel.png', type: 'image/png', size: PNG.length });
+    await expect.poll(async () => (await imageState(page))[0]).toMatchObject({ ref: before.ref, status: 'pending', progress: 0.5 });
+    await expect.poll(() => displayed(page)).toEqual([1]);
+    expect((await idb(page, id)).outbox).toEqual([{ hash: before.ref.slice('nabu-asset:'.length), attempts: 2, state: 'pending' }]);
+
+    await page.evaluate(() => (window as any).__hostRelease());
+    await expect.poll(async () => (await imageState(page))[0].status).toBe('ready');
+    expect((await imageState(page))[0].ref).toBe(before.ref);
+    expect(await hostedUrl(page)).toBe(await page.evaluate(() => (window as any).__hostUploads[0].ref));
+    await expect.poll(async () => (await idb(page, id)).outbox).toEqual([]);
+
+    // saved, then reopened with the host: nothing left to resume
+    await page.evaluate(() => (window as any).nabu.saveNow());
+    await page.reload();
+    await page.waitForFunction(() => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0, null, { timeout: 20000 });
+    await expect.poll(async () => (await imageState(page))[0]?.status).toBe('ready');
+    expect(await page.evaluate(() => (window as any).__hostUploads.length)).toBe(0);
+  });
+
+  test('9 · a failing host → error (reason, local copy kept) → the host recovers → block.retry() → ready', async ({ page }) => {
+    const id = docId();
+    await boot(page, id, 'fail');
+    await uploadImage(page, PNG, 'pixel.png', 'error');
+    const [failed] = await imageState(page);
+    expect(failed).toMatchObject({ status: 'error', reason: 'upload-failed', progress: null, shown: 'error' });
+    await page.evaluate(() => (window as any).nabu.saveNow());
+    const state = await idb(page, id);
+    expect(state.assets).toHaveLength(1);
+    expect(state.outbox).toEqual([{ hash: failed.ref.slice('nabu-asset:'.length), attempts: 1, state: 'error' }]);
+    await expect.poll(() => displayed(page).then((l) => l.length)).toBe(0); // the error state is shown (no <img>)
+
+    await page.evaluate(() => { (window as any).__hostFailing = false; });
+    const ok = await page.evaluate(() => [...(window as any).nabu.blocks.values()].find((b: any) => b.type === 'image').retry());
+    expect(ok).toBe(true);
+    await expect.poll(async () => (await imageState(page))[0].status).toBe('ready');
+    expect((await imageState(page))[0].ref).toBe(failed.ref);
+    expect(await page.evaluate(() => (window as any).__hostUploads.length)).toBe(2);
+    await expect.poll(() => displayed(page)).toEqual([1]);
+  });
+
+  test('10 · deleting the last block aborts the upload; Ctrl+Z brings the block back and restarts it; cancel() leaves it in error', async ({ page }) => {
+    const id = docId();
+    await boot(page, id, 'gated');
+    await uploadImage(page, PNG, 'pixel.png', 'pending');
+    await expect.poll(() => page.evaluate(() => (window as any).__hostUploads.length)).toBe(1);
+    await page.evaluate(async () => {
+      const n = (window as any).nabu;
+      n.undoManager.clear();
+      const block = [...n.blocks.values()].find((b: any) => b.type === 'image');
+      n.tree.delete(block.node.id);
+      await n.commit();
+    });
+    await expect.poll(() => page.evaluate(() => (window as any).__hostAborted)).toBe(1);
+    expect(await images(page)).toEqual([]);
+    await page.evaluate(() => (window as any).nabu.undo());
+    await expect.poll(async () => (await images(page)).map((i) => i.status)).toEqual(['pending']);
+    await expect.poll(() => page.evaluate(() => (window as any).__hostUploads.length)).toBe(2); // restarted
+
+    const cancelled = await page.evaluate(() => [...(window as any).nabu.blocks.values()].find((b: any) => b.type === 'image' && !b.node.isDeleted?.()).cancel());
+    expect(cancelled).toBe(true);
+    await expect.poll(async () => (await imageState(page))[0]).toMatchObject({ status: 'error', reason: 'cancelled', progress: null });
+    expect(await page.evaluate(() => (window as any).__hostAborted)).toBe(2);
+  });
+
+  test('11 · a copy made right after a reload carries the bytes of the stored image (preload)', async ({ page }) => {
+    const id = docId();
+    await boot(page, id);
+    await uploadImage(page);
+    const [img] = await images(page);
+    await page.evaluate(() => (window as any).nabu.saveNow());
+    await page.reload();
+    await page.waitForFunction(() => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0, null, { timeout: 20000 });
+    const assets = await page.evaluate(async () => {
+      const n = (window as any).nabu;
+      await n.systems.get('files').whenIdle(); // the preload
+      const json = n.serialize('json');
+      return Object.fromEntries(Object.entries(json.assets ?? {}).map(([k, v]: [string, any]) => [k, { omitted: v.omitted ?? false, hasData: typeof v.data === 'string' && v.data.length > 0 }]));
+    });
+    expect(assets).toEqual({ [img.ref.slice('nabu-asset:'.length)]: { omitted: false, hasData: true } });
+  });
+
+  test('12 · files.maxFileSize: a too big file gives a rejected block with a readable reason (nothing stored)', async ({ page }) => {
+    const id = docId();
+    await page.goto('/e2e?persist=' + encodeURIComponent(id) + '&options=' + encodeURIComponent(JSON.stringify({ files: { maxFileSize: 50 } })));
+    await page.waitForFunction(() => (window as any).__nabu_ready === true && (window as any).nabu?.children?.length > 0, null, { timeout: 20000 });
+    await focusEmpty(page);
+    const chooserP = new Promise<any>((res) => page.once('filechooser', res));
+    await page.keyboard.type('/image');
+    await expect(page.locator('.nabu-slash')).toBeVisible();
+    await page.keyboard.press('Enter');
+    const chooser = await chooserP;
+    await chooser.setFiles({ name: 'big.png', mimeType: 'image/png', buffer: Buffer.concat([PNG, Buffer.alloc(200)]) });
+    await expect.poll(async () => (await imageState(page))[0]?.status).toBe('rejected');
+    expect(await imageState(page)).toEqual([{ ref: '', status: 'rejected', progress: null, reason: 'too-large', shown: 'rejected' }]);
+    expect(await page.evaluate(() => [...(window as any).nabu.blocks.values()].find((b: any) => b.type === 'image').reason.message)).toMatch(/too large/i);
+    await page.evaluate(() => (window as any).nabu.saveNow());
+    expect((await idb(page, id)).assets).toHaveLength(0);
   });
 });

@@ -143,49 +143,51 @@ test.describe('B · paste', () => {
     expect(otherErrors.list()).toEqual([]);
   });
 
-  test('4 · another document with a host onBeforePersist: re-uploaded to the host, no inline asset, image displays', async ({ page, context }) => {
+  test('4 · another document with a host onBeforePersist: uploaded to the host, the block keeps its hash ref, no bytes in the document, image displays', async ({ page, context }) => {
     await boot(page);
     await uploadImage(page);
     const ev = await copyAll(page);
+    const [orig] = await imageInfo(page);
 
     const host = await context.newPage();
     await boot(host, '1');
     await pasteInto(host, payload(ev));
     await expect.poll(() => tree(host)).toBe('p(before) ; image(∅) ; p(after)');
     await expect.poll(async () => (await imageInfo(host))[0]?.status).toBe('ready');
-    const [img] = await imageInfo(host);
-    expect(img.ref).toMatch(/^blob:/); // the host's own ref
+    expect(await imageInfo(host)).toEqual([{ ref: orig.ref, status: 'ready' }]); // the ref is the content hash and never changes
     const uploads = await host.evaluate(() => (window as any).__hostUploads);
     expect(uploads).toHaveLength(1);
     expect(uploads[0]).toMatchObject({ name: 'pixel.png', type: 'image/png', size: PNG.length });
-    expect(await bytesInDoc(host)).toBe(0); // the host has the file; the document never holds bytes (the local store has a copy first)
+    const url = await host.evaluate((hash) => (window as any).nabu.doc.getMap('assetIndex').toJSON()[hash]?.url, orig.ref.slice('nabu-asset:'.length));
+    expect(url).toBe(uploads[0].ref); // the host location is recorded in the index
+    expect(await bytesInDoc(host)).toBe(0); // the document never holds bytes (the local store has a copy first)
     await imagesDisplay(host, 1);
   });
 
-  test('5 · with a slow host upload the block shows at once (pending preview); Ctrl+Z removes the whole paste, Ctrl+Shift+Z brings the final ref back', async ({ page, context }) => {
+  test('5 · with a slow host upload the block shows at once (pending, displayed from the local copy); Ctrl+Z removes the whole paste, Ctrl+Shift+Z brings it back ready', async ({ page, context }) => {
     await boot(page);
     await uploadImage(page);
     const ev = await copyAll(page);
+    const [orig] = await imageInfo(page);
 
     const host = await context.newPage();
     await boot(host, 'gated');
     await pasteInto(host, payload(ev));
     await expect.poll(() => tree(host)).toBe('p(before) ; image(∅) ; p(after)');
-    expect((await imageInfo(host))[0].status).toBe('pending');
+    expect(await imageInfo(host)).toEqual([{ ref: orig.ref, status: 'pending' }]);
     await expect(host.locator('.nabu-image-spinner')).toBeVisible();
-    await imagesDisplay(host, 1); // optimistic local preview
+    await imagesDisplay(host, 1); // shown from the local copy while it is sent
 
     await host.evaluate(() => (window as any).__hostRelease());
     await expect.poll(async () => (await imageInfo(host))[0]?.status).toBe('ready');
-    const finalRef = (await imageInfo(host))[0].ref;
-    expect(finalRef).toMatch(/^blob:/);
+    expect((await imageInfo(host))[0].ref).toBe(orig.ref);
 
-    await undo(host); // ONE step: the swap to the final ref is not its own undo step
+    await undo(host); // ONE step: the completion of the upload is not its own undo step
     await expect.poll(() => tree(host)).toBe('p(∅)');
     await expect.poll(() => imageInfo(host)).toEqual([]);
     await redo(host);
     await expect.poll(() => tree(host)).toBe('p(before) ; image(∅) ; p(after)');
-    await expect.poll(() => imageInfo(host)).toEqual([{ ref: finalRef, status: 'ready' }]);
+    await expect.poll(() => imageInfo(host)).toEqual([{ ref: orig.ref, status: 'ready' }]);
     await imagesDisplay(host, 1);
   });
 

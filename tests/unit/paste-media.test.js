@@ -80,12 +80,13 @@ describe('P-51 copy: the bytes travel in the fragment', () => {
     expect('assets' in frag).toBe(false);
   });
 
-  it('above maxInlineSize the bytes are not embedded (ref only) and nabu.warn says so', async () => {
+  it('above maxInlineSize the bytes are not embedded: the file is flagged `omitted` (no silent loss) and nabu.warn says so', async () => {
     const a = await makeEditor({ files: { maxInlineSize: 8 } });
     const warn = vi.spyOn(a, 'warn');
     const block = await addImage(a); // 12 bytes > 8
     const frag = JSON.parse(copyBlock(a, block)['application/x-nabu+json']);
-    expect('assets' in frag).toBe(false);
+    const id = block.ref.slice('nabu-asset:'.length);
+    expect(frag.assets[id]).toEqual({ mime: 'image/png', name: 'pic.png', size: PNG.length, omitted: true }); // no `data`
     expect(frag.blocks[0].props.ref).toBe(block.ref);
     expect(warn).toHaveBeenCalled();
   });
@@ -236,18 +237,18 @@ describe('P-51 paste: the asset is re-created in the target document', () => {
   });
 });
 
-describe('P-51 paste with a host onBeforePersist: re-uploaded, optimistic preview, final ref', () => {
+describe('P-51 paste with a host onBeforePersist: the block keeps its hash ref, the upload runs in the background', () => {
   function hostEditor() {
     const uploads = [];
     let release;
     const gate = new Promise((r) => { release = r; });
     return {
       uploads, release,
-      make: () => makeEditor({ files: { onBeforePersist: async (file) => { uploads.push(file); await gate; return { ref: 'https://host.test/' + file.name }; } } }),
+      make: () => makeEditor({ files: { onBeforePersist: async (file, ctx) => { uploads.push({ file, ctx }); await gate; return { ref: 'https://host.test/' + file.name }; } } }),
     };
   }
 
-  it('block appears pending with a local preview, then gets the host ref; no asset is stored inline', async () => {
+  it('block appears pending with its hash ref (displayed from the local store), then ready; the host location is the index url', async () => {
     const a = await makeEditor();
     const host = hostEditor();
     const b = await host.make();
@@ -255,21 +256,25 @@ describe('P-51 paste with a host onBeforePersist: re-uploaded, optimistic previe
     pasteInto(b, data);
     await flush();
     let [pasted] = images(b);
+    const hash = await sha256Id(PNG);
     expect(pasted.status).toBe('pending');
-    expect(pasted.ref).toMatch(/^nabu-pending:/);
+    expect(pasted.ref).toBe('nabu-asset:' + hash);
+    pasted.displaySrc; await flush();
     expect(pasted.displaySrc).toMatch(/^blob:/);
     expect(host.uploads).toHaveLength(1);
-    expect(host.uploads[0].name).toBe('pic.png');
+    expect(host.uploads[0].file.name).toBe('pic.png');
+    expect(host.uploads[0].ctx.signal).toBeInstanceOf(AbortSignal);
     host.release();
     await flush();
     [pasted] = images(b);
     expect(pasted.status).toBe('ready');
-    expect(pasted.ref).toBe('https://host.test/pic.png');
+    expect(pasted.ref).toBe('nabu-asset:' + hash); // never swapped
+    expect(Files.get(b).index.get(hash).url).toBe('https://host.test/pic.png');
     expect(Object.keys(Files.get(b).assets.toJSON())).toHaveLength(0); // never bytes in the document
     expect(stored(b)).toBe(1); // the local store got them first (ADR 014)
   });
 
-  it('two pastes of the same asset upload it once and both blocks get the ref', async () => {
+  it('two pastes of the same asset upload it once and both blocks become ready', async () => {
     const a = await makeEditor();
     const host = hostEditor();
     const b = await host.make();
@@ -280,10 +285,11 @@ describe('P-51 paste with a host onBeforePersist: re-uploaded, optimistic previe
     host.release();
     await flush();
     expect(host.uploads).toHaveLength(1);
-    expect(images(b).map((i) => i.ref)).toEqual(['https://host.test/pic.png', 'https://host.test/pic.png']);
+    expect(images(b).map((i) => i.status)).toEqual(['ready', 'ready']);
+    expect(new Set(images(b).map((i) => i.ref)).size).toBe(1);
   });
 
-  it('the settle commit is not an undo step: undo removes the whole paste, redo brings the final ref back', async () => {
+  it('the completion commit is not an undo step: undo removes the whole paste, redo brings it back ready', async () => {
     const a = await makeEditor();
     const host = hostEditor();
     const b = await host.make();
@@ -292,22 +298,27 @@ describe('P-51 paste with a host onBeforePersist: re-uploaded, optimistic previe
     pasteInto(b, data);
     host.release();
     await flush();
-    expect(images(b)[0].ref).toBe('https://host.test/pic.png');
+    expect(images(b)[0].status).toBe('ready');
     b.undo();
     await flush();
     expect(images(b)).toHaveLength(0);
     b.redo();
     await flush();
     expect(images(b)).toHaveLength(1);
-    expect(images(b)[0].ref).toBe('https://host.test/pic.png');
+    expect(images(b)[0].status).toBe('ready');
+    expect(images(b)[0].ref).toBe('nabu-asset:' + await sha256Id(PNG));
   });
 
-  it('a failing upload ends in the error status', async () => {
+  it('a failing upload ends in the error status, with a reason; the local copy is kept', async () => {
     const a = await makeEditor();
     const b = await makeEditor({ files: { onBeforePersist: async () => { throw new Error('boom'); } } });
     pasteInto(b, copyBlock(a, await addImage(a)));
     await flush();
-    expect(images(b)[0].status).toBe('error');
+    const [pasted] = images(b);
+    expect(pasted.status).toBe('error');
+    expect(pasted.reason.code).toBe('upload-failed');
+    expect(pasted.reason.message).toContain('boom');
+    expect(stored(b)).toBe(1);
   });
 
   it('undoing the paste before the upload ends is harmless', async () => {

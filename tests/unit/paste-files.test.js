@@ -235,7 +235,7 @@ describe('P-55 — files on the clipboard', () => {
   });
 
   describe('with a host onBeforePersist', () => {
-    it('the block is pending with a local preview, then gets the host ref (silent commit)', async () => {
+    it('the block is pending with its hash ref (local preview), then ready once the host has the file (silent commit)', async () => {
       let release;
       const gate = new Promise((r) => { release = r; });
       const uploads = [];
@@ -245,16 +245,18 @@ describe('P-55 — files on the clipboard', () => {
       await flush();
       const [img] = media(engine);
       expect(img.status).toBe('pending');
-      expect(img.ref).toMatch(/^nabu-pending:/);
+      expect(img.ref).toMatch(/^nabu-asset:sha256-[0-9a-f]{64}$/);
       expect(uploads).toHaveLength(1);
       expect(uploads[0]).toMatchObject({ name: 'up.png', type: 'image/png' });
       expect(Object.keys(Files.get(engine).assets.toJSON())).toHaveLength(0); // no bytes in the document
       expect(Files.get(engine).store.size).toBe(1); // the local store has them first
       release();
       await flush();
+      const ref = img.ref;
       expect(media(engine)[0].status).toBe('ready');
-      expect(media(engine)[0].ref).toBe('https://host.test/up.png');
-      // one undo removes the whole paste, even after the swap
+      expect(media(engine)[0].ref).toBe(ref); // the ref never changes
+      expect(Files.get(engine).index.get(ref.slice('nabu-asset:'.length)).url).toBe('https://host.test/up.png');
+      // one undo removes the whole paste, even after the upload completed
       engine.undo();
       await flush();
       expect(media(engine)).toHaveLength(0);
@@ -301,7 +303,7 @@ describe('files.importRemote', () => {
     expect(media(engine)).toHaveLength(0);
   });
 
-  it('ON, through onBeforePersist: the host receives the downloaded File', async () => {
+  it('ON, through onBeforePersist: the host receives the downloaded File; the block keeps the hash ref', async () => {
     globalThis.fetch = vi.fn(async () => ({ ok: true, blob: async () => new Blob([PNG], { type: 'image/png' }) }));
     const seen = [];
     const engine = await makeEditor({ files: { importRemote: true, onBeforePersist: async (file) => { seen.push(file); return { ref: 'https://host.test/' + file.name }; } } });
@@ -310,8 +312,9 @@ describe('files.importRemote', () => {
     await flush();
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ name: 'cat.png', type: 'image/png' });
-    expect(media(engine)[0].ref).toBe('https://host.test/cat.png');
+    expect(media(engine)[0].ref).toMatch(/^nabu-asset:sha256-/);
     expect(media(engine)[0].status).toBe('ready');
+    expect(Files.get(engine).index.get(media(engine)[0].ref.slice('nabu-asset:'.length)).url).toBe('https://host.test/cat.png');
   });
 
   it('a failing fetch (network, CORS, HTTP error, not a media type) keeps the original URL', async () => {

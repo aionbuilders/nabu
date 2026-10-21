@@ -9,6 +9,8 @@ import { Blob as NodeBlob } from 'node:buffer';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MemoryAssetStore } from '$lib/files/store.js';
 import { IndexedDBAssetStore } from '$lib/persistence/asset-store.js';
+import { IndexedDBOutbox } from '$lib/persistence/outbox.js';
+import { MemoryOutbox } from '$lib/files/outbox.js';
 import { loadSnapshot, saveSnapshot, deleteSnapshot, openDB } from '$lib/persistence/indexeddb.js';
 
 const H1 = 'sha256-' + '1'.repeat(64);
@@ -87,8 +89,83 @@ describe('IndexedDBAssetStore (fake-indexeddb)', () => {
   });
 });
 
+/** The contract every outbox must honour (one document). */
+function outboxContract(make) {
+  let outbox;
+  beforeEach(async () => { outbox = await make(); });
+  const entry = (hash, extra = {}) => ({ hash, attempts: 1, state: 'pending', updatedAt: 5, ...extra });
+
+  it('put / list / delete; put replaces the entry of the same hash', async () => {
+    expect(await outbox.list()).toEqual([]);
+    await outbox.put(entry(H1));
+    await outbox.put(entry(H2, { attempts: 3, state: 'error' }));
+    await outbox.put(entry(H1, { attempts: 2 }));
+    const list = (await outbox.list()).sort((a, b) => a.hash.localeCompare(b.hash));
+    expect(list).toEqual([entry(H1, { attempts: 2 }), entry(H2, { attempts: 3, state: 'error' })]);
+    await outbox.delete(H1);
+    expect((await outbox.list()).map((e) => e.hash)).toEqual([H2]);
+    await outbox.clear();
+    expect(await outbox.list()).toEqual([]);
+  });
+}
+
+describe('MemoryOutbox', () => { outboxContract(() => new MemoryOutbox()); });
+
+describe('IndexedDBOutbox (fake-indexeddb)', () => {
+  outboxContract(() => { globalThis.indexedDB = new IDBFactory(); return new IndexedDBOutbox('doc-a'); });
+
+  it('is scoped to its document: two documents never see each other\'s uploads', async () => {
+    globalThis.indexedDB = new IDBFactory();
+    const a = new IndexedDBOutbox('doc-a');
+    const b = new IndexedDBOutbox('doc-b');
+    await a.put({ hash: H1, attempts: 1, state: 'pending', updatedAt: 1 });
+    await b.put({ hash: H1, attempts: 5, state: 'error', updatedAt: 2 });
+    expect((await a.list()).map((e) => e.attempts)).toEqual([1]);
+    expect((await b.list()).map((e) => e.attempts)).toEqual([5]);
+    await a.clear();
+    expect(await a.list()).toEqual([]);
+    expect(await b.list()).toHaveLength(1);
+  });
+});
+
 describe('IndexedDB schema upgrade (ADR 014)', () => {
-  it('a version 1 database (snapshots only) upgrades to 2 and keeps its snapshots', async () => {
+  it('a version 2 database (snapshots, assets, docRefs) upgrades to 3, gains `outbox` and keeps ALL its data', async () => {
+    globalThis.indexedDB = new IDBFactory();
+    BlobCtor = NodeBlob;
+    // what lot 1 created: version 2 with snapshots + assets + docRefs, each holding data
+    await new Promise((resolve, reject) => {
+      const request = indexedDB.open('nabu', 2);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore('snapshots', { keyPath: 'docId' });
+        request.result.createObjectStore('assets', { keyPath: 'hash' });
+        request.result.createObjectStore('docRefs', { keyPath: 'docId' });
+      };
+      request.onsuccess = () => {
+        const tx = request.result.transaction(['snapshots', 'assets', 'docRefs'], 'readwrite');
+        tx.objectStore('snapshots').put({ docId: 'doc', snapshot: new Uint8Array([1, 2, 3]), savedAt: 1 });
+        tx.objectStore('assets').put({ hash: H1, blob: blobOf(4, 5), mime: 'image/png', name: 'a.png', size: 2, savedAt: 1 });
+        tx.objectStore('docRefs').put({ docId: 'doc', hashes: [H1], savedAt: 1 });
+        tx.oncomplete = () => { request.result.close(); resolve(); };
+      };
+      request.onerror = () => reject(request.error);
+    });
+
+    const db = await openDB();
+    expect(db.version).toBe(3);
+    expect([...db.objectStoreNames].sort()).toEqual(['assets', 'docRefs', 'outbox', 'snapshots']);
+    db.close();
+    expect([...(await loadSnapshot('doc'))]).toEqual([1, 2, 3]);
+    const store = new IndexedDBAssetStore();
+    expect(await bytesOf(await store.get(H1))).toEqual([4, 5]);
+    expect(await store.stat(H1)).toEqual({ mime: 'image/png', name: 'a.png', size: 2 });
+    expect([...(await store.getDocRefs('doc'))]).toEqual([H1]);
+    // and the new store works
+    const outbox = new IndexedDBOutbox('doc');
+    await outbox.put({ hash: H1, attempts: 1, state: 'pending', updatedAt: 1 });
+    expect(await outbox.list()).toHaveLength(1);
+  });
+
+  it('a version 1 database (snapshots only) upgrades to 3 and keeps its snapshots', async () => {
     globalThis.indexedDB = new IDBFactory();
     // what the beta created: base `nabu`, version 1, a `snapshots` store
     await new Promise((resolve, reject) => {
@@ -103,8 +180,8 @@ describe('IndexedDB schema upgrade (ADR 014)', () => {
     });
 
     const db = await openDB();
-    expect(db.version).toBe(2);
-    expect([...db.objectStoreNames].sort()).toEqual(['assets', 'docRefs', 'snapshots']);
+    expect(db.version).toBe(3);
+    expect([...db.objectStoreNames].sort()).toEqual(['assets', 'docRefs', 'outbox', 'snapshots']);
     db.close();
     expect([...(await loadSnapshot('old-doc'))]).toEqual([7, 8, 9]);
 

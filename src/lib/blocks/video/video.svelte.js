@@ -26,7 +26,7 @@ export class VideoBlock extends MediaBlock {
         }));
         this.serializers.set('application/x-nabu+json', () => ({
             type: 'video',
-            props: { ref: this.ref, alt: this.alt, name: this.name },
+            props: { ref: this.ref, alt: this.alt, name: this.name, ...this.clipboardState },
             partial: false,
         }));
     }

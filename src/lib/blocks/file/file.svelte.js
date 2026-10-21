@@ -26,7 +26,7 @@ export class FileBlock extends MediaBlock {
         }));
         this.serializers.set('application/x-nabu+json', () => ({
             type: 'file',
-            props: { ref: this.ref, name: this.name },
+            props: { ref: this.ref, name: this.name, ...this.clipboardState },
             partial: false,
         }));
     }

@@ -24,21 +24,32 @@
 
     // Test-only (this route only exists in dev / `build:e2e`): `?hostFiles=1` installs an in-memory `files.onBeforePersist` that "uploads" to
     // a blob: URL and records the call in `window.__hostUploads`; `?hostFiles=gated` makes every upload wait for
-    // `window.__hostRelease()` (to observe the pending state of a paste).
+    // `window.__hostRelease()` (to observe the pending state); `?hostFiles=fail` makes every upload fail while `window.__hostFailing`
+    // is true (set it to false to let a retry succeed). The host reports a progress of 0.5 as soon as it starts, honours the abort
+    // `signal` (counted in `window.__hostAborted`, gated mode).
     const hostFiles = page.url.searchParams.get('hostFiles');
     if (hostFiles) {
       const w = /** @type {any} */ (window);
       w.__hostUploads = [];
+      w.__hostAborted = 0;
+      w.__hostFailing = hostFiles === 'fail';
       /** @type {() => void} */
       let release = () => {};
       const gate = hostFiles === 'gated' ? new Promise((resolve) => { release = () => resolve(undefined); }) : null;
       w.__hostRelease = release;
       options.files = {
         ...(options.files ?? {}),
-        onBeforePersist: async (/** @type {File} */ file) => {
+        onBeforePersist: async (/** @type {File} */ file, /** @type {{ signal?: AbortSignal, onProgress?: (p: number) => void }} */ ctx = {}) => {
           const ref = URL.createObjectURL(file);
           w.__hostUploads.push({ name: file.name, size: file.size, type: file.type, ref });
-          if (gate) await gate;
+          ctx.onProgress?.(0.5);
+          if (gate) {
+            await new Promise((resolve, reject) => {
+              ctx.signal?.addEventListener('abort', () => { w.__hostAborted++; reject(new DOMException('aborted', 'AbortError')); });
+              gate.then(resolve);
+            });
+          }
+          if (w.__hostFailing) throw new Error('host is down');
           return { ref };
         },
       };

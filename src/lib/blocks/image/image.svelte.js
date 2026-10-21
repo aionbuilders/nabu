@@ -29,7 +29,7 @@ export class ImageBlock extends MediaBlock {
         }));
         this.serializers.set('application/x-nabu+json', () => ({
             type: 'image',
-            props: { ref: this.ref, alt: this.alt },
+            props: { ref: this.ref, alt: this.alt, ...this.clipboardState },
             partial: false,
         }));
     }

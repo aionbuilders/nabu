@@ -3,8 +3,9 @@ import { FullPreset } from '../presets.js';
 import { Files } from '../files/files.svelte.js';
 import { loadSnapshot, saveSnapshot, deleteSnapshot } from './indexeddb.js';
 import { IndexedDBAssetStore } from './asset-store.js';
+import { IndexedDBOutbox } from './outbox.js';
 
-export { loadSnapshot, saveSnapshot, deleteSnapshot, IndexedDBAssetStore };
+export { loadSnapshot, saveSnapshot, deleteSnapshot, IndexedDBAssetStore, IndexedDBOutbox };
 
 /**
  * @import { Extension } from '../utils/extensions.js';
@@ -22,6 +23,8 @@ export { loadSnapshot, saveSnapshot, deleteSnapshot, IndexedDBAssetStore };
  * The bytes of the files (images, videos…) are NOT saved in the snapshot (ADR 014): they go to an `IndexedDBAssetStore`
  * (base `nabu`, object store `assets`, shared by every document of the origin), unless `files.store` provides another one.
  * The document only keeps references and a small metadata index; the store also records which files each document references.
+ * With a host (`files.onBeforePersist`) the uploads still to do are listed in an `IndexedDBOutbox` (object store `outbox`, unless
+ * `files.outbox` provides another one): an upload interrupted by a closed tab RESUMES when the document is opened again.
  *
  * The instance gains three extra methods:
  * - `nabu.saveNow()` — force an immediate save (returns a Promise)
@@ -59,10 +62,11 @@ export async function createPersistedEditor({
 } = {}) {
 	const snapshot = await loadSnapshot(docId);
 	const store = init.files?.store ?? new IndexedDBAssetStore();
+	const outbox = init.files?.outbox ?? new IndexedDBOutbox(docId);
 
 	const nabu = new Nabu({
 		...init,
-		files: { ...init.files, store },
+		files: { ...init.files, store, outbox },
 		extensions: [...preset, ...extensions],
 		...(snapshot ? { snapshot } : {})
 	});
@@ -98,6 +102,7 @@ export async function createPersistedEditor({
 		await deleteSnapshot(docId);
 		const clear = /** @type {any} */ (store).clearDocRefs;
 		if (typeof clear === 'function') await clear.call(store, docId);
+		await outbox.clear?.();
 	};
 
 	return nabu;

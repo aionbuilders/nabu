@@ -1231,8 +1231,8 @@ export class Nabu {
 
     /**
      * Insert the blocks made of pasted files, at the caret, in order. The files are hashed and stored first (`Files#stage`),
-     * then ONE `insertFragment` does the rest like any other paste: the blocks hold the hash refs, or (with a host's
-     * `onBeforePersist`) the optimistic `pending` block; a single undo step.
+     * then ONE `insertFragment` does the rest like any other paste: the blocks hold the hash refs (`pending` while a host's
+     * `onBeforePersist` uploads the file, `rejected` for a file over `files.maxFileSize`); a single undo step.
      * @param {Array<{ file: File, block: import('../utils/extensions.js').PasteBlock }>} planned
      */
     async #pasteFiles(planned) {
@@ -1244,7 +1244,7 @@ export class Nabu {
         for (const { file, block } of planned) {
             try {
                 const staged = await files.stage(file);
-                blocks.push({ ...block, props: { ...block.props, ref: staged.ref }, partial: false });
+                blocks.push({ ...block, props: { ...block.props, ref: staged.ref, ...staged.props }, partial: false });
                 if (staged.asset) assets[staged.id] = staged.asset;
             } catch (error) {
                 this.warn(`paste: could not read file "${file.name}": ${error}`);

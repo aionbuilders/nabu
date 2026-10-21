@@ -93,26 +93,27 @@ test.describe('pasting files', () => {
     await imagesDisplay(page, 1);
   });
 
-  test('2 · with a host onBeforePersist: pending with a preview, then ready with the host ref', async ({ page }) => {
+  test('2 · with a host onBeforePersist: pending with a preview, then ready; the ref is the hash and never changes', async ({ page }) => {
     await boot(page, '?hostFiles=gated');
     await focusEmpty(page);
     await pasteFiles(page, [png('up.png')]);
     await expect.poll(async () => (await media(page))[0]?.status).toBe('pending');
-    expect((await media(page))[0].ref).toMatch(/^nabu-pending:/);
-    await imagesDisplay(page, 1); // the local preview is shown meanwhile
+    const [pending] = await media(page);
+    expect(pending.ref).toMatch(/^nabu-asset:sha256-[0-9a-f]{64}$/);
+    await imagesDisplay(page, 1); // the local copy is shown meanwhile
     expect(await page.evaluate(() => Object.keys((window as any).nabu.doc.getMap('assets').toJSON()))).toEqual([]); // never bytes in the document
     await page.evaluate(() => (window as any).__hostRelease());
     await expect.poll(async () => (await media(page))[0]?.status).toBe('ready');
     const [img] = await media(page);
-    expect(img.ref).toMatch(/^blob:/);
+    expect(img.ref).toBe(pending.ref);
     expect(await page.evaluate(() => (window as any).__hostUploads.map((u: any) => [u.name, u.type]))).toEqual([['up.png', 'image/png']]);
     await imagesDisplay(page, 1);
-    // the swap is not an undo step: one undo removes the block, one redo brings it back with the final ref
+    // the completion is not an undo step: one undo removes the block, one redo brings it back
     await undo(page);
     await expect.poll(() => tree(page)).toBe('p(∅)');
     await redo(page);
     await expect.poll(() => tree(page)).toBe('image(∅)');
-    expect((await media(page))[0].ref).toMatch(/^blob:/);
+    expect((await media(page))[0].ref).toBe(pending.ref);
   });
 
   test('3 · several files give several blocks, in order, by type', async ({ page }) => {

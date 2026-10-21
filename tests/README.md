@@ -89,7 +89,7 @@ suite runs against a **production build**:
 - Use `--reporter=line` (or `list`) for ad-hoc runs; the default config also writes a JSON report to `test-results/results.json` (git-ignored).
 
 The `/e2e` route reads `?persist=<docId>` (IndexedDB-backed editor), `?options=<json>` (Nabu init
-options), `?hostFiles=1|gated` (in-memory `files.onBeforePersist`), and exposes `window.nabu` plus
+options), `?hostFiles=1|gated|fail` (in-memory `files.onBeforePersist`: immediate, held until `window.__hostRelease()`, or failing while `window.__hostFailing`), and exposes `window.nabu` plus
 `window.__nabu_ready`.
 
 ## Key Constraints

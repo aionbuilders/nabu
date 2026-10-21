@@ -1,28 +1,49 @@
-import { Files } from "../../files/files.svelte.js";
+import { Files, FileRejectedError } from "../../files/files.svelte.js";
+import { reasonOf } from "../../files/status.js";
 
 /**
- * Insert a media block of `type` from a local File: optimistic preview → persist → ref.
+ * Insert a media block of `type` from a local File. The block appears at once (`pending`, with a local preview), the bytes
+ * are hashed and written to the local store (ADR 014), then the block gets its `nabu-asset:sha256-…` ref: `ready`, or — with a
+ * host (`files.onBeforePersist`) — still `pending` while the background upload runs (`block.progress`, `block.retry()`,
+ * `block.cancel()`); the ref never changes afterwards. A file over `files.maxFileSize` is refused: the block is created
+ * `rejected`, with no ref and a readable `reason`.
  * @param {import('../nabu.svelte.js').Nabu} nabu @param {string} type @param {File} file
  */
 export async function insertMediaFromFile(nabu, type, file) {
     const BlockClass = /** @type {any} */ (nabu.registry.get(type));
     if (!BlockClass) return;
+    const files = Files.get(nabu);
     const anchor = nabu.selection.anchorBlock;
     const parentId = anchor?.node.parent()?.id.toString() ?? null;
     const idx = (anchor?.node.index() ?? -1) + 1;
+    const rejection = files.checkSize(file.size);
+    if (rejection) {
+        nabu.warn(`file "${file.name}" refused: ${rejection.message}`);
+        BlockClass.create(nabu, type, { status: 'rejected', name: file.name, reason: rejection }, parentId, idx >= 0 ? idx : null);
+        await nabu.commit();
+        return;
+    }
     const block = BlockClass.create(nabu, type, { status: 'pending', name: file.name }, parentId, idx >= 0 ? idx : null);
     block.previewUrl = URL.createObjectURL(file);
     await nabu.commit();
     const id = block.id;
     try {
-        // TODO(ADR-014 lot 2): progress / retry / cancel (`block.progress`, `block.retry()`, `block.cancel()`) and outbox-based upload;
         // lot 3: drag and drop calls this same path.
-        const ref = await Files.get(nabu).persist(file);
+        const { id: hash, ref } = await files.ingest(file);
         const fresh = nabu.blocks.get(id);
-        if (fresh) { const d = /** @type {any} */ (fresh.node.data); d.set('ref', ref); d.set('status', 'ready'); /** @type {any} */ (fresh).previewUrl = null; await nabu.commit(); }
-    } catch {
+        if (fresh) {
+            const d = /** @type {any} */ (fresh.node.data);
+            d.set('ref', ref);
+            d.set('status', files.initialStatus(hash)); // with a host: stays pending, the upload queue takes over
+            await nabu.commit();
+        }
+    } catch (error) {
         const fresh = nabu.blocks.get(id);
-        if (fresh) { /** @type {any} */ (fresh.node.data).set('status', 'error'); await nabu.commit(); }
+        if (fresh) {
+            const d = /** @type {any} */ (fresh.node.data);
+            if (error instanceof FileRejectedError) { d.set('status', 'rejected'); d.set('reason', error.reason); } else { d.set('status', 'error'); d.set('reason', reasonOf('upload-failed')); }
+            await nabu.commit();
+        }
     }
 }
 

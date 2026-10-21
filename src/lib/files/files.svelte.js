@@ -2,8 +2,14 @@ import { SvelteMap } from 'svelte/reactivity';
 import { sanitizeUrl } from '../utils/html.js';
 import { ASSET_PREFIX, PENDING_PREFIX, assetIdOf, isHashId, sha256Id, mapAssetBlocks, mapRemoteBlocks, remoteFileName, collectAssetIds, bytesToBase64, base64ToBytes } from './assets.clipboard.js';
 import { MemoryAssetStore } from './store.js';
+import { Uploads } from './uploads.svelte.js';
+import { FileRejectedError, tooLarge, reasonOf } from './status.js';
 
 /** @import { AssetStore, AssetMeta } from './store.js' */
+/** @import { Outbox } from './outbox.js' */
+/** @import { FileReason, FileStatus } from './status.js' */
+
+export { FileRejectedError };
 
 /** Origin of the commits that finish a paste in the background (ref swap): not undoable. See Nabu's UndoManager. */
 export const SILENT_ORIGIN = 'nabu:silent:files';
@@ -14,12 +20,15 @@ const EMBED_CACHE_BUDGET = 32 * 1024 * 1024;
 
 /**
  * An asset as carried by `application/x-nabu+json` (`assets: { [id]: EmbeddedAsset }`), `id` being the part of the ref
- * after `nabu-asset:` (`sha256-<hex>`, or a beta `<uuid>`).
+ * after `nabu-asset:` (`sha256-<hex>`, or a beta `<uuid>`). An entry with `omitted: true` and no `data` says "this file
+ * exists but its bytes are NOT in this copy" (too large, or not loaded yet): the receiver shows the block as `missing`
+ * with the reason `not-embedded` (unless its own store already has the file).
  * @typedef {Object} EmbeddedAsset
  * @property {string} mime
  * @property {string} name
  * @property {number} size byte length
- * @property {string} data base64
+ * @property {string} [data] base64 (absent when `omitted`)
+ * @property {boolean} [omitted]
  */
 
 /**
@@ -28,15 +37,25 @@ const EMBED_CACHE_BUDGET = 32 * 1024 * 1024;
  *   (`createPersistedEditor`: an `IndexedDBAssetStore` shared by all the documents of the origin). The document itself only
  *   holds `nabu-asset:sha256-<hex>` references and a metadata index (`assetIndex`).
  * @property {(file: File, ctx: { signal?: AbortSignal, onProgress?: (p: number) => void }) => Promise<{ ref: string } | void>} [onBeforePersist]
- *   Host storage. The file is always written to the local store first; return `{ ref }` to ALSO put it at your own
- *   location (the returned ref replaces the local one in the block). Return nothing to keep the local reference.
+ *   Host storage (ADR 014 §3.4). The file is always written to the local store first and the block keeps its
+ *   `nabu-asset:sha256-…` ref FOREVER; the upload then runs in the background (the block is `pending`, `block.progress` follows
+ *   `onProgress(0..1)`). Return `{ ref }` (where the host keeps the file): it is recorded as `assetIndex[hash].url` and the
+ *   block becomes `ready`. Throw to fail (`error`, the local copy is kept, `block.retry()` runs it again). `signal` fires when
+ *   the upload is cancelled (`block.cancel()`) or when the last block that shows the file is deleted — honour it. The upload
+ *   is retried from the local copy after a reload (it may therefore run more than once for one file: make it idempotent).
+ * @property {number} [maxFileSize] Largest file (bytes) accepted; default none. A bigger file is REFUSED: the block that would
+ *   have shown it is created with `status: 'rejected'`, no ref, and a readable `reason` (`too-large`).
+ * @property {Outbox} [outbox] Where the uploads still to do are listed (ADR 014 §3.4), scoped to this document. Default: in
+ *   memory (`createPersistedEditor`: an `IndexedDBOutbox`, next to the asset store).
+ * @property {(ref: string) => void} [onAssetReleased] TODO(ADR-014 lot 3): declared only. Will be called with the host
+ *   `url` of a file no document version references any more, so the integrator can delete it. NOT called yet.
  * @property {(ref: string) => string} [resolve] Turn a stored ref into a display URL.
  * @property {number} [maxInlineSize] Byte threshold for embedding files in a COPY / export (`application/x-nabu+json`,
  *   `serialize('json')`): above it (total, or for one file) the bytes are not embedded. Default 2MB.
  * @property {boolean} [importRemote] Opt-in, default `false`. When `true`, a remote image / media (an `http(s)` URL) pasted
- *   from the HTML of a web page is fetched and stored through {@link Files#persist} (so `onBeforePersist` sees it) instead of
- *   being hot-linked: the block shows the original URL meanwhile (`pending`) and gets the stored ref when done. A fetch that
- *   fails (network, CORS, HTTP error) keeps the original URL.
+ *   from the HTML of a web page is fetched and stored in the local store (and sent to `onBeforePersist`, if any) instead of
+ *   being hot-linked: the block shows the original URL meanwhile (`pending`) and gets its `nabu-asset:` ref when done. A fetch
+ *   that fails (network, CORS, HTTP error) or a file over `maxFileSize` keeps the original URL.
  */
 
 /**
@@ -75,6 +94,8 @@ export class Files {
     #legacy = new Map();
     /** @type {Map<string, string>} ref → objectURL of a beta asset whose bytes are still in the Loro `assets` map (migration pending) */
     #legacyUrls = new Map();
+    /** The upload queue (host mode). @type {Uploads} */
+    #uploads;
 
     /** Milliseconds an unused objectURL is kept before being revoked (a block that moves unmounts and remounts at once). */
     revokeGraceMs = 1000;
@@ -88,7 +109,19 @@ export class Files {
         this.assets = nabu.doc.getMap('assets');
         /** ADR 014 §3.2: `hash → { mime, name, size, url? }`, metadata only (never bytes). */
         this.index = nabu.doc.getMap('assetIndex');
+        this.#uploads = new Uploads({
+            nabu,
+            store: this.store,
+            index: this.index,
+            config: () => this.config,
+            silent: (write) => this.#silent(write),
+            settled: async (hash) => { await this.#inflight.get(hash)?.catch(() => {}); },
+            forgetMissing: () => { for (const [key, value] of this.#urls) if (value === null) this.#urls.delete(key); },
+            track: (promise) => this.#track(promise),
+        });
+        nabu.doc.subscribe((event) => this.#uploads.onDocEvent(event));
         if (this.assets.size > 0) this.#track(this.#migrate());
+        this.#preload();
     }
 
     /** @param {import('../blocks/nabu.svelte.js').Nabu} nabu @returns {Files} */
@@ -105,6 +138,24 @@ export class Files {
     get config() { return this.#nabu.fileConfig || {}; }
 
     get maxInlineSize() { return this.config.maxInlineSize ?? 2 * 1024 * 1024; }
+
+    /** `files.maxFileSize`, or `null` (no limit). @returns {number | null} */
+    get maxFileSize() {
+        const max = this.config.maxFileSize;
+        return typeof max === 'number' && max > 0 ? max : null;
+    }
+
+    /** Whether a host is configured (`files.onBeforePersist`): files are then uploaded in the background. @returns {boolean} */
+    get hosted() { return typeof this.config.onBeforePersist === 'function'; }
+
+    /**
+     * Check a file size against `files.maxFileSize`.
+     * @param {number} size bytes @returns {FileReason | null} the reason it is refused, `null` when accepted
+     */
+    checkSize(size) {
+        const max = this.maxFileSize;
+        return max !== null && size > max ? tooLarge(size, max) : null;
+    }
 
     // ── Background work ──────────────────────────────────────────────────────────────────────────
 
@@ -177,11 +228,13 @@ export class Files {
     /**
      * Hash a File and write it to the local store (deduplicated: the same bytes give the same id and one entry), then
      * make sure the document's `assetIndex` knows it. This is step 1 of the lifecycle (ADR 014 §3.4).
+     * Throws {@link FileRejectedError} for a file over `files.maxFileSize`.
      * @param {File} file
      * @returns {Promise<{ id: string, ref: string, meta: AssetMeta }>}
      */
     async ingest(file) {
-        // TODO(ADR-014 lot 2): `files.maxFileSize` check here (a too big file is rejected with a readable reason).
+        const rejection = this.checkSize(file.size);
+        if (rejection) throw new FileRejectedError(rejection);
         const bytes = new Uint8Array(await file.arrayBuffer());
         const id = await sha256Id(bytes);
         const meta = { mime: file.type || 'application/octet-stream', name: file.name || '', size: bytes.length };
@@ -195,23 +248,74 @@ export class Files {
     }
 
     /**
-     * Persist a File → durable ref. The bytes always go to the local store first (and the document index), whatever the
-     * mode; with `onBeforePersist` the host then gets the file and its returned ref replaces the local one.
+     * Store a File and hand it to the host: {@link Files#ingest}, then (with `onBeforePersist`) the upload starts in the
+     * background. Resolves with the `nabu-asset:sha256-…` ref as soon as the local copy is written — it never changes, the
+     * host location ends up in `assetIndex[hash].url`. Blocks do not call this: they use `ingest` and become `pending`, the
+     * upload queue does the rest. For programmatic use.
      * @param {File} file
-     * @param {{ signal?: AbortSignal, onProgress?: (p:number)=>void }} [ctx]
      * @returns {Promise<string>}
      */
-    async persist(file, ctx = {}) {
-        const { ref } = await this.ingest(file);
-        const hook = this.config.onBeforePersist;
-        if (hook) {
-            // TODO(ADR-014 lot 2): the upload becomes a background outbox job (persisted, resumable, cancelable) and the block
-            // keeps its hash ref, with `assetIndex[hash].url` set on success. Until then the host ref replaces the local one.
-            const result = await hook(file, ctx);
-            if (result && result.ref) return result.ref;
-        }
+    async persist(file) {
+        const { id, ref } = await this.ingest(file);
+        if (this.hosted) this.#uploads.upload(id);
         return ref;
     }
+
+    // ── Upload state & controls (ADR 014 §3.5) ───────────────────────────────────────────────────
+
+    /** @param {string} ref @returns {string | null} the hash id of a `nabu-asset:sha256-…` ref */
+    #hashOf(ref) {
+        const raw = ref ? assetIdOf(ref) : null;
+        if (raw === null) return null;
+        const id = this.#canonical(raw);
+        return isHashId(id) ? id : null;
+    }
+
+    /**
+     * Progress (0–1) of the running upload of the file `ref` designates; `null` when none runs. Reactive.
+     * @param {string} ref @returns {number | null}
+     */
+    progress(ref) {
+        const id = this.#hashOf(ref);
+        return id === null ? null : this.#uploads.progress(id);
+    }
+
+    /** Whether the upload of the file `ref` designates is running. Reactive. @param {string} ref @returns {boolean} */
+    isUploading(ref) {
+        const id = this.#hashOf(ref);
+        return id !== null && this.#uploads.isUploading(id);
+    }
+
+    /**
+     * Run the upload of the file `ref` designates again, from its local copy. Resolves `true` when the file ended up at the host.
+     * @param {string} ref @returns {Promise<boolean>}
+     */
+    retry(ref) {
+        const id = this.#hashOf(ref);
+        return id === null ? Promise.resolve(false) : this.#uploads.retry(id);
+    }
+
+    /**
+     * Abort the running upload of the file `ref` designates (the host's `signal` fires). The blocks showing it become `error` with
+     * the reason `cancelled`; the local copy stays. Uploads are per file: every block with the same ref is affected.
+     * @param {string} ref @returns {boolean} whether an upload was running
+     */
+    cancel(ref) {
+        const id = this.#hashOf(ref);
+        return id !== null && this.#uploads.cancel(id);
+    }
+
+    /**
+     * The status a block showing the file `id` should start with: `pending` when a host still has to get it, else `ready`.
+     * @param {string} id @returns {'pending' | 'ready'}
+     */
+    initialStatus(id) { return this.#uploads.needsUpload(id) ? 'pending' : 'ready'; }
+
+    /** Resolves when the first pass over the document (resuming the uploads of a reopened document) is done. @returns {Promise<void>} */
+    whenResumed() { return this.#uploads.ready(); }
+
+    /** Run an upload pass now (tests, or after changing the host config at runtime). @returns {Promise<void>} */
+    reconcileUploads() { return this.#uploads.reconcile(); }
 
     // ── Display ──────────────────────────────────────────────────────────────────────────────────
 
@@ -350,6 +454,22 @@ export class Files {
         })());
     }
 
+    /**
+     * P-65: at open, read the bytes of every file the document indexes (up to `maxInlineSize` each, and about the budget of the
+     * embed cache in total) so that a copy / `serialize('json')` made right after opening carries them. `whenIdle()` waits for it.
+     */
+    #preload() {
+        let planned = 0;
+        for (const [id, meta] of Object.entries(/** @type {Record<string, any>} */ (this.index.toJSON()))) {
+            if (!isHashId(id)) continue;
+            const size = typeof meta?.size === 'number' ? meta.size : 0;
+            if (size > this.maxInlineSize) continue;
+            planned += size;
+            if (planned > EMBED_CACHE_BUDGET) break;
+            this.warm(ASSET_PREFIX + id);
+        }
+    }
+
     /** @param {string} id @param {Blob} blob */
     async #warmFrom(id, blob) {
         if (this.#embed.has(id) || blob.size > this.maxInlineSize) return;
@@ -383,28 +503,40 @@ export class Files {
 
     /**
      * COPY: the bytes of every `nabu-asset:` media of `blocks`, for the `assets` map of the fragment (keyed by hash id, ADR 014
-     * §3.8). Nothing is embedded (and `nabu.warn` says so) when the total exceeds `maxInlineSize`; the blocks keep their ref either way.
+     * §3.8). A file whose bytes cannot go along (total over `maxInlineSize`, or not in the in-memory cache — evicted, or not
+     * read yet) is NOT silently dropped: it gets an entry `{ mime, name, size, omitted: true }` so the receiver shows the block
+     * as `missing` with the reason `not-embedded` (unless its own store has the file), and `nabu.warn` says so. The blocks keep
+     * their ref either way.
      * @param {any[]} blocks PasteBlocks about to be copied
-     * @returns {Record<string, EmbeddedAsset> | undefined} `undefined` when there is nothing to embed
+     * @returns {Record<string, EmbeddedAsset> | undefined} `undefined` when there is nothing to carry
      */
     embedAssets(blocks) {
         const ids = collectAssetIds(blocks);
         /** @type {Array<{ key: string } & NonNullable<ReturnType<Files['getAsset']>>>} */
         const found = [];
+        /** @type {string[]} */
+        const omitted = [];
         for (const key of ids) {
             const asset = this.getAsset(key);
             if (asset) found.push({ key, ...asset });
-            else if (isHashId(key) && this.index.get(key)) this.#nabu.warn(`copy: file ${key} is not embedded (larger than maxInlineSize, or its bytes are not loaded yet): pasting in another document will show it as missing unless that document's store has it`);
+            else if (isHashId(key) && this.index.get(key)) omitted.push(key);
         }
-        if (!found.length) return undefined;
         const total = found.reduce((n, a) => n + a.data.length, 0);
-        if (total > this.maxInlineSize) {
-            this.#nabu.warn(`copy: ${found.length} embedded file(s) total ${(total / 1048576).toFixed(1)}MB > maxInlineSize (${(this.maxInlineSize / 1048576).toFixed(1)}MB): the bytes are not put on the clipboard, pasting in another document will show them as missing`);
-            return undefined;
-        }
+        const tooBig = total > this.maxInlineSize;
+        if (tooBig) this.#nabu.warn(`copy: ${found.length} embedded file(s) total ${(total / 1048576).toFixed(1)}MB > maxInlineSize (${(this.maxInlineSize / 1048576).toFixed(1)}MB): the bytes are not put on the clipboard, pasting in another document will show them as missing`);
+        if (omitted.length) this.#nabu.warn(`copy: file(s) ${omitted.join(', ')} cannot be embedded (larger than maxInlineSize, or their bytes are not loaded yet): pasting in another document will show them as missing unless that document's store has them`);
+        if (!found.length && !omitted.length) return undefined;
         /** @type {Record<string, EmbeddedAsset>} */
         const assets = {};
-        for (const a of found) assets[a.key] = { mime: a.type, name: a.name, size: a.data.length, data: bytesToBase64(a.data) };
+        for (const a of found) {
+            assets[a.key] = tooBig
+                ? { mime: a.type, name: a.name, size: a.data.length, omitted: true }
+                : { mime: a.type, name: a.name, size: a.data.length, data: bytesToBase64(a.data) };
+        }
+        for (const key of omitted) {
+            const meta = /** @type {any} */ (this.index.get(key));
+            assets[key] = { mime: meta?.mime ?? 'application/octet-stream', name: meta?.name ?? '', size: meta?.size ?? 0, omitted: true };
+        }
         return assets;
     }
 
@@ -431,13 +563,15 @@ export class Files {
      * PASTE / import: make every `nabu-asset:` media of `blocks` valid in THIS document (ADR 014 §3.4, §3.8). Synchronous:
      * the refs are content hashes, so a block keeps its ref and the storage happens in the background (see {@link Files#whenIdle}).
      *  - a hash ref whose bytes the fragment carries: they are verified (the hash must match, else the file is treated as
-     *    missing and `nabu.warn` says so) and written to the store, unless it already has them;
+     *    missing — reason `corrupt` — and `nabu.warn` says so) and written to the store, unless it already has them; over
+     *    `files.maxFileSize` the block becomes `rejected` (no ref, a readable reason) instead;
      *  - a hash ref the document already indexes: reused as is;
-     *  - a hash ref with no bytes and no index entry: kept, then flagged `status: 'missing'` unless the local store has the file;
-     *  - a beta `nabu-asset:<uuid>` ref (older exports / clipboards) with its bytes: re-created through {@link Files#persist}
+     *  - a hash ref with no bytes and no index entry: kept, then flagged `status: 'missing'` unless the local store has the file
+     *    (reason `not-embedded` when the copy said it left the bytes out, else `unavailable`);
+     *  - a beta `nabu-asset:<uuid>` ref (older exports / clipboards) with its bytes: re-created through {@link Files#ingest}
      *    and given its hash ref when done (the block is `pending` with a local preview meanwhile); without bytes: `missing`;
-     *  - with a host hook, a file the document does not know yet is sent through {@link Files#persist} (the host uploads it)
-     *    and the block is `pending` until the host ref replaces the local one.
+     *  - with a host hook, a file the host does not have yet makes the block `pending`: the upload starts in the background (the
+     *    block keeps its hash ref; the host location lands in `assetIndex[hash].url`).
      * No commit; the caller commits. Never throws.
      * @param {any[]} blocks PasteBlocks (already sanitized)
      * @param {Record<string, EmbeddedAsset> | null | undefined} embedded the `assets` map of the fragment
@@ -459,20 +593,22 @@ export class Files {
             decoded.set(id, value);
             return value;
         };
-        return mapAssetBlocks(blocks, (_pb, id) => isHashId(id) ? this.#adoptHash(id, embeddedOf(id)) : this.#adoptLegacy(id, embeddedOf(id)));
+        /** @param {string} id @returns {boolean} the copy declared it left this file's bytes out */
+        const omittedOf = (id) => Boolean(embedded && typeof embedded === 'object' && /** @type {any} */ (embedded)[id]?.omitted === true);
+        return mapAssetBlocks(blocks, (_pb, id) => isHashId(id) ? this.#adoptHash(id, embeddedOf(id), omittedOf(id)) : this.#adoptLegacy(id, embeddedOf(id)));
     }
 
-    /** @param {string} id @param {EmbeddedBytes | null} emb @returns {Record<string, any> | null} */
-    #adoptHash(id, emb) {
-        const hosted = this.config.onBeforePersist;
-        if (hosted) {
-            const memo = this.#adopted.get(id);
-            if (memo) return memo.startsWith(PENDING_PREFIX) ? { ref: memo, status: 'pending' } : { ref: memo };
-        }
+    /** @param {string} id @param {EmbeddedBytes | null} emb @param {boolean} omitted @returns {Record<string, any> | null} */
+    #adoptHash(id, emb, omitted) {
         const known = Boolean(this.index.get(id));
-        // TODO(ADR-014 lot 2): with a host the block keeps its hash ref and the upload is an outbox job; today the host ref replaces it.
-        if (hosted && emb && !known) return this.#adoptPending(id, emb);
-        if (emb || !known) this.#ensure(id, emb);
+        const rejection = emb && !known ? this.checkSize(emb.bytes.length) : null;
+        if (rejection) {
+            this.#nabu.warn(`paste: file ${id} refused: ${rejection.message}`);
+            return { ref: '', status: 'rejected', reason: rejection };
+        }
+        if (emb || !known) this.#ensure(id, emb, omitted);
+        // With a host: a file it does not have yet is sent in the background; the block is pending until then.
+        if ((emb || known) && this.#uploads.needsUpload(id)) return { status: 'pending' };
         return null;
     }
 
@@ -482,25 +618,28 @@ export class Files {
         if (migrated) return { ref: ASSET_PREFIX + migrated };
         if (this.assets.get(id)) return null; // still inside this document: the migration will rewrite the refs
         const memo = this.#adopted.get(id);
-        if (memo) return memo.startsWith(PENDING_PREFIX) ? { ref: memo, status: 'pending' } : { ref: memo };
-        if (!emb) return { status: 'missing' };
+        if (memo) return memo.startsWith(PENDING_PREFIX) ? { ref: memo, status: 'pending' } : { ref: memo, status: this.initialStatus(memo.slice(ASSET_PREFIX.length)) };
+        if (!emb) return { status: 'missing', reason: reasonOf('unavailable') };
         return this.#adoptPending(id, emb);
     }
 
     /**
-     * The bytes are re-created in the background through {@link Files#persist} (local store, then the host if any); the block
-     * shows a local preview as `pending` and gets the final ref in a silent commit.
+     * The bytes are re-created in the background ({@link Files#ingest}: local store, index); the block shows a local preview as
+     * `pending` and gets its hash ref in a silent commit (still `pending` while a host has to get the file).
      * @param {string} id @param {EmbeddedBytes} emb @returns {Record<string, any>}
      */
     #adoptPending(id, emb) {
         const tempRef = PENDING_PREFIX + (globalThis.crypto?.randomUUID?.() ?? String(Date.now()) + Math.random().toString(36).slice(2));
         this.#pendingUrls.set(tempRef, URL.createObjectURL(new Blob([/** @type {BlobPart} */ (emb.bytes)], { type: emb.type })));
         this.#adopted.set(id, tempRef);
-        const upload = this.persist(new File([/** @type {BlobPart} */ (emb.bytes)], emb.name, { type: emb.type })).then(
-            (ref) => this.#settle(id, tempRef, ref),
-            () => this.#settle(id, tempRef, null),
+        const stored = this.ingest(new File([/** @type {BlobPart} */ (emb.bytes)], emb.name, { type: emb.type })).then(
+            ({ ref }) => this.#settle(id, tempRef, ref),
+            (error) => {
+                if (error instanceof FileRejectedError) return this.#settle(id, tempRef, null, null, error.reason);
+                return this.#settle(id, tempRef, null);
+            },
         );
-        if (!this.config.onBeforePersist) this.#track(upload); // local only: quick, the import can wait for it (a host upload is not waited for)
+        this.#track(stored); // local storage only: quick, the import can wait for it (an upload to a host is not waited for)
         return { ref: tempRef, status: 'pending' };
     }
 
@@ -508,17 +647,20 @@ export class Files {
      * Make sure the store (and the index) has the file `id`, in the background. With bytes (from a paste / import) they
      * are verified against the hash first. Without bytes and without any other source, the blocks showing it are flagged
      * `missing`.
-     * @param {string} id @param {EmbeddedBytes | null} emb
+     * @param {string} id @param {EmbeddedBytes | null} emb @param {boolean} [omitted] the copy declared it left the bytes out
      */
-    #ensure(id, emb) {
+    #ensure(id, emb, omitted = false) {
         if (this.#inflight.has(id)) return;
-        const job = this.#ensureStored(id, emb).catch((error) => { this.#nabu.warn(`asset ${id}: could not be stored: ${error}`); });
+        const job = this.#ensureStored(id, emb, omitted).catch((error) => { this.#nabu.warn(`asset ${id}: could not be stored: ${error}`); });
         this.#inflight.set(id, job);
-        this.#track(job).finally(() => { if (this.#inflight.get(id) === job) this.#inflight.delete(id); });
+        this.#track(job).finally(() => {
+            if (this.#inflight.get(id) === job) this.#inflight.delete(id);
+            this.#uploads.schedule(); // the bytes are there now: a pending block can be sent
+        });
     }
 
-    /** @param {string} id @param {EmbeddedBytes | null} emb */
-    async #ensureStored(id, emb) {
+    /** @param {string} id @param {EmbeddedBytes | null} emb @param {boolean} omitted */
+    async #ensureStored(id, emb, omitted) {
         if (await this.store.has(id).catch(() => false)) {
             if (!this.index.get(id)) {
                 const stat = emb ? null : await this.store.stat?.(id);
@@ -533,18 +675,18 @@ export class Files {
             const actual = await sha256Id(/** @type {BufferSource} */ (emb.bytes));
             if (actual !== id) {
                 this.#nabu.warn(`asset ${id}: the embedded bytes hash to ${actual}: ignored, the file is treated as missing`);
-                await this.#markMissing(id);
+                await this.#markMissing(id, reasonOf('corrupt'));
                 return;
             }
             await this.#storeBytes(id, emb.bytes, { mime: emb.type, name: emb.name, size: emb.bytes.length });
             return;
         }
         const hosted = /** @type {any} */ (this.index.get(id))?.url;
-        if (!hosted) await this.#markMissing(id);
+        if (!hosted) await this.#markMissing(id, reasonOf(omitted ? 'not-embedded' : 'unavailable'));
     }
 
-    /** Flag as `missing` every live block that shows file `id` (silent commit). @param {string} id */
-    async #markMissing(id) {
+    /** Flag as `missing` every live block that shows file `id` (silent commit). @param {string} id @param {FileReason} reason */
+    async #markMissing(id, reason) {
         const ref = ASSET_PREFIX + id;
         /** @type {any[]} */
         const targets = [];
@@ -555,7 +697,7 @@ export class Files {
         }
         if (!targets.length) return;
         this.#urls.set(id, null);
-        await this.#silent(() => { for (const node of targets) node.data.set('status', 'missing'); });
+        await this.#silent(() => { for (const node of targets) { node.data.set('status', 'missing'); node.data.set('reason', reason); } });
     }
 
     // ── Beta documents (ADR 014 §3.7) ────────────────────────────────────────────────────────────
@@ -604,32 +746,25 @@ export class Files {
     // ── Clipboard: files pasted from outside ──────────────────────────────────────────────────
 
     /**
-     * PASTE FILES: read a pasted File and prepare it for {@link Files#adoptAssets}. Without a host hook the file is hashed
-     * and written to the local store right here (no base64 round trip): the fragment only carries its hash ref, as one
-     * undo step with the blocks. With `onBeforePersist` the bytes travel as an embedded asset, so that the paste goes through
-     * the host (`pending` block, local preview, upload).
+     * PASTE FILES: read a pasted File and prepare it for {@link Files#adoptAssets}. The file is hashed and written to the local
+     * store right here (no base64 round trip), whatever the mode: the fragment only carries its hash ref, as one undo step with
+     * the blocks. `props` is a patch for the block: `status: 'pending'` when a host still has to get the file (the upload starts
+     * once the block is in the document), or `status: 'rejected'` + `reason` (and an empty ref) when it is over `files.maxFileSize`.
      * @param {File} file
-     * @returns {Promise<{ id: string, ref: string, asset: EmbeddedAsset | null }>}
+     * @returns {Promise<{ id: string, ref: string, asset: EmbeddedAsset | null, props?: Record<string, any> }>}
      */
     async stage(file) {
-        if (!this.config.onBeforePersist) {
-            const { id, ref } = await this.ingest(file);
-            return { id, ref, asset: null };
-        }
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const id = await sha256Id(bytes);
-        return {
-            id,
-            ref: ASSET_PREFIX + id,
-            asset: { mime: file.type || 'application/octet-stream', name: file.name || '', size: bytes.length, data: bytesToBase64(bytes) },
-        };
+        const rejection = this.checkSize(file.size);
+        if (rejection) return { id: '', ref: '', asset: null, props: { status: 'rejected', reason: rejection } };
+        const { id, ref } = await this.ingest(file);
+        return { id, ref, asset: null, ...(this.#uploads.needsUpload(id) ? { props: { status: 'pending' } } : {}) };
     }
 
     /**
      * PASTE (HTML from outside): with `config.importRemote`, every block of `blocks` whose `ref` is a remote `http(s)` URL is
-     * fetched and stored through {@link Files#persist}. The block shows the original URL at once, as `pending`, and gets the
-     * final ref in the background (a silent commit, not an undo step); when the fetch or the storage fails it keeps the
-     * original URL. Without the option, `blocks` come back untouched. No commit; never throws.
+     * fetched and stored in the local store ({@link Files#ingest}). The block shows the original URL at once, as `pending`, and gets its
+     * `nabu-asset:` ref in the background (a silent commit, not an undo step; still `pending` while a host uploads it); when the
+     * fetch or the storage fails (or the file is over `maxFileSize`) it keeps the original URL. Without the option, `blocks` come back untouched. No commit; never throws.
      * @param {any[]} blocks PasteBlocks (already sanitized)
      * @returns {any[]}
      */
@@ -658,8 +793,9 @@ export class Files {
             if (!response.ok) throw new Error('HTTP ' + response.status);
             const blob = await response.blob();
             if (/^(text\/|application\/(xhtml|json))/i.test(blob.type)) throw new Error('not a media file: ' + blob.type);
-            finalRef = await this.persist(new File([blob], remoteFileName(url, blob.type), { type: blob.type }));
-        } catch {
+            finalRef = (await this.ingest(new File([blob], remoteFileName(url, blob.type), { type: blob.type }))).ref;
+        } catch (error) {
+            if (error instanceof FileRejectedError) this.#nabu.warn(`paste: ${url} not imported: ${error.reason.message} The original URL is kept.`);
             finalRef = null; // kept as a link to the original
         }
         await this.#settle(null, tempRef, finalRef, url);
@@ -667,20 +803,25 @@ export class Files {
 
     /**
      * End of a background re-creation: every block still holding `tempRef` gets the final ref (or the `error` status
-     * when the upload failed). Committed with a silent origin: not an undo step of its own, the paste stays ONE step.
+     * when the storage failed). Committed with a silent origin: not an undo step of its own, the paste stays ONE step.
+     * With a host the block stays `pending` until the upload (started by the document watcher) ends.
      * @param {string | null} id asset id of a media pasted from another document (`null`: a remote URL, see importRemote)
      * @param {string} tempRef @param {string | null} finalRef
      * @param {string | null} [fallbackRef] the ref to keep when there is no final one (the original URL of a remote media)
+     * @param {FileReason | null} [reason] why there is no final ref (a refused file)
      */
-    async #settle(id, tempRef, finalRef, fallbackRef = null) {
+    async #settle(id, tempRef, finalRef, fallbackRef = null, reason = null) {
         if (id !== null) { if (finalRef) this.#adopted.set(id, finalRef); else this.#adopted.delete(id); }
         const nabu = this.#nabu;
         let touched = false;
+        const status = finalRef ? this.initialStatus(finalRef.slice(ASSET_PREFIX.length)) : fallbackRef ? 'ready' : reason ? 'rejected' : 'error';
         for (const block of nabu.blocks.values()) {
             const node = /** @type {any} */ (block.node);
             if (node.isDeleted?.() || node.data.get('ref') !== tempRef) continue;
             node.data.set('ref', finalRef ?? fallbackRef ?? '');
-            node.data.set('status', finalRef || fallbackRef ? 'ready' : 'error');
+            node.data.set('status', status);
+            if (status === 'error') node.data.set('reason', reasonOf('upload-failed'));
+            else if (status === 'rejected' && reason) node.data.set('reason', reason);
             touched = true;
         }
         try {
