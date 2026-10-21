@@ -432,6 +432,25 @@ extension('audio', {
 });
 ```
 
+### Dropping files, text and content
+
+Dropping on the editor works like pasting, at the place under the pointer (a text position, or before / after an image or a divider):
+
+- **Files from the OS** become media blocks, in order (same rules as pasted files: `pasteFileHandlers`, the local asset store or your `onBeforePersist`, `files.maxFileSize`).
+- **Text, HTML, markdown or a Nabu fragment** dragged from another page or application is interpreted by the same paste engine (bold kept, no Google Docs junk); into a code block it is inserted as plain text.
+- **The editor's own selection**, dragged, is **moved** (one undo step; dropping it on itself does nothing). Hold **Ctrl** (Windows / Linux) or **Alt / Option** (macOS) to **copy** instead.
+- One undo step each. The browser never inserts anything itself, so the document and the DOM cannot drift apart.
+
+`engine.dropTarget` is reactive state for your own drop indicator (Nabu draws nothing): `{ block, offset, side, kind } | null` while something droppable is over the editor, with `side` `'inside'` (a caret position `offset` in the text of `block`) or `'before'` / `'after'` (beside a block without text) and `kind` `'files'`, `'content'` or `'move'`; `null` when it leaves, is dropped or is cancelled.
+
+```svelte
+{#if engine.dropTarget}
+  <MyDropIndicator block={engine.dropTarget.block} side={engine.dropTarget.side} />
+{/if}
+```
+
+`engine.dropAt(dataTransfer, position)` runs the same pipeline programmatically. The block drag handle above is separate (pointer events, not browser drag and drop).
+
 ## Task tracking (Todos)
 
 To-do list blocks (`listType: 'todo'`) feed a reactive document-level registry. Use `Todos` to read and control them from outside the editor:

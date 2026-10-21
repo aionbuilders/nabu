@@ -3,19 +3,21 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte.js';
 import { MegaBlock } from './megablock.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
-import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, findDirectChildOf, findLCA } from './container.utils.js';
+import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, deleteRange, selectionRange, findDirectChildOf, findLCA } from './container.utils.js';
 import { jsonToPasteBlocks, degradeUnknownBlocks, CLIPBOARD_FORMAT_VERSION, JSON_FORMAT_VERSION, isSupportedJsonVersion } from '../utils/extensions.js';
 import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
 import { tick } from 'svelte';
 import { Files } from '../files/files.svelte.js';
 import { Pulse } from '@aionbuilders/pulse';
 import { normalizePlaceholders } from '../utils/placeholders.js';
+import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
 
 /**
 * @import {Component} from "svelte";
 * @import { LoroTreeNode, LoroTree } from "loro-crdt";
 * @import {Extension} from '../utils/extensions.js';
+* @import {DropPosition, DropTarget, DropKind} from '../utils/drop.js';
 */
 
 /**
@@ -1030,10 +1032,21 @@ export class Nabu {
         this.selection.sync();
         if (this.selection.isCollapsed) return;
         e.preventDefault();
+        if (!e.clipboardData) return;
+        this.#writeSelection(e.clipboardData);
+    }
 
+    /**
+     * Serialize the current (non-collapsed) selection into `dt`: `application/x-nabu+json` (the fragment, with the bytes of
+     * the stored media), `text/plain` (raw text for one text block, markdown otherwise) and `text/html`. Shared by copy / cut
+     * (the clipboard) and by the drag of a text selection.
+     * @param {DataTransfer} dt
+     * @returns {boolean} False when there is nothing to serialize
+     */
+    #writeSelection(dt) {
         const startBlock = this.selection.startBlock;
         const endBlock   = this.selection.endBlock;
-        if (!startBlock || !endBlock || !e.clipboardData) return;
+        if (!startBlock || !endBlock) return false;
 
         const startFrom = this.selection.start?.from ?? 0;
         const endTo     = this.selection.end?.to ?? null;
@@ -1055,10 +1068,10 @@ export class Nabu {
             } else {
                 const startRoot = findDirectChildOf(startBlock, this);
                 const endRoot   = findDirectChildOf(endBlock,   this);
-                if (!startRoot || !endRoot) return;
+                if (!startRoot || !endRoot) return false;
                 const si = this.children.indexOf(startRoot);
                 const ei = this.children.indexOf(endRoot);
-                if (si === -1 || ei === -1) return;
+                if (si === -1 || ei === -1) return false;
                 rootBlocks = this.children.slice(si, ei + 1);
             }
         }
@@ -1088,14 +1101,14 @@ export class Nabu {
             });
         }).filter(Boolean);
 
-        if (!pasteBlocks.length) return;
+        if (!pasteBlocks.length) return false;
 
         // Media stored in the document (`nabu-asset:` refs) is meaningless in another document: its bytes travel in the
         // fragment (`assets`), the blocks keep their ref. Outside Nabu (html / plain) such a ref is replaced, never leaked.
         const files = Files.get(this);
         const assets = files.embedAssets(pasteBlocks);
         const fragment = { version: CLIPBOARD_FORMAT_VERSION, blocks: pasteBlocks, ...(assets ? { assets } : {}) };
-        e.clipboardData.setData('application/x-nabu+json', JSON.stringify(fragment));
+        dt.setData('application/x-nabu+json', JSON.stringify(fragment));
 
         // Recursive serializers — dispatch to each BlockClass's static toMarkdown/toHtml.
         // helpers.recurse lets blocks serialize a child without knowing its type; helpers.recurseAll serializes a list of
@@ -1131,9 +1144,9 @@ export class Nabu {
         const plain = single
             ? /** @type {any[]} */ (single.delta).map(op => typeof op.insert === 'string' ? op.insert : '').join('')
             : files.externalize(pasteBlocks).map((pb, k, all) => pbToMarkdown(pb, { before: all.slice(0, k) })).join('\n\n');
-        e.clipboardData.setData('text/plain', plain);
-        e.clipboardData.setData('text/html',  files.externalize(pasteBlocks, { inline: true }).map(pb => pbToHtml(pb)).join('\n'));
-
+        dt.setData('text/plain', plain);
+        dt.setData('text/html',  files.externalize(pasteBlocks, { inline: true }).map(pb => pbToHtml(pb)).join('\n'));
+        return true;
     }
 
     /** @param {ClipboardEvent} e */
@@ -1161,25 +1174,36 @@ export class Nabu {
         e.preventDefault();
         const clipboard = e.clipboardData;
         if (!clipboard) return;
+        this.#insertTransfer(clipboard, null);
+    }
 
+    /**
+     * THE pipeline that turns a `DataTransfer` (the clipboard of a paste, the payload of a drop) into content: files become
+     * the blocks their file handlers make of them, text goes to the verbatim buffer of a `pastesAsPlainText` block, else the
+     * first paste interpreter (internal fragment, HTML, markdown, plain text) that reads the payload makes the fragment.
+     * One undo step. `at` is where it lands: null = at the caret (a paste), else a drop position.
+     * @param {DataTransfer} clipboard
+     * @param {DropPosition | null} at
+     */
+    #insertTransfer(clipboard, at) {
         const sorted = [...this.#pasteInterpreters].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
 
         // Files on the clipboard (a screenshot, a file copied from the OS) win over its text payloads: each one becomes the
-        // block its file handler makes of it. Except an internal copy (`application/x-nabu+json` already holds the blocks,
+        // block their file handler makes of it. Except an internal copy (`application/x-nabu+json` already holds the blocks,
         // and their bytes), and a text payload that declares itself worth more (a spreadsheet range comes with an image of it).
         const planned = this.#planPastedFiles(clipboard, sorted);
 
         // A block with `pastesAsPlainText` (code…) is a verbatim buffer: take the clipboard text as-is,
         // before any interpreter (markdown / HTML / nabu JSON) gets a chance to split it into blocks.
-        const target = this.selection.anchorBlock;
-        if (target && target === this.selection.focusBlock && target.pastesAsPlainText) {
+        const target = at ? (at.side === 'inside' ? at.block : null) : this.selection.anchorBlock;
+        if (target && (at || target === this.selection.focusBlock) && target.pastesAsPlainText) {
             const text = clipboard.getData('text/plain');
-            if (text) { this.#pasteVerbatim(target, text); return; }
+            if (text) { this.#pasteVerbatim(target, text, at ? at.offset : undefined); return; }
             if (!planned.length) return;
         }
 
         if (planned.length) {
-            this.#pasteFiles(planned);
+            this.#pasteFiles(planned, at);
             return;
         }
 
@@ -1188,7 +1212,7 @@ export class Nabu {
             if (!raw) continue;
             const fragment = interpreter.interpret(raw, this);
             if (fragment) {
-                this.insertFragment(fragment);
+                this.insertFragment(fragment, at ? { at } : undefined);
                 return;
             }
         }
@@ -1234,9 +1258,12 @@ export class Nabu {
      * then ONE `insertFragment` does the rest like any other paste: the blocks hold the hash refs (`pending` while a host's
      * `onBeforePersist` uploads the file, `rejected` for a file over `files.maxFileSize`); a single undo step.
      * @param {Array<{ file: File, block: import('../utils/extensions.js').PasteBlock }>} planned
+     * @param {DropPosition | null} [at]  where the blocks land (a drop); null = at the caret (a paste)
      */
-    async #pasteFiles(planned) {
+    async #pasteFiles(planned, at = null) {
         const files = Files.get(this);
+        // Staging is asynchronous: a drop position is followed through concurrent edits (Loro cursor), not re-read as an offset.
+        const resolveAt = at ? this.#followPosition(at) : null;
         /** @type {import('../utils/extensions.js').PasteBlock[]} */
         const blocks = [];
         /** @type {Record<string, import('../files/files.svelte.js').EmbeddedAsset>} */
@@ -1250,7 +1277,9 @@ export class Nabu {
                 this.warn(`paste: could not read file "${file.name}": ${error}`);
             }
         }
-        if (blocks.length) this.insertFragment({ blocks, assets });
+        if (!blocks.length) return;
+        const where = resolveAt ? resolveAt() : null;
+        this.insertFragment({ blocks, assets }, where ? { at: where } : undefined);
     }
 
     /**
@@ -1258,10 +1287,11 @@ export class Nabu {
      * block. One undo step (isolated commit).
      * @param {Block} block
      * @param {string} text
+     * @param {number} [offset]  insert here instead of replacing the selection (a drop)
      */
-    #pasteVerbatim(block, text) {
+    #pasteVerbatim(block, text, offset) {
         const behavior = block.behaviors?.get('text');
-        const sel = behavior?.selection;
+        const sel = offset === undefined ? behavior?.selection : { from: offset, to: offset };
         if (!behavior || !sel) return;
         const from = Math.min(sel.from, sel.to);
         const to = Math.max(sel.from, sel.to);
@@ -1270,6 +1300,169 @@ export class Nabu {
         this.#isolateNextCommits();
         this.commit();
         tick().then(() => this.selection.setCursor(this.blocks.get(block.id) || block, from + text.length));
+    }
+
+    // DRAG & DROP (ADR 014, lot 4)
+    //
+    // The browser never edits the document: every `dragover` / `drop` over the editor is taken here, whatever it carries.
+    // What is dropped goes through the SAME pipeline as a paste (`#insertTransfer`: files → media blocks, then the paste
+    // interpreters), at the model position under the pointer. The editor's own text selection can be dragged: it is a MOVE.
+    // (The block drag handle — `ui/DragHandle.svelte` — uses pointer events, not HTML5 DnD: the two never meet.)
+
+    /**
+     * Where the drop would land while something is dragged over the editor, `null` otherwise (left, dropped, cancelled, or
+     * nothing the editor can take). Reactive state for a UI: Nabu itself draws nothing.
+     *  - `block` / `offset` / `side`: a caret position in the text of `block` (`side: 'inside'`, `offset` in its text), or
+     *    beside a block that holds no text (image, divider…: `side: 'before' | 'after'`, by the pointer's half).
+     *  - `kind`: `'files'` (OS files → media blocks), `'content'` (text / HTML / markdown / Nabu fragment from outside, or a
+     *    copy of the editor's own selection), `'move'` (the editor's own selection being moved). Decided from the drag's
+     *    declared types: a drag that mixes files and text resolves as it does for a paste (files win) at the drop.
+     * @type {DropTarget | null}
+     */
+    dropTarget = $state.raw(null);
+
+    /**
+     * The text selection being dragged out of this editor (set by `handleDragStart`, until the drop / dragend).
+     * @type {{ token: string, range: import('./container.utils.js').DeletionRange } | null}
+     */
+    #dragSource = null;
+
+    /** @param {DropTarget | null} target */
+    #setDropTarget(target) {
+        if (!sameTarget(this.dropTarget, target)) this.dropTarget = target;
+    }
+
+    /** What this editor can take from a drag: the formats its interpreters read, whether it takes files. */
+    #dropCaps() {
+        return { formats: this.#pasteInterpreters.map((interpreter) => interpreter.format), files: this.#pasteFileHandlers.length > 0 };
+    }
+
+    /**
+     * Whether a drag event is for this editor's own content: not for a nested editor, a UI island or a form control
+     * inside it (those keep their native behavior), and not during an IME composition.
+     * @param {DragEvent} e
+     */
+    #ownsDrag(e) {
+        const root = /** @type {HTMLElement | null} */ (e.currentTarget);
+        const target = /** @type {Node | null} */ (e.target instanceof Node ? e.target : null);
+        const el = target && (target.nodeType === Node.ELEMENT_NODE ? /** @type {Element} */ (target) : target.parentElement);
+        if (!root || !el || this.#composing) return false;
+        if (el.closest('[data-nabu-root]') !== root) return false;
+        return !el.closest('[data-nabu-ui], input, textarea, select');
+    }
+
+    /**
+     * Start of a drag inside the editor. A drag of the TEXT SELECTION is serialized like a copy (internal fragment, plain text,
+     * HTML — so it can also be dropped in another editor or application) and remembered: dropped back in the editor it is a
+     * MOVE (see `dropAt`). Any other drag (an image, a link, a draggable element) is cancelled: the browser would hand a drop
+     * its own serialization of the DOM node.
+     * @param {DragEvent} e
+     */
+    handleDragStart(e) {
+        this.#dragSource = null;
+        this.#setDropTarget(null);
+        if (!this.#ownsDrag(e) || !e.dataTransfer) return;
+        const target = e.target;
+        const draggedElement = target instanceof Element && !!target.closest('img, a[href], [draggable="true"]');
+        this.selection.sync();
+        const range = draggedElement || this.selection.isCollapsed ? null : selectionRange(this);
+        const canMove = this.#pasteInterpreters.some((interpreter) => interpreter.format === NABU_FORMAT);
+        if (!range || !canMove || !this.#writeSelection(e.dataTransfer)) {
+            e.preventDefault();
+            return;
+        }
+        const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        e.dataTransfer.setData(DRAG_MARKER, token);
+        e.dataTransfer.effectAllowed = 'copyMove';
+        this.#dragSource = { token, range };
+    }
+
+    /**
+     * `dragenter` / `dragover` over the editor: accept what it can take (cancelling the event is how a drop is allowed),
+     * announce move vs copy, and publish the position in `dropTarget`.
+     * @param {DragEvent} e
+     */
+    handleDragOver(e) {
+        const dt = e.dataTransfer;
+        if (!dt) return;
+        if (!this.#ownsDrag(e)) { this.#setDropTarget(null); return; }
+        const own = !!this.#dragSource && Array.from(dt.types ?? []).includes(DRAG_MARKER);
+        const copy = own && wantsCopy(e);
+        /** @type {DropKind | null} */
+        const kind = own ? (copy ? 'content' : 'move') : transferKind(dt.types, this.#dropCaps());
+        if (!kind) { this.#setDropTarget(null); dt.dropEffect = 'none'; return; }
+        const root = /** @type {HTMLElement} */ (e.currentTarget);
+        const position = resolveDropPosition(this, root, e.clientX, e.clientY);
+        e.preventDefault(); // allows the drop
+        if (kind === 'move' && position && this.#dragSource && positionInRange(this.#dragSource.range, position)) {
+            dt.dropEffect = 'none'; // onto the dragged text itself: nothing to do
+            this.#setDropTarget(null);
+            return;
+        }
+        dt.dropEffect = pickDropEffect(dt.effectAllowed, kind === 'move' ? 'move' : 'copy');
+        this.#setDropTarget(position ? { ...position, kind } : null);
+    }
+
+    /** @param {DragEvent} e */
+    handleDragLeave(e) {
+        if (!this.#ownsDrag(e)) return;
+        const root = /** @type {HTMLElement} */ (e.currentTarget);
+        if (e.relatedTarget instanceof Node && root.contains(e.relatedTarget)) return; // still inside the editor
+        this.#setDropTarget(null);
+    }
+
+    /** The drag that started in this editor ended (dropped anywhere, or cancelled). @param {DragEvent} [e] */
+    handleDragEnd(e) {
+        this.#dragSource = null;
+        this.#setDropTarget(null);
+    }
+
+    /**
+     * `drop` on the editor: the browser's default (inserting DOM nodes behind Loro's back, or navigating to a dropped
+     * file) never happens. The position under the pointer is resolved, then {@link Nabu#dropAt} does the rest.
+     * @param {DragEvent} e
+     */
+    handleDrop(e) {
+        const dt = e.dataTransfer;
+        if (!dt || !this.#ownsDrag(e)) return;
+        e.preventDefault();
+        const source = this.#dragSource;
+        this.#dragSource = null;
+        this.#setDropTarget(null);
+        const root = /** @type {HTMLElement} */ (e.currentTarget);
+        const position = resolveDropPosition(this, root, e.clientX, e.clientY) ?? documentEnd(this);
+        if (!position) return;
+        // The editor takes the focus (undo, typing…) even when the drop leaves no text caret to put in it (a dropped image).
+        if (document.activeElement !== root) root.focus({ preventScroll: true });
+        const own = !!source && dt.getData(DRAG_MARKER) === source.token;
+        this.dropAt(dt, position, { source: own && !wantsCopy(e) ? source : null });
+    }
+
+    /**
+     * Drop `dt` at `position`, as ONE undo step, through the paste pipeline (files → media blocks, `pasteInterpreters`:
+     * internal fragment, HTML, markdown, plain text; verbatim text into a `pastesAsPlainText` block).
+     * With `opts.source` (the editor's own dragged selection) it is a MOVE: the source range is deleted and the content
+     * inserted in the same transaction, the position corrected for the deletion; a position inside (or at the edge of) the
+     * source range does nothing. Without it, content from outside — or a copy of the selection — is simply inserted.
+     * @param {DataTransfer} dt
+     * @param {DropPosition} position
+     * @param {{ source?: { range: import('./container.utils.js').DeletionRange } | null }} [opts]
+     */
+    dropAt(dt, position, opts = {}) {
+        const source = opts.source ?? null;
+        if (source) {
+            const { range } = source;
+            const alive = (/** @type {Block} */ b) => !!b && !b.node?.isDeleted?.() && this.blocks.get(b.id) === b;
+            if (!alive(range.startBlock) || !alive(range.endBlock) || !alive(position.block)) return;
+            if (positionInRange(range, position)) return;
+            // Check the payload reads back BEFORE deleting anything: a move that cannot insert must not lose text.
+            const reader = this.#pasteInterpreters.find((interpreter) => interpreter.format === NABU_FORMAT);
+            const raw = dt.getData(NABU_FORMAT);
+            if (!reader || !raw || !reader.interpret(raw, this)) return;
+            if (!deleteRange(this, range)) return;
+            position = positionAfterRemoval(range, position, !!range.endBlock.node?.isDeleted?.());
+        }
+        this.#insertTransfer(dt, position);
     }
 
     /**
@@ -1306,10 +1499,59 @@ export class Nabu {
     }
 
     /**
-     * Insère un PasteFragment à la position du curseur courant.
-     * @param {import('../utils/extensions.js').PasteFragment} fragment
+     * The caret position a drop position stands for. Beside a block without text (before / after an image, a divider…) there
+     * is no caret: an empty default text block is created there (same transaction as the insertion, so one undo step), and the
+     * fragment lands in it like in any empty block (a text becomes its text, a media block replaces it).
+     * @param {DropPosition} at
+     * @returns {{ block: Block, offset: number } | null}
      */
-    insertFragment(fragment) {
+    #landingFor(at) {
+        const { block, side } = at;
+        if (!block || block.node?.isDeleted?.()) return null;
+        if (side === 'inside') {
+            const length = block.behaviors?.get('text')?.text?.length;
+            if (length === undefined) return null;
+            return { block, offset: Math.max(0, Math.min(at.offset, length)) };
+        }
+        const type = this.defaultBlockType;
+        const Class = type && this.registry.get(type);
+        if (!Class) return null;
+        const created = Class.create(this, type, {});
+        if (side === 'before') created.node.moveBefore(block.node);
+        else created.node.moveAfter(block.node);
+        wrapOrphan(this, created);
+        return { block: created, offset: 0 };
+    }
+
+    /**
+     * A function that re-reads a drop position later, after edits that happened meanwhile (the files of a drop are hashed
+     * asynchronously): a text position follows the text through a Loro cursor; a block that vanished falls back to the end
+     * of the document.
+     * @param {DropPosition} at
+     * @returns {() => DropPosition | null}
+     */
+    #followPosition(at) {
+        const text = at.side === 'inside' ? /** @type {any} */ (at.block.behaviors?.get('text')?.container) : null;
+        /** @type {any} */
+        let cursor = null;
+        try { cursor = text?.getCursor?.(at.offset) ?? null; } catch { /* static fallback */ }
+        return () => {
+            if (at.block.node?.isDeleted?.()) return documentEnd(this);
+            if (!cursor) return at;
+            try {
+                const pos = this.doc.getCursorPos(cursor);
+                return pos ? { ...at, offset: pos.offset } : at;
+            } catch { return at; }
+        };
+    }
+
+    /**
+     * Insère un PasteFragment à la position du curseur courant — or at `opts.at` (a drop position: a caret position in a
+     * text block, or beside a block without text, where an empty text block receives the fragment), whatever the DOM selection is.
+     * @param {import('../utils/extensions.js').PasteFragment} fragment
+     * @param {{ at?: DropPosition }} [opts]
+     */
+    insertFragment(fragment, opts = {}) {
         this.selection.sync(); // public entry point: may be called outside an input event
         // Every fragment (HTML / markdown / nabu JSON / API) goes through here: unsafe link & media URLs are dropped.
         const files = Files.get(this);
@@ -1322,7 +1564,12 @@ export class Nabu {
         let anchorBlock;
         let offset;
 
-        if (!this.selection.isCollapsed) {
+        if (opts.at) {
+            const landing = this.#landingFor(opts.at);
+            if (!landing) return;
+            anchorBlock = landing.block;
+            offset = landing.offset;
+        } else if (!this.selection.isCollapsed) {
             const result = deleteSelectionContent(this, this);
             if (!result) return;
             anchorBlock = result.block;

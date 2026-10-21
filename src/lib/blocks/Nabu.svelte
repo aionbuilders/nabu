@@ -23,6 +23,12 @@
     oncopy={(e) => engine.handleCopy(e)}
     oncut={(e) => engine.handleCut(e)}
     onpaste={(e) => engine.handlePaste(e)}
+    ondragstart={(e) => engine.handleDragStart(e)}
+    ondragenter={(e) => engine.handleDragOver(e)}
+    ondragover={(e) => engine.handleDragOver(e)}
+    ondragleave={(e) => engine.handleDragLeave(e)}
+    ondragend={(e) => engine.handleDragEnd(e)}
+    ondrop={(e) => engine.handleDrop(e)}
     oncompositionstart={(e) => engine.handleCompositionStart(e)}
     oncompositionupdate={(e) => engine.handleCompositionUpdate(e)}
     oncompositionend={(e) => engine.handleCompositionEnd(e)}
