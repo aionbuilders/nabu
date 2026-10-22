@@ -6,14 +6,6 @@ import { Extension } from '../../utils/extensions.js';
 import { TextBehavior } from './text.behavior.svelte.js';
 import { sanitizeUrl } from '../../utils/html.js';
 
-/** @type {Record<string, string>} */
-const MARK_SHORTCUTS = {
-    b: 'bold',
-    i: 'italic',
-    u: 'underline',
-    e: 'code',
-};
-
 /**
  * Collect all selected blocks with a TextBehavior and a non-collapsed selection.
  * @param {Nabu} nabu
@@ -103,24 +95,18 @@ function removeMark(nabu, markName) {
 }
 
 /**
+ * The mark shortcuts are COMMANDS (`mark:bold`…, keys below, replaceable through the `keymap` option). This legacy hook only
+ * runs when no command took the key: the browser's own Ctrl/Cmd+B / I / U would then format the text natively
+ * (`beforeinput` `formatBold`…), so a shortcut a `keymap` removed or moved stays dead instead of coming back through the
+ * native path.
  * @param {Nabu} nabu
  * @param {KeyboardEvent} event
  */
 function onKeyDown(nabu, event) {
-    const ctrl = event.ctrlKey || event.metaKey;
-    if (!ctrl) return;
-
-    let markName = null;
-    if (!event.shiftKey) {
-        markName = MARK_SHORTCUTS[event.key.toLowerCase()] ?? null;
-    } else if (event.key.toLowerCase() === 'x') {
-        markName = 'strikethrough';
-    }
-
-    if (!markName) return;
-
+    if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey) return;
+    const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+    if (key !== 'b' && key !== 'i' && key !== 'u') return;
     event.preventDefault();
-    nabu.exec('mark:toggle', { mark: markName });
     return nabu.BREAK;
 }
 
@@ -215,6 +201,14 @@ export const RichTextExtension = new Extension('rich-text', {
         'underline':     (nabu) => toggleMark(nabu, 'underline'),
         'code':          (nabu) => toggleMark(nabu, 'code'),
         'strikethrough': (nabu) => toggleMark(nabu, 'strikethrough'),
+    },
+    // Keyboard shortcuts (ADR 017). Also actions of the bus: `nabu.exec('mark:bold')`.
+    commands: {
+        'mark:bold':          { label: 'Bold',          keys: ['Mod-b'],       run: (nabu) => { toggleMark(nabu, 'bold'); } },
+        'mark:italic':        { label: 'Italic',        keys: ['Mod-i'],       run: (nabu) => { toggleMark(nabu, 'italic'); } },
+        'mark:underline':     { label: 'Underline',     keys: ['Mod-u'],       run: (nabu) => { toggleMark(nabu, 'underline'); } },
+        'mark:code':          { label: 'Code',          keys: ['Mod-e'],       run: (nabu) => { toggleMark(nabu, 'code'); } },
+        'mark:strikethrough': { label: 'Strikethrough', keys: ['Mod-Shift-x'], run: (nabu) => { toggleMark(nabu, 'strikethrough'); } },
     },
     hooks: { onKeyDown, onBeforeInput }
 });

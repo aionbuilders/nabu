@@ -9,6 +9,7 @@ import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
 import { tick } from 'svelte';
 import { Files } from '../files/files.svelte.js';
 import { Pulse } from '@aionbuilders/pulse';
+import { CommandRegistry } from '../utils/commands.js';
 import { normalizePlaceholders } from '../utils/placeholders.js';
 import { normalizeLang } from '../utils/spellcheck.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection } from './undo-selection.js';
@@ -40,6 +41,11 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 * @property {string} [lang] - Language of the content, a BCP 47 tag (`'fr'`, `'en-GB'`). Set on the root as `lang`, so the browser's
 *   spellchecker, hyphenation and screen readers use it. Unset: inherits the page language. An invalid tag is ignored (warning).
 *   Reactive: `nabu.lang`.
+* @property {Record<string, string[]>} [keymap] - Replaces the keyboard shortcuts of commands (ADR 017): `{ 'mark:bold': ['Mod-Alt-b'] }`;
+*   `[]` disables a command's keys. Chords: see `utils/keys.js`; the same checks as for a declared key apply (reserved chords,
+*   a key without modifier needs the command's `when`).
+* @property {'mac' | 'other'} [platform] - Which platform's conventions `Mod` and the displayed shortcuts follow. Detected from the
+*   browser by default; set it for tests or server-side rendering.
 */
 
 /**
@@ -161,6 +167,17 @@ export class Nabu {
         this.placeholders = normalizePlaceholders(init.placeholders);
         this.spellcheck = init.spellcheck !== false;
         this.lang = init.lang;
+
+        /**
+         * Commands and keyboard shortcuts (ADR 017): `list()`, `get(id)`, `run(id, data)`. A plain snapshot API, the set of
+         * commands is fixed once the editor is built.
+         */
+        this.commands = new CommandRegistry(this, { keymap: init.keymap, platform: init.platform });
+        // Engine commands first: they win a tie with an extension's command on the same chord.
+        this.#registerCommands('core', {
+            undo: { label: 'Undo', keys: ['Mod-z'], run: () => { this.undo(); } },
+            redo: { label: 'Redo', keys: ['Mod-Shift-z', 'Mod-y'], run: () => { this.redo(); } },
+        });
         
         if (this.extensions?.length) {
             for (const ext of this.extensions) {
@@ -189,6 +206,9 @@ export class Nabu {
                     }
                 }
 
+                if (ext.commands) this.#registerCommands(ext.name, ext.commands);
+                if (ext.commandContext) this.commands.addContextProvider(ext.commandContext, ext.name);
+
                 if (ext.pasteInterpreters?.length) {
                     for (const interpreter of ext.pasteInterpreters) {
                         this.#pasteInterpreters.push(interpreter);
@@ -213,9 +233,8 @@ export class Nabu {
             }
         }
 
-        // Core actions — always available
-        this.#pulse.on('undo', () => this.undo());
-        this.#pulse.on('redo', () => this.redo());
+        // Core actions (`undo`, `redo`) are commands, registered above.
+        this.commands.checkKeymap();
 
         const roots = /** @type {NabuNode[]} */ (this.tree.roots());
         if (roots?.length) {
@@ -437,6 +456,18 @@ export class Nabu {
     exec(topic, data) {
         this.selection.sync();
         return this.#pulse.emit(topic, data);
+    }
+
+    /**
+     * Register commands (ADR 017): the registry keeps them and resolves their keys; each one is also an action of the bus.
+     * @param {string} owner  extension name
+     * @param {Record<string, import('../utils/commands.js').CommandDef>} commands
+     */
+    #registerCommands(owner, commands) {
+        for (const [id, def] of Object.entries(commands)) {
+            const entry = this.commands.register(id, def, owner);
+            if (entry) this.#pulse.on(id, ({ event }) => this.commands.invoke(entry, event.data));
+        }
     }
 
     trigger(hookName, ...args) {
@@ -1004,19 +1035,9 @@ export class Nabu {
     handleKeydown(e) {
         this.selection.sync(); // no-op when the document capture listener already synced
         this.selection.normalize();
-        // Undo: Ctrl+Z or Cmd+Z (without Shift)
-        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-            e.preventDefault();
-            this.undo();
-            return;
-        }
-
-        // Redo: Ctrl+Y, Cmd+Y, or Ctrl+Shift+Z, Cmd+Shift+Z
-        if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
-            e.preventDefault();
-            this.redo();
-            return;
-        }
+        // Commands first (ADR 017): undo / redo and every declared shortcut. What no command handles falls through to the
+        // legacy `onKeyDown` hooks and the block's own keydown, then to the native behavior.
+        if (this.commands.handleKeydown(e)) return;
 
         this.dispatchEventToSelection('keydown', e, 'onKeyDown');
     }

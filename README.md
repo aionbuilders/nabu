@@ -486,6 +486,34 @@ todos.uncheckAll();
 todos.goTo(item);   // move the editor cursor to a specific to-do
 ```
 
+## Commands & shortcuts
+
+Keyboard shortcuts are **commands** that extensions declare (design: `docs/adr/017-commands-keymap-confirmations.md`). The engine resolves the keys, so conflicts are reported, shortcuts can be rebound, and a help sheet can list them.
+
+```js
+import { extension } from '@aionbuilders/nabu';
+
+const MyExtension = extension('my-ext', {
+  commands: {
+    'note:stamp': {
+      label: 'Stamp the paragraph',                  // or (ctx) => string
+      keys: ['Mod-Shift-k'],                         // Mod = Cmd on macOS, Ctrl elsewhere
+      scope: 'paragraph',                            // optional: wins over generic commands when the caret is in such a block
+      when: (ctx) => ctx.isCollapsed,                // where it applies; REQUIRED for a key without modifier (Backspace, Enter, a letter…)
+      run: (nabu, ctx, data) => { /* … */ },         // returning false = "not handled": the key falls through
+    },
+  },
+  // Optional facts added to `ctx` for every command: { nabu, event, block, selection, isCollapsed, ancestors, inRoot, ...yours }
+  commandContext: (nabu, ctx) => ({ atEnd: /* … */ false }),
+});
+```
+
+- A command is also an action: `nabu.exec('note:stamp', data)` works without any key (palette, menu, API).
+- Chords are `[Mod|Ctrl|Alt|Shift|Meta-]*Key` (`Mod-Enter`, `Ctrl-Alt-ArrowUp`, `Mod-k`). Chords the browser keeps for itself (`Mod-w`, `Mod-t`, `Mod-n`, `Mod-q`, reload…) and a modifier-less key without `when` are refused with a warning (`nabu.debugging = true` to see warnings).
+- Rebind or disable shortcuts when creating the editor: `createEditor({ keymap: { 'mark:bold': ['Mod-Alt-b'], 'mark:italic': [] } })` (`[]` disables the keys; the command still runs through `exec`).
+- `nabu.commands.list()` returns `[{ id, label, keys, display, scope, extension, available, confirm }]`, `display` being formatted for the platform (`['⌘B']` or `['Ctrl+B']`); `nabu.commands.run(id, data)` runs one. It is a plain snapshot, the set of commands is fixed once the editor is built.
+- Built-in commands: `undo`, `redo`, `mark:bold|italic|underline|code|strikethrough`, `todo:toggle`. The `onKeyDown` hooks keep working for everything else. A command that declares `confirm` is accepted but not bound to keys yet (confirmation strategies come in a later lot).
+
 ## Regions
 
 Regions divide one continuous text into parts, chapters, scenes… with **markers** (design: `docs/adr/016-regions.md`). The document stays flat; a `region` marker is a void block (the caret steps over it, like a divider) and a region runs from its marker to the next marker of the same or a higher level. Nabu stores and exposes the structure; what a division *means* (synopsis, status, views) is up to your app. The default rendering is a discreet seam (label + hairline, announced to screen readers as a heading of the region's level, themable with `--nb-region-*` CSS variables); there is no editing UI. Keyboard actions, markdown / HTML and clipboard forms of a marker are not there yet.

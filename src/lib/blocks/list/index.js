@@ -6,7 +6,7 @@ import ListItemComponent from "./ListItem.svelte";
 import { normalizeLists } from "./normalize.js";
 import { moveItems, selectedItems, handleTab } from "./indent.js";
 import { convertToList } from "./to-list.js";
-import { toggleTodos } from "./todos-toggle.js";
+import { toggleSelectedTodos, selectedTodoItems } from "./todos-toggle.js";
 import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
 
 const ListExtension = extension("list", {
@@ -18,8 +18,6 @@ const ListExtension = extension("list", {
         // the lowest common ancestor (a List, a container, the root), which does not know about indenting.
         // A selection inside one block is handled by ListItem.keydown.
         onKeyDown: (nabu, event) => {
-            // Ctrl/Cmd+Enter: toggle the to-do item(s) the selection touches.
-            if (toggleTodos(nabu, event)) return nabu.BREAK;
             const sel = nabu.selection;
             if (sel.anchorBlock === sel.focusBlock) return nabu.CONTINUE;
             return handleTab(nabu, event) ? nabu.BREAK : nabu.CONTINUE;
@@ -33,6 +31,17 @@ const ListExtension = extension("list", {
 const ListItemExtension = extension("list-item", {
     block: ListItem,
     component: ListItemComponent,
+    commands: {
+        // Mod-Enter on a to-do item: toggle the to-do item(s) the selection touches. `when` limits it to to-do items and
+        // `scope` makes it win over a generic Mod-Enter command (e.g. the regions' "split here") with the caret in an item.
+        'todo:toggle': {
+            label: 'Toggle to-do',
+            keys: ['Mod-Enter'],
+            scope: 'list-item',
+            when: (ctx) => selectedTodoItems(ctx.nabu).length > 0,
+            run: (nabu) => toggleSelectedTodos(nabu),
+        },
+    },
     actions: {
         // Every list item the selection touches (the anchor item for a caret).
         'list:indent': (nabu) => { moveItems(nabu, selectedItems(nabu), false); },

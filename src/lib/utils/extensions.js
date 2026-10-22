@@ -83,6 +83,12 @@
  * @property {Partial<ExtensionHooks>} [hooks]
  * @property {Record<string, (nabu: Nabu) => any>} [serializers]
  * @property {Record<string, (nabu: Nabu, data: any, topic: string) => any>} [actions]
+ * @property {Record<string, import('./commands.js').CommandDef>} [commands]
+ *   Commands (ADR 017): `{ [id]: { label, keys?, when?, scope?, run(nabu, ctx, data?), confirm? } }`. Each one is also an action of the
+ *   bus (`nabu.exec(id, data)`); the engine resolves their `keys` at keydown, before the legacy `onKeyDown` hooks.
+ * @property {(nabu: Nabu, ctx: import('./commands.js').CommandContext) => Record<string, any> | void} [commandContext]
+ *   Contributes FACTS to the context given to the `when` / `run` / `label` of commands (e.g. `{ atStartOfRegion: true }`).
+ *   Called once per candidate key press; keep it cheap. It cannot replace the engine's own fields.
  * @property {PasteInterpreter[]} [pasteInterpreters]
  * @property {PasteFileHandler[]} [pasteFileHandlers]
  *   Make a block of a file pasted from the clipboard (see {@link PasteFileHandler}).
@@ -108,6 +114,10 @@ export class Extension {
         this.serializers = init.serializers || {};
         /** @type {Record<string, (nabu: Nabu, data: any, topic: string) => any>} */
         this.actions = init.actions || {};
+        /** @type {Record<string, import('./commands.js').CommandDef>} */
+        this.commands = init.commands || {};
+        /** @type {ExtensionInit['commandContext']} */
+        this.commandContext = init.commandContext;
         /** @type {PasteInterpreter[]} */
         this.pasteInterpreters = init.pasteInterpreters || [];
         /** @type {PasteFileHandler[]} */
