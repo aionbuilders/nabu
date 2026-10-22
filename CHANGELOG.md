@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added - Command confirmations: hold, invite, choose (ADR 017, lot 2)
+- Commands with `confirm` now get their keys bound. **`hold`** (`holdMs`, default 700, or `new Nabu({ commandConfirm: { holdMs } })`): only a fresh press starts it, `progress` runs 0 -> 1 over animation frames, release / another key / blur / selection change cancels, completion runs once; the repeats of a key held before the context are swallowed at the context (nothing starts, the text is no longer erased). **`invite`**: first press asks, same chord again runs; Escape / another key / click / 5 s cancel. **`choose`**: automatic when several commands tie on a key (replaces "run the first and warn"), or explicit (`confirm: { strategy: 'choose', options(ctx) }`, `run(nabu, ctx, option)`); arrows + Enter, digits 1-9, click.
+- New reactive `nabu.pendingCommand` (`{ id, strategy, label, display, message, target?, progress, options?, selectedIndex }`), `nabu.cancelPendingCommand()`, `nabu.pendingCommandOn(target)`, `nabu.commandAnnouncement`. `nabu.exec` / `commands.run` still run a command directly. Controller: `utils/command-confirm.svelte.js`.
+- **Accessibility**: `NabuEditor` renders a polite `aria-live` region (`[data-nabu-live]`) with the prompts and outcomes; the texts are overridable (`commandConfirm.messages`, per-command `confirm.messages`). The hold target element gets `data-command-target` and `--nb-command-progress`.
+- New default components `CommandInvite` and `CommandChooser` (`src/lib/ui/`, exported), neutral, themable with `--nb-command-*`.
+- Behaviour change: a real tie between commands now opens the chooser instead of running the first registered one (including an extension command on `Mod-z` against the engine's `undo`).
+
 ### Added - Commands, keymap and key chords (ADR 017, lot 1)
 - New `commands` field on `Extension`: `{ [id]: { label, keys?, when?, scope?, run(nabu, ctx, data?), confirm? } }`. Every command is also an action of the bus (`nabu.exec(id, data)` keeps working). New `commandContext(nabu, ctx)` field lets an extension contribute facts to the context (`ctx` = `{ nabu, event, block, selection, isCollapsed, ancestors, inRoot, ...facts }`); the engine names none.
 - **Key resolution in the engine** (`Nabu#handleKeydown`, before the legacy `onKeyDown` hooks; ignored during IME composition): chord match + `when`; one command runs; several -> a command `scope`d to the caret's block type beats a generic one, a real tie runs the first registered and warns; a synchronous `false` from `run` falls through to the next command, the legacy hooks and the native behavior.

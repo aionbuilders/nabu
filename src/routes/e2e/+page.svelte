@@ -4,7 +4,8 @@
   import { createFullEditor, FullPreset } from '$lib/presets.js';
   import { createPersistedEditor } from '$lib/persistence/persistence.js';
   import { NabuEditor } from '$lib/blocks';
-  import { FloatingToolbar, SlashMenu, DragHandle } from '$lib/ui';
+  import { FloatingToolbar, SlashMenu, DragHandle, CommandInvite, CommandChooser } from '$lib/ui';
+  import { DemoConfirmExtension } from './demo-commands.js';
 
   /** @type {import('$lib/blocks/nabu.svelte.js').Nabu | null} */
   let engine = $state(null);
@@ -93,6 +94,9 @@
       eng.undoManager.clear();
     };
 
+    // Test-only: `?commands=demo` installs the demo commands of the confirmation strategies (./demo-commands.js).
+    if (page.url.searchParams.get('commands') === 'demo') options.extensions = [...(options.extensions ?? []), DemoConfirmExtension];
+
     (async () => {
       // No `persist` param: fresh in-memory editor. Otherwise: persisted under that docId (no seeding).
       const eng = docId
@@ -119,6 +123,8 @@
       <FloatingToolbar {engine} />
       <SlashMenu {engine} />
       <DragHandle {engine} />
+      <CommandInvite {engine} />
+      <CommandChooser {engine} />
       <NabuEditor {engine} />
     </div>
   {/if}

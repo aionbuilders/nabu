@@ -512,7 +512,27 @@ const MyExtension = extension('my-ext', {
 - Chords are `[Mod|Ctrl|Alt|Shift|Meta-]*Key` (`Mod-Enter`, `Ctrl-Alt-ArrowUp`, `Mod-k`). Chords the browser keeps for itself (`Mod-w`, `Mod-t`, `Mod-n`, `Mod-q`, reload…) and a modifier-less key without `when` are refused with a warning (`nabu.debugging = true` to see warnings).
 - Rebind or disable shortcuts when creating the editor: `createEditor({ keymap: { 'mark:bold': ['Mod-Alt-b'], 'mark:italic': [] } })` (`[]` disables the keys; the command still runs through `exec`).
 - `nabu.commands.list()` returns `[{ id, label, keys, display, scope, extension, available, confirm }]`, `display` being formatted for the platform (`['⌘B']` or `['Ctrl+B']`); `nabu.commands.run(id, data)` runs one. It is a plain snapshot, the set of commands is fixed once the editor is built.
-- Built-in commands: `undo`, `redo`, `mark:bold|italic|underline|code|strikethrough`, `todo:toggle`. The `onKeyDown` hooks keep working for everything else. A command that declares `confirm` is accepted but not bound to keys yet (confirmation strategies come in a later lot).
+- Built-in commands: `undo`, `redo`, `mark:bold|italic|underline|code|strikethrough`, `todo:toggle`. The `onKeyDown` hooks keep working for everything else.
+
+### Confirmations: hold, invite, choose
+
+A command that is risky to run from a single key press declares how it asks for confirmation. `nabu.exec(id)` / `nabu.commands.run(id)` always run it directly (menus, palettes, the accessible path); only the KEY goes through the confirmation. What is waiting is exposed as the reactive `nabu.pendingCommand` (`{ id, strategy, label, display, message, target?, progress, options?, selectedIndex }` or `null`); `nabu.cancelPendingCommand()` cancels it, nothing runs and no undo step exists.
+
+```js
+'region:merge-previous': {
+  label: (ctx) => `Merge with "${ctx.previousRegion.title}"`,
+  keys: ['Backspace'],
+  when: (ctx) => ctx.isCollapsed && ctx.atStartOfRegion,
+  confirm: { strategy: 'hold', holdMs: 700, target: (ctx) => ctx.block },   // or 'invite' / 'choose'
+  run: (nabu, ctx) => { /* … */ },
+},
+```
+
+- **`hold`**: hold the key for `holdMs` (default 700; globally `new Nabu({ commandConfirm: { holdMs } })`). `progress` goes 0 → 1 (animation frames) and the command runs once at the end, even if the key is still down. Releasing the key (or a modifier of the chord) first cancels; any other key cancels AND does its normal action; losing focus or moving the selection cancels. Only a FRESH press (`event.repeat === false`) starts it: the repeats of a key that was held before entering the context are swallowed there, so someone erasing text with Backspace held stops at the boundary and has to release and press again. The `target` (`confirm.target(ctx)`, usually a block) draws the progress: the editor sets `data-command-target="hold"` and `--nb-command-progress` on its element (neutral default style with `--nb-command-accent` / `--nb-command-fill`), or a block reads `nabu.pendingCommandOn(block)?.progress` and draws its own. Without a mountable target, `<CommandInvite {engine} />` shows a small hint with a progress bar.
+- **`invite`**: the first press shows a hint at the caret (`<CommandInvite {engine} />`); the same chord pressed again runs it. Escape, any other key (which acts normally), a click or 5 s (`inviteMs`, per command or globally) cancel. Repeats never start nor confirm it.
+- **`choose`**: used automatically when several commands tie on a key (neither `scope`d to the caret's block), or explicitly with `confirm: { strategy: 'choose', options: (ctx) => [{ id, label, display? }] }` (`run(nabu, ctx, option)` gets the chosen option). `<CommandChooser {engine} />` lists the options at the caret: Arrow keys + Enter, a digit 1-9, a click; Escape or any other key (which acts normally) cancels. Choosing counts as the confirmation of the chosen command. It is a safety net, not a mode: design default keys that do not collide.
+- **Accessibility**: `NabuEditor` renders one polite `aria-live` region (`[data-nabu-live]`) announcing prompts and outcomes (`Hold Ctrl+Backspace to confirm: Merge with "The bank"`, `… : done`, `Cancelled`, `2 of 3: Beta`). The texts are English; override them for every command with `commandConfirm: { messages: { hold, invite, choose, option, done, cancelled } }` (each a string or a function of `{ keys, label, options, option, index, count }`), or per command with `confirm.messages`.
+- **Components** (mount them next to the editor, like `SlashMenu`): `CommandInvite` (props `engine`, `hold: 'auto' | true | false`) and `CommandChooser` (props `engine`, `label`). Neutral defaults styled with `--nb-command-bg`, `-text`, `-border`, `-radius`, `-shadow`, `-accent`, `-active`, `-muted`, `-font-size`, `-z` (falling back on the `--nb-*` theme tokens); design your own from `nabu.pendingCommand`.
 
 ## Regions
 

@@ -10,6 +10,7 @@ import { tick } from 'svelte';
 import { Files } from '../files/files.svelte.js';
 import { Pulse } from '@aionbuilders/pulse';
 import { CommandRegistry } from '../utils/commands.js';
+import { CommandConfirmation } from '../utils/command-confirm.svelte.js';
 import { normalizePlaceholders } from '../utils/placeholders.js';
 import { normalizeLang } from '../utils/spellcheck.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection } from './undo-selection.js';
@@ -44,6 +45,10 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 * @property {Record<string, string[]>} [keymap] - Replaces the keyboard shortcuts of commands (ADR 017): `{ 'mark:bold': ['Mod-Alt-b'] }`;
 *   `[]` disables a command's keys. Chords: see `utils/keys.js`; the same checks as for a declared key apply (reserved chords,
 *   a key without modifier needs the command's `when`).
+* @property {import('../utils/command-confirm.svelte.js').CommandConfirmOptions} [commandConfirm] - Confirmation of commands asked by a
+*   key press (ADR 017 lot 2): `{ holdMs?: number (700), inviteMs?: number (5000), messages?: ConfirmMessages }`. `messages` are the
+*   texts of the prompts and outcomes announced to screen readers (English by default; each is a string or a function of the
+*   parameters, see `ConfirmMessages`); a command can override them with `confirm.messages`.
 * @property {'mac' | 'other'} [platform] - Which platform's conventions `Mod` and the displayed shortcuts follow. Detected from the
 *   browser by default; set it for tests or server-side rendering.
 */
@@ -172,6 +177,8 @@ export class Nabu {
          * Commands and keyboard shortcuts (ADR 017): `list()`, `get(id)`, `run(id, data)`. A plain snapshot API, the set of
          * commands is fixed once the editor is built.
          */
+        this.commandConfirm = new CommandConfirmation(this, init.commandConfirm);
+        this.systems.set('command-confirm', { start: () => this.commandConfirm.start(), stop: () => this.commandConfirm.stop() });
         this.commands = new CommandRegistry(this, { keymap: init.keymap, platform: init.platform });
         // Engine commands first: they win a tie with an extension's command on the same chord.
         this.#registerCommands('core', {
@@ -457,6 +464,31 @@ export class Nabu {
         this.selection.sync();
         return this.#pulse.emit(topic, data);
     }
+
+    /**
+     * The command waiting for the user's confirmation (ADR 017 §3.4), reactive; `null` when none:
+     * `{ id, strategy: 'hold' | 'invite' | 'choose', label, display, message, target?, progress, options?, selectedIndex }`.
+     * `progress` (hold, 0 → 1) and `selectedIndex` (choose) are reactive fields of that object.
+     * @returns {import('../utils/command-confirm.svelte.js').PendingCommand | null}
+     */
+    get pendingCommand() { return this.commandConfirm.pending; }
+
+    /** Cancel the pending confirmation, if any: nothing runs. */
+    cancelPendingCommand() { this.commandConfirm.cancel('api'); }
+
+    /**
+     * The pending confirmation when it is ABOUT `target` (what `confirm.target(ctx)` returned: usually a block), else `null`.
+     * Reactive: a block that draws its own hold progress reads `nabu.pendingCommandOn(block)?.progress`.
+     * @param {any} target
+     * @returns {import('../utils/command-confirm.svelte.js').PendingCommand | null}
+     */
+    pendingCommandOn(target) { return this.commandConfirm.pendingOn(target); }
+
+    /**
+     * Text of the polite live region of the editor (prompts and outcomes of confirmations). Reactive.
+     * @returns {string}
+     */
+    get commandAnnouncement() { return this.commandConfirm.announcement; }
 
     /**
      * Register commands (ADR 017): the registry keeps them and resolves their keys; each one is also an action of the bus.

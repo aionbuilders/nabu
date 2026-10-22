@@ -1,6 +1,7 @@
 <script>
     import { Nabu } from "./nabu.svelte.js";
     import Block from "./Block.svelte";
+    import { commandTargetElement } from "../utils/command-confirm.svelte.js";
 
     /** @type {{ engine: Nabu }} */
     let { engine = new Nabu() } = $props();
@@ -8,6 +9,17 @@
     $effect(() => {
         engine.systems.forEach(system => system.start?.());
         return () => engine.systems.forEach(system => system.stop?.());
+    });
+
+    // The target of a pending confirmation (ADR 017 §3.4a) is marked so that it can draw the progress: `data-command-target`
+    // (the strategy) and `--nb-command-progress` (0 → 1). A block that draws its own may read `engine.pendingCommandOn(block)`.
+    $effect(() => {
+        const pending = engine.pendingCommand;
+        const el = pending ? commandTargetElement(pending.target) : null;
+        if (!pending || !el) return;
+        el.setAttribute('data-command-target', pending.strategy);
+        $effect(() => { el.style.setProperty('--nb-command-progress', String(pending.progress)); });
+        return () => { el.removeAttribute('data-command-target'); el.style.removeProperty('--nb-command-progress'); };
     });
 </script>
 
@@ -44,13 +56,43 @@
     {/each}
 </div>
 
+<!-- One polite live region per editor: prompts and outcomes of command confirmations (hold, invite, choose). Visually hidden. -->
+<div class="nabu-live" role="status" aria-live="polite" aria-atomic="true" data-nabu-ui data-nabu-live>{engine.commandAnnouncement}</div>
+
 <style>
+    .nabu-live {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+        border: 0;
+    }
+
     .nabu-editor {
         outline: none;
         min-height: 100px;
         padding: 1rem;
         white-space: pre-wrap; /* Important pour le comportement éditeur */
         word-break: break-word;
+    }
+
+    /* Target of a pending confirmation (ADR 017): a neutral default, a thin outline + a fill that follows --nb-command-progress
+       (0 → 1). Override --nb-command-* freely, or draw your own from [data-command-target] / engine.pendingCommandOn(block). */
+    .nabu-editor :global([data-command-target]) {
+        outline: 2px solid var(--nb-command-accent, currentColor);
+        outline-offset: 2px;
+        border-radius: var(--nb-command-radius, 3px);
+        background-image: linear-gradient(to right, var(--nb-command-fill, color-mix(in srgb, currentColor 12%, transparent)) calc(var(--nb-command-progress, 0) * 100%), transparent 0);
+    }
+    .nabu-editor :global([data-command-target='invite']) {
+        background-image: none;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        .nabu-editor :global([data-command-target]) { transition: outline-color 0.1s; }
     }
 
     /* Placeholders — blocks expose data-placeholder when it must be shown

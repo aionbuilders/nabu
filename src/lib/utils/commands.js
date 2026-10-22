@@ -27,9 +27,15 @@ import { detectPlatform, parseChord, chordId, eventChordId, formatChord, hasComm
  */
 
 /**
- * How a command that needs confirmation asks for it. ACCEPTED and kept as-is in lot 1, but NOT executed: the strategies
- * (`hold`, `invite`, `choose`) arrive in lot 2. Until then a command with `confirm` is never bound to keys (see
- * {@link CommandRegistry#register}); it stays runnable through `nabu.exec` / `nabu.commands.run`.
+ * How a command that needs confirmation asks for it before a KEY PRESS runs it (`nabu.exec(id)` / `commands.run` run it
+ * directly, without confirmation: the accessible path). Controller: `command-confirm.svelte.js`.
+ *
+ *  - `{ strategy: 'hold', holdMs?, target?(ctx), messages? }`: hold the chord for `holdMs` (default 700, global default: the
+ *    `commandConfirm.holdMs` init option); `target(ctx)` is what draws the progress (a block, an element).
+ *  - `{ strategy: 'invite', inviteMs?, messages? }`: first press asks, the same chord again confirms (timeout default 5000).
+ *  - `{ strategy: 'choose', options(ctx), messages? }`: variants; `options` returns `[{ id, label, display?, ...any }]` and
+ *    `run(nabu, ctx, option)` receives the chosen one. (Several commands tying on a key use `choose` automatically.)
+ *  - `messages`: texts of the prompt / outcome for this command (see `ConfirmMessages`).
  * @typedef {{ strategy: 'hold' | 'invite' | 'choose', [option: string]: any }} CommandConfirm
  */
 
@@ -99,8 +105,8 @@ export class CommandRegistry {
      *  - invalid chord, or reserved by the browser / OS (see `RESERVED_CHORDS`) -> that chord is dropped, `nabu.warn`;
      *  - a chord without Ctrl / Alt / Meta (Backspace, Enter, a letter, Shift+letter…) on a command with no `when` -> dropped
      *    (it would swallow the key everywhere), `nabu.warn`;
-     *  - the command has a `confirm` -> ALL its keys dropped until the confirmation strategies exist (lot 2): a risky
-     *    command is never run from a key without its confirmation. TODO(ADR-017 lot 2): bind them instead.
+     *  - the command has a `confirm` with an unknown strategy (or `choose` without `options`) -> ALL its keys dropped: a risky
+     *    command is never run from a key without its confirmation.
      *  - another command with the same chord AND the same `scope` (or both unscoped) -> `nabu.warn`, both kept (the
      *    ambiguity is settled at key press, see {@link CommandRegistry#handleKeydown}).
      * A duplicate id is refused (warning, the first registration wins). The `keymap` option replaces `def.keys`, with the
@@ -123,8 +129,12 @@ export class CommandRegistry {
         if (override !== undefined && !Array.isArray(override)) this.nabu.warn(`commands: keymap["${id}"] must be an array of chords: ignored`);
         const wanted = Array.isArray(override) ? override : Array.isArray(def.keys) ? def.keys : [];
         if (def.confirm && wanted.length) {
-            this.nabu.warn(`commands: "${id}" declares \`confirm\` (strategies arrive in ADR-017 lot 2): its keys are not bound yet; it still runs through nabu.exec("${id}")`);
-            return entry;
+            const confirm = /** @type {any} */ (def.confirm);
+            const known = confirm.strategy === 'hold' || confirm.strategy === 'invite' || (confirm.strategy === 'choose' && (typeof confirm.options === 'function' || Array.isArray(confirm.options)));
+            if (!known) {
+                this.nabu.warn(`commands: "${id}": unknown \`confirm\` strategy ${JSON.stringify(confirm.strategy)} (or \`choose\` without \`options\`): its keys are not bound; it still runs through nabu.exec("${id}")`);
+                return entry;
+            }
         }
         for (const text of wanted) this.#bind(entry, text);
         return entry;
@@ -211,17 +221,23 @@ export class CommandRegistry {
      *  1. nothing happens during an IME composition, or when someone already `preventDefault`ed the event;
      *  2. the chord of the event (keys.js) selects the commands bound to it; none -> return (no context is even built);
      *  3. candidates are the commands whose `when(ctx)` is true (absent = true; a throwing `when` = false);
-     *  4. ONE -> it runs. SEVERAL -> a command whose `scope` is the type of the caret's block beats generic ones; still tied
-     *     -> the first registered runs and the ambiguity is reported once with `nabu.warn`
-     *     (TODO(ADR-017 lot 2): the `choose` strategy replaces this);
+     *  4. ONE -> it runs, through its `confirm` strategy when it has one (the controller keeps the key from there: see
+     *     `command-confirm.svelte.js`). SEVERAL -> a command whose `scope` is the type of the caret's block beats generic ones;
+     *     still tied -> the `choose` strategy lets the user pick (and the ambiguity is reported once with `nabu.warn`: the
+     *     default keys should not step on each other);
      *  5. a command whose `run` returns `false` synchronously did not handle the key: the next candidate (in priority order)
      *     is tried, then the legacy hooks.
      * @param {KeyboardEvent} event
      * @returns {boolean}
      */
     handleKeydown(event) {
-        if (!this.byChord.size || event.defaultPrevented) return false;
         if (event.isComposing || event.keyCode === 229 || this.nabu.composing) return false;
+        const confirmation = this.nabu.commandConfirm;
+        if (confirmation?.busy) {
+            if (event.defaultPrevented) confirmation.cancel('key'); // somebody else took the key (slash menu…): the pending one is moot
+            else if (confirmation.handleKeydown(event)) return true;
+        }
+        if (!this.byChord.size || event.defaultPrevented) return false;
         const chord = eventChordId(event);
         const bound = chord ? this.byChord.get(chord) : undefined;
         if (!bound?.length) return false;
@@ -241,10 +257,16 @@ export class CommandRegistry {
             const signature = `${chord}|${ties.join(',')}`;
             if (!this.reported.has(signature)) {
                 this.reported.add(signature);
-                this.nabu.warn(`commands: ambiguous key ${chord}: ${ties.join(', ')} all apply here; running "${ties[0]}"`); // TODO(ADR-017 lot 2): strategy `choose`
+                this.nabu.warn(`commands: ambiguous key ${chord}: ${ties.join(', ')} all apply here; the user is asked to choose`);
             }
+            if (confirmation && confirmation.beginTie(candidates.filter((entry) => rank(entry) === rank(candidates[0])), ctx, event)) return true;
         }
         for (const entry of candidates) {
+            // A command that asks for confirmation never runs from the key press itself: the controller takes over.
+            if (entry.def.confirm && confirmation) {
+                if (confirmation.begin(entry, ctx, event)) return true;
+                continue;
+            }
             let result;
             try {
                 result = entry.def.run(this.nabu, ctx);

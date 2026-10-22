@@ -119,18 +119,24 @@ describe('refused keys', () => {
     expect(warned(/invalid chord "Mod-Nope"/)).toBe(true);
   });
 
-  it('a command with `confirm` is never bound to keys in lot 1 (it would run without its confirmation)', async () => {
+  it('a command with a known `confirm` strategy is bound; an unknown strategy (or `choose` without options) is not', async () => {
     watchWarnings();
     const run = vi.fn();
     const confirm = { strategy: 'hold', holdMs: 700 };
-    const engine = await make({ extensions: [ext('x', { 'x:merge': cmd({ run, keys: ['Mod-m'], confirm }) })] });
-    expect(engine.commands.get('x:merge').keys).toEqual([]);
+    const engine = await make({ extensions: [ext('x', {
+      'x:merge': cmd({ run, keys: ['Mod-m'], confirm }),
+      'x:odd': cmd({ run, keys: ['Mod-k'], confirm: { strategy: 'shout' } }),
+      'x:pick': cmd({ run, keys: ['Mod-l'], confirm: { strategy: 'choose' } }),
+    })] });
+    expect(engine.commands.get('x:merge').keys).toEqual(['Mod-m']);
     expect(engine.commands.get('x:merge').confirm).toEqual(confirm);
-    expect(warned(/declares `confirm`/)).toBe(true);
-    const event = press(engine, 'm', { ctrlKey: true });
+    expect(engine.commands.get('x:odd').keys).toEqual([]);
+    expect(engine.commands.get('x:pick').keys).toEqual([]);
+    expect(warned(/unknown `confirm` strategy "shout"/)).toBe(true);
+    const event = press(engine, 'k', { ctrlKey: true });
     expect(run).not.toHaveBeenCalled();
     expect(event.preventDefault).not.toHaveBeenCalled();
-    await engine.exec('x:merge'); // still runnable without a key
+    await engine.exec('x:merge'); // exec runs a command directly, without its confirmation (the accessible path)
     expect(run).toHaveBeenCalledTimes(1);
   });
 
@@ -232,28 +238,35 @@ describe('key resolution', () => {
     scoped.mockClear();
     engine.selection.anchorBlock = { ...engine.children[0], type: 'heading', parents: [], parent: null };
     press(engine, 'j', { ctrlKey: true });
+    // Elsewhere neither is scoped to the block: they tie, and the user is asked (see command-confirm.test.js)
     expect(scoped).not.toHaveBeenCalled();
-    expect(generic).toHaveBeenCalledTimes(1);
+    expect(generic).not.toHaveBeenCalled();
+    expect(engine.pendingCommand.strategy).toBe('choose');
+    expect(engine.pendingCommand.options.map((o) => o.id)).toEqual(['x:generic', 'x:scoped']);
   });
 
-  it('a real tie runs the first registered command and warns about the ambiguity (once)', async () => {
+  it('a real tie asks the user to choose (nothing runs) and warns about the ambiguity (once)', async () => {
     watchWarnings();
     const a = vi.fn(); const b = vi.fn();
     const engine = await make({ extensions: [ext('x', { 'x:a': cmd({ run: a, keys: ['Mod-j'], scope: 'paragraph' }) }), ext('y', { 'y:b': cmd({ run: b, keys: ['Mod-j'], scope: 'paragraph' }) })] });
     warn.mockClear();
     press(engine, 'j', { ctrlKey: true });
-    press(engine, 'j', { ctrlKey: true });
-    expect(a).toHaveBeenCalledTimes(2);
+    expect(a).not.toHaveBeenCalled();
     expect(b).not.toHaveBeenCalled();
+    expect(engine.pendingCommand.options.map((o) => o.id)).toEqual(['x:a', 'y:b']);
+    engine.cancelPendingCommand();
+    press(engine, 'j', { ctrlKey: true });
     expect(warn.mock.calls.filter((c) => /ambiguous key/.test(c.join(' ')))).toHaveLength(1);
   });
 
-  it('engine commands win a tie against an extension (registered first)', async () => {
+  it('an engine command and an extension command on the same chord tie too (undo vs x:undo)', async () => {
     watchWarnings();
     const run = vi.fn();
     const engine = await make({ extensions: [ext('x', { 'x:undo': cmd({ run, keys: ['Mod-z'] }) })] });
     const undo = vi.spyOn(engine, 'undo').mockImplementation(() => {});
     press(engine, 'z', { ctrlKey: true });
+    expect(engine.pendingCommand.options.map((o) => o.id)).toEqual(['undo', 'x:undo']); // registration order: the engine's first
+    engine.commandConfirm.choose(0);
     expect(undo).toHaveBeenCalledTimes(1);
     expect(run).not.toHaveBeenCalled();
   });
