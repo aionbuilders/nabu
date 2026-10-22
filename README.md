@@ -519,7 +519,7 @@ const MyExtension = extension('my-ext', {
 A command that is risky to run from a single key press declares how it asks for confirmation. `nabu.exec(id)` / `nabu.commands.run(id)` always run it directly (menus, palettes, the accessible path); only the KEY goes through the confirmation. What is waiting is exposed as the reactive `nabu.pendingCommand` (`{ id, strategy, label, display, message, target?, progress, options?, selectedIndex }` or `null`); `nabu.cancelPendingCommand()` cancels it, nothing runs and no undo step exists.
 
 ```js
-'region:merge-previous': {
+'region:merge-previous': {                    // the real one lives in the Regions extension, see "Regions" below
   label: (ctx) => `Merge with "${ctx.previousRegion.title}"`,
   keys: ['Backspace'],
   when: (ctx) => ctx.isCollapsed && ctx.atStartOfRegion,
@@ -536,7 +536,7 @@ A command that is risky to run from a single key press declares how it asks for 
 
 ## Regions
 
-Regions divide one continuous text into parts, chapters, scenes… with **markers** (design: `docs/adr/016-regions.md`). The document stays flat; a `region` marker is a void block (the caret steps over it, like a divider) and a region runs from its marker to the next marker of the same or a higher level. Nabu stores and exposes the structure; what a division *means* (synopsis, status, views) is up to your app. The default rendering is a discreet seam (label + hairline, announced to screen readers as a heading of the region's level, themable with `--nb-region-*` CSS variables); there is no editing UI. Keyboard actions, markdown / HTML and clipboard forms of a marker are not there yet.
+Regions divide one continuous text into parts, chapters, scenes… with **markers** (design: `docs/adr/016-regions.md`). The document stays flat; a `region` marker is a void block (the caret steps over it, like a divider) and a region runs from its marker to the next marker of the same or a higher level. Nabu stores and exposes the structure; what a division *means* (synopsis, status, views) is up to your app. The default rendering is a discreet seam (label + hairline, announced to screen readers as a heading of the region's level, themable with `--nb-region-*` CSS variables); there is no editing UI. Markdown / HTML and clipboard forms of a marker are not there yet.
 
 ```js
 import { RegionsExtension, insertRegion } from '@aionbuilders/nabu';
@@ -569,6 +569,35 @@ r.setField('pov', 'Anna');          // validated against the declared type, own 
 r.blocks; r.first; r.last;          // the range (sub-regions included), marker .. last block
 r.wordCount;                        // words of the range, no rendering needed
 ```
+
+### Region commands and keys
+
+The extension declares commands (ADR 016 §3.4, ADR 017), all runnable through `nabu.exec(id, data)`. Only three have default keys, the arrow-key chords being mostly taken by the OS and the browser; bind the others with the `keymap` option. `exec` runs a command directly; the confirmation (the hold) is a keyboard concern. Every structural command is ONE undo step and Ctrl+Z gives the selection back. `data.region` (a `Region`, its marker block or its marker id) makes a command act on that region instead of the one holding the caret.
+
+| Command | Default key | Data | What it does |
+|---|---|---|---|
+| `region:split` | `Mod-Enter` | - | Cut here: the block is split at the caret (head stays, tail starts the new region), a marker of the SAME type as the current region goes between (the default top-level type in the preamble); the caret goes to the start of the tail. At the start of a block nothing is cut, the marker goes before it. Not in a list item, a toggle or a code block (their `Mod-Enter` stays theirs). |
+| `region:merge-previous` | `Backspace`, `Shift-Backspace` held | `{ region? }` | At the start of a region: **hold** to remove its marker; its content joins the previous region (or the preamble). |
+| `region:merge-next` | `Delete` held | `{ region? }` | At the end of a region: **hold** to remove the NEXT region's marker. |
+| `region:insert` | - | `{ type?, at?: 'after' \| 'before', title?, fields? }` | A marker after the region's whole range (default) or before its marker; the caret stays. |
+| `region:move` | - | `{ direction: 'up' \| 'down' }` | Moves the region WITH its sub-regions before / after its neighbouring sibling of the same level. No-op at the edges. |
+| `region:move-up` / `region:move-down` | - | `{ region? }` | The same with the direction built in: what a `keymap` binds (a key cannot carry `data`). |
+| `region:promote` / `region:demote` | - | - | Changes the type to the declared type of the level above / below (the first declared one if several). No-op when there is none. |
+| `region:next` / `region:prev` / `region:parent` | - | - | Caret to the first text position of that region, scrolled into view. |
+
+```js
+const engine = createEditor({ keymap: {
+  'region:move-up': ['Mod-Alt-ArrowUp'],       // bind what you need (these chords are free in most browsers, not in every OS)
+  'region:move-down': ['Mod-Alt-ArrowDown'],
+  'region:next': ['Mod-Alt-j'],
+  'region:split': ['Mod-Shift-Enter'],         // or move the default
+} });
+engine.exec('region:move', { direction: 'down' });
+```
+
+**Backspace and Delete protect the structure.** A caret at the very start of the first text block of a region (a plain paragraph) never merges text through the marker: a quick Backspace does nothing; **holding** it for 700 ms (the `hold` confirmation) removes the marker. The seam shows the prompt above its label, left-aligned, without any bubble, in a warning tint (`--nb-region-warning`, amber by default), and its hairline drains with the progress; releasing early restores everything. Delete at the end of the last text block before a marker is symmetric (the NEXT marker is the one that disappears). Repeats of a key held before the boundary are swallowed there, so erasing a word with Backspace held stops at the seam. A heading, quote, dialogue or code block at the start of a region first converts to a paragraph with Backspace, as anywhere; then the next Backspace is protected. A region at the very start of the document has nothing to merge into: Backspace does nothing. Any other silent path is closed too (a key not bound to a command, a virtual keyboard): the engine's text merge is vetoed through the extension's `onBeforeMerge` hook. A selection that SPANS a marker is explicit: it deletes the selected text and the marker inside it, as one undo step.
+
+Texts are overridable (English by default): `RegionsExtension({ types, messages: { split: 'Couper ici', mergePreamble: '…', mergePrevious: ({ title }) => `Fusionner avec « ${title} »`, hold: ({ keys, label }) => `Maintenez ${keys} : ${label}` } })`. The command facts available in `ctx` for your own commands: `region`, `previousRegion`, `nextRegion`, `atStartOfRegion`, `atEndOfRegion`, `inRootTextBlock`.
 
 Field kinds: `text`, `richtext` (a LoroText, `marker.richtext(name)`), `number`, `boolean`, `enum`, `date` (ISO 8601). An invalid value for a declared field is refused; fields a type does not declare are kept as they are. Markers only live at the root: one that ends up inside a container (a list, a toggle…) is moved out, right after it, in the same undo step.
 

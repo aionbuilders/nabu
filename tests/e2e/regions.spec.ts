@@ -1,14 +1,14 @@
 /**
  * E2E — Regions (ADR 016, lot 1): the marker renders as an accessible seam with its computed label, the caret steps over
  * it like over a divider (one key press) and typing never lands in it, markers stay at the root, the registry follows the
- * document, and Backspace / Delete next to a marker leave a valid document (what they DO is recorded below: the
- * protect-vs-merge decision is lot 2).
+ * document. Lot 2 (ADR 016 §3.4 / §6, ADR 017): Mod-Enter splits, Backspace / Delete at a region boundary NEVER merge text through
+ * the marker (the merge is a HOLD of the key on the seam), the structural commands run through `nabu.exec`, one undo step each.
  */
 
 import { test, expect, type Page } from '@playwright/test';
 import { gotoEditor, clearAndReset, press, flushRender } from './helpers/editor.js';
 import { undo } from './helpers/keyboard.js';
-import { caret, violations, focusAt, focusEnd, collectErrors } from './helpers/model.js';
+import { caret, violations, focusAt, focusEnd, focusEmpty, selectRange, collectErrors } from './helpers/model.js';
 
 /** One-line outline of the root blocks: `p(text)` or `R:type(title)`. */
 async function roots(page: Page): Promise<string> {
@@ -168,48 +168,296 @@ test.describe('caret and typing', () => {
   });
 });
 
+const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
+const exec = (page: Page, topic: string, data?: any) => page.evaluate(([t, d]) => (window as any).nabu.exec(t, d), [topic, data] as [string, any]);
+const pending = (page: Page) => page.evaluate(() => {
+  const p = (window as any).nabu.pendingCommand;
+  return p ? { id: p.id, strategy: p.strategy, progress: p.progress, message: p.message } : null;
+});
+const seams = (page: Page) => page.locator('[data-block-type="region"]');
+const live = (page: Page) => page.locator('[data-nabu-live]');
+const seamTexts = (page: Page) => seams(page).evaluateAll((els) => els.map((e) => e.querySelector('.nabu-region-label')?.textContent));
+
 /**
- * Backspace / Delete next to a marker. CURRENT behaviour (lot 1, no region hook yet): the marker is a void block like the
- * divider but WITHOUT the divider's delete hooks, so the text merge goes through it. These tests pin that the document
- * stays valid and that nothing is lost or duplicated; whether a Backspace should instead PROTECT the marker (ADR 016,
- * open question 1) is decided in lot 2, which will change the expectations below.
+ * Backspace / Delete at a region boundary (ADR 016 §6 question 1, decided in lot 2): the text is NEVER merged through the
+ * marker. A quick press does nothing; HOLDING the key on the seam (ADR 017 `hold`, 700 ms) removes the marker.
  */
-test.describe('Backspace / Delete next to a marker (current behaviour, decided in lot 2)', () => {
+test.describe('Backspace / Delete at a region boundary (protected, merge = hold)', () => {
   test.beforeEach(async ({ page }) => {
     await gotoEditor(page);
     await clearAndReset(page);
     await build(page, ['p:above', 'r:section-1:Part', 'p:below']);
   });
 
-  test('Backspace at the start of the block after a marker merges the texts through it and leaves a valid document, one undo step', async ({ page }) => {
+  test('a quick Backspace at the start of the block after a marker does nothing (no text merged through it)', async ({ page }) => {
     await focusAt(page, 'below', 0);
     await press(page, 'Backspace');
     await flushRender(page);
-    // The text merge goes THROUGH the marker: both texts are kept, merged before it (the marker is left behind them).
-    await expectRoots(page, 'p(abovebelow) ; R:section-1(Part)');
-    await expectValid(page);
-    await undo(page);
     await expectRoots(page, 'p(above) ; R:section-1(Part) ; p(below)');
+    expect(await pending(page)).toBeNull();
+    await expect(page.locator('[data-region-hint]')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).nabu.undoManager.canUndo())).toBe(false);
     await expectValid(page);
   });
 
-  test('Delete at the end of the block before a marker merges the texts through it and leaves a valid document, one undo step', async ({ page }) => {
+  test('holding Backspace shows the hint above the label, the hairline drains, ~800 ms merges: the seam is gone and labels renumber', async ({ page }) => {
+    await build(page, ['p:pre', 'r:section-1:One', 'p:a', 'r:section-1:Two', 'p:below']);
+    await focusAt(page, 'below', 0);
+    const seam = seams(page).nth(1);
+    const before = await seam.boundingBox();
+    await page.keyboard.down('Backspace');
+    await expect.poll(() => pending(page)).toMatchObject({ id: 'region:merge-previous', strategy: 'hold' });
+    // the hint: DOM text on the seam being merged, the warning tint, the aria-live prompt
+    await expect(seam).toHaveAttribute('data-region-pending', 'hold');
+    const hint = seam.locator('[data-region-hint]');
+    await expect(hint).toHaveText('Hold Backspace to merge with “One”');
+    await expect(live(page)).toContainText('Hold Backspace to merge with “One”');
+    // no layout shift: the seam does not move while the hint shows
+    const during = await seam.boundingBox();
+    expect(during).toEqual(before);
+    const hintBox = await hint.boundingBox();
+    expect(hintBox!.y + hintBox!.height).toBeLessThanOrEqual(during!.y + 1); // above the label, in the margin
+    const color = await hint.evaluate((el) => getComputedStyle(el).color);
+    expect(color).toBe('rgb(180, 83, 9)');
+    // no bubble, no background, no border: the engine's default target outline / fill is switched off on a seam
+    const box = await seam.evaluate((el) => { const c = getComputedStyle(el); return [c.outlineStyle, c.backgroundImage, c.backgroundColor]; });
+    expect(box).toEqual(['none', 'none', 'rgba(0, 0, 0, 0)']);
+    const hintBox2 = await hint.evaluate((el) => { const c = getComputedStyle(el); return [c.backgroundColor, c.borderTopStyle]; });
+    expect(hintBox2).toEqual(['rgba(0, 0, 0, 0)', 'none']);
+    // the hairline drains with the progress
+    await page.waitForTimeout(300);
+    const scale = await seam.locator('.nabu-region-drain').evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a);
+    expect(scale).toBeGreaterThan(0.1);
+    expect(scale).toBeLessThan(0.9);
+    // nothing merged yet
+    await expectRoots(page, 'p(pre) ; R:section-1(One) ; p(a) ; R:section-1(Two) ; p(below)');
+    await page.waitForTimeout(700);
+    await expectRoots(page, 'p(pre) ; R:section-1(One) ; p(a) ; p(below)');
+    await expect(seams(page)).toHaveCount(1);
+    await expect(seams(page).first()).toHaveText('1. One');
+    expect(await pending(page)).toBeNull();
+    await expect(page.locator('[data-region-hint]')).toHaveCount(0);
+    await page.keyboard.up('Backspace');
+    await expectCaret(page, '|below');
+    await expectValid(page);
+  });
+
+  test('releasing early cancels: the seam is intact and the hairline is restored', async ({ page }) => {
+    await focusAt(page, 'below', 0);
+    await page.keyboard.down('Backspace');
+    await expect.poll(() => pending(page)).not.toBeNull();
+    await expect(page.locator('[data-region-hint]')).toHaveCount(1);
+    await page.waitForTimeout(250);
+    await page.keyboard.up('Backspace');
+    expect(await pending(page)).toBeNull();
+    await expect(page.locator('[data-region-hint]')).toHaveCount(0);
+    await expect(page.locator('.nabu-region-drain')).toHaveCount(0);
+    await expect(seams(page).first()).not.toHaveAttribute('data-region-pending', /.*/);
+    await page.waitForTimeout(800);
+    await expectRoots(page, 'p(above) ; R:section-1(Part) ; p(below)');
+    await expect(live(page)).toContainText('Cancelled');
+    await expectValid(page);
+  });
+
+  test('Ctrl+Z after a held merge restores the marker and the caret (one undo step)', async ({ page }) => {
+    await focusAt(page, 'below', 0);
+    await page.keyboard.down('Backspace');
+    await expect.poll(() => roots(page), { timeout: 4000 }).toBe('p(above) ; p(below)');
+    await page.keyboard.up('Backspace');
+    await undo(page);
+    await expectRoots(page, 'p(above) ; R:section-1(Part) ; p(below)');
+    await expectCaret(page, '|below');
+    await expect(seams(page).first()).toHaveText('1. Part');
+    await expectValid(page);
+  });
+
+  test('a held Backspace erasing a word stops at the boundary: no merge, the key must be released', async ({ page }) => {
+    await build(page, ['p:above', 'r:section-1:Part', 'p:word']);
+    await focusEnd(page, 'word');
+    await page.keyboard.down('Backspace'); // the fresh press erases one letter...
+    for (let i = 0; i < 9; i++) await page.keyboard.down('Backspace'); // ...the auto-repeats erase the rest and stop at the seam
+    await page.waitForTimeout(900);
+    await expectRoots(page, 'p(above) ; R:section-1(Part) ; p()');
+    expect(await pending(page)).toBeNull();
+    await page.keyboard.up('Backspace');
+    // a NEW press at the boundary now asks for the hold
+    await page.keyboard.down('Backspace');
+    await expect.poll(() => pending(page)).toMatchObject({ id: 'region:merge-previous' });
+    await page.keyboard.up('Backspace');
+    await expectRoots(page, 'p(above) ; R:section-1(Part) ; p()');
+    await expectValid(page);
+  });
+
+  test('the first region of the document (no preamble): Backspace at its start does nothing, no hold', async ({ page }) => {
+    await build(page, ['r:section-1:Part', 'p:text']);
+    await focusAt(page, 'text', 0);
+    await page.keyboard.down('Backspace');
+    await page.waitForTimeout(900);
+    await page.keyboard.up('Backspace');
+    await expectRoots(page, 'R:section-1(Part) ; p(text)');
+    expect(await pending(page)).toBeNull();
+    await expectValid(page);
+  });
+
+  test('Backspace in an EMPTY block right after a marker is protected the same way (hold to merge)', async ({ page }) => {
+    await build(page, ['p:above', 'r:section-1:Part', 'p:']);
+    await focusEmpty(page);
+    await press(page, 'Backspace');
+    await flushRender(page);
+    await expectRoots(page, 'p(above) ; R:section-1(Part) ; p()');
+    await page.keyboard.down('Backspace');
+    await expect.poll(() => roots(page), { timeout: 4000 }).toBe('p(above) ; p()');
+    await page.keyboard.up('Backspace');
+    await expectValid(page);
+  });
+
+  test('a quick Delete at the end of the block before a marker does nothing; holding it removes the NEXT marker', async ({ page }) => {
     await focusEnd(page, 'above');
     await press(page, 'Delete');
     await flushRender(page);
-    await expectRoots(page, 'p(abovebelow) ; R:section-1(Part)'); // same outcome as Backspace from the other side
-    await expectValid(page);
+    await expectRoots(page, 'p(above) ; R:section-1(Part) ; p(below)');
+    await page.keyboard.down('Delete');
+    await expect.poll(() => pending(page)).toMatchObject({ id: 'region:merge-next', strategy: 'hold' });
+    await expect(seams(page).first()).toHaveAttribute('data-region-pending', 'hold');
+    await expect(seams(page).first().locator('[data-region-hint]')).toHaveText('Hold Delete to merge “Part” into this region');
+    await expect(live(page)).toContainText('Hold Delete to merge “Part” into this region');
+    await expect.poll(() => roots(page), { timeout: 4000 }).toBe('p(above) ; p(below)');
+    await page.keyboard.up('Delete');
+    await expectCaret(page, 'above|');
     await undo(page);
     await expectRoots(page, 'p(above) ; R:section-1(Part) ; p(below)');
+    await expectCaret(page, 'above|');
     await expectValid(page);
   });
 
-  test('Backspace in an empty block right after a marker changes nothing', async ({ page }) => {
-    await build(page, ['r:section-1:Part', 'p:']);
-    await focusAt(page, '', 0);
+  test('a held Delete erasing forward stops at the boundary (no merge)', async ({ page }) => {
+    await build(page, ['p:word', 'r:section-1:Part', 'p:below']);
+    await focusAt(page, 'word', 0);
+    await page.keyboard.down('Delete');
+    for (let i = 0; i < 9; i++) await page.keyboard.down('Delete');
+    await page.waitForTimeout(900);
+    await expectRoots(page, 'p() ; R:section-1(Part) ; p(below)');
+    expect(await pending(page)).toBeNull();
+    await page.keyboard.up('Delete');
+    await expectValid(page);
+  });
+
+  test('a selection spanning a marker deletes the text and the marker, as one undo step', async ({ page }) => {
+    await build(page, ['p:aaXX', 'r:section-1:Part', 'p:YYbb']);
+    await selectRange(page, 'aaXX', 2, 'YYbb', 2);
     await press(page, 'Backspace');
     await flushRender(page);
-    await expectRoots(page, 'R:section-1(Part) ; p()'); // nothing to merge into: untouched
+    await expectRoots(page, 'p(aabb)');
+    await undo(page);
+    await expectRoots(page, 'p(aaXX) ; R:section-1(Part) ; p(YYbb)');
+    await expectValid(page);
+  });
+});
+
+test.describe('region:split (Mod-Enter)', () => {
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+  });
+
+  test('cuts at the caret: the tail starts a new region of the same type, typing continues in it; Ctrl+Z puts everything back', async ({ page }) => {
+    await build(page, ['p:pre', 'r:section-2:Two', 'p:abcdef']);
+    await focusAt(page, 'abcdef', 3);
+    await press(page, `${MOD}+Enter`);
+    await expectRoots(page, 'p(pre) ; R:section-2(Two) ; p(abc) ; R:section-2() ; p(def)');
+    await expectCaret(page, '|def');
+    await page.keyboard.type('X');
+    await expectRoots(page, 'p(pre) ; R:section-2(Two) ; p(abc) ; R:section-2() ; p(Xdef)');
+    await undo(page); // the typing
+    await undo(page); // the split: ONE step
+    await expectRoots(page, 'p(pre) ; R:section-2(Two) ; p(abcdef)');
+    await expectCaret(page, 'abc|def');
+    await expectValid(page);
+  });
+
+  test('in the preamble it opens a top-level region', async ({ page }) => {
+    await build(page, ['p:hello world']);
+    await focusAt(page, 'hello world', 5);
+    await press(page, `${MOD}+Enter`);
+    await expectRoots(page, 'p(hello) ; R:section-1() ; p( world)');
+    await expectValid(page);
+  });
+
+  test('coexists with todo:toggle: in a to-do item Mod-Enter checks it and adds no marker', async ({ page }) => {
+    await build(page, ['p:text', 'r:section-1:Part', 'p:para']);
+    await page.evaluate(async () => {
+      const n = (window as any).nabu;
+      const l = n.insert('list', { listType: 'todo' }, null, 3);
+      n.insert('list-item', { text: 'task', checked: false }, l.id, 0);
+      await n.commit();
+    });
+    await page.waitForFunction(() => document.querySelectorAll('[data-block-id]').length >= 5);
+    await focusEnd(page, 'task');
+    await press(page, `${MOD}+Enter`);
+    await flushRender(page);
+    expect(await page.evaluate(() => { const n = (window as any).nabu; return n.tree.roots().at(-1).children()[0].data.get('checked'); })).toBe(true);
+    await expect(seams(page)).toHaveCount(1);
+    await focusAt(page, 'para', 2);
+    await press(page, `${MOD}+Enter`);
+    await expect(seams(page)).toHaveCount(2);
+    await expectValid(page);
+  });
+});
+
+test.describe('structural commands through exec (seeded document)', () => {
+  test.beforeEach(async ({ page }) => { await gotoEditor(page, { seed: 'regions' }); });
+
+  test('region:move down: the region and its content swap with its next sibling, labels renumber, Ctrl+Z restores the caret', async ({ page }) => {
+    await focusAt(page, 'Text of the bank.', 4);
+    await exec(page, 'region:move', { direction: 'down' });
+    await expect.poll(() => seamTexts(page)).toEqual(['1. The ferryman', '1.1 The water', '1.2 The bank', '2. The return']);
+    await expectRoots(page, 'p(Preamble, outside any region.) ; R:section-1(The ferryman) ; p(Opening of the first section.) ; R:section-2(The water) ; p(Text of the water.) ; R:section-2(The bank) ; p(Text of the bank.) ; R:section-1(The return) ; p(Closing text.)');
+    await expectCaret(page, 'Text| of the bank.');
+    await undo(page);
+    await expect.poll(() => seamTexts(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return']);
+    await expectCaret(page, 'Text| of the bank.');
+    await expectValid(page);
+  });
+
+  test('region:move at the edge is a no-op (no undo step)', async ({ page }) => {
+    await focusAt(page, 'Closing text.', 0);
+    await exec(page, 'region:move', { direction: 'down' });
+    await flushRender(page);
+    expect(await page.evaluate(() => (window as any).nabu.undoManager.canUndo())).toBe(false);
+  });
+
+  test('region:promote / region:demote change the level of the region holding the caret', async ({ page }) => {
+    await focusAt(page, 'Text of the water.', 0);
+    await exec(page, 'region:promote');
+    await expect.poll(() => seamTexts(page)).toEqual(['1. The ferryman', '1.1 The bank', '2. The water', '3. The return']);
+    await exec(page, 'region:demote');
+    await expect.poll(() => seamTexts(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return']);
+    await expectValid(page);
+  });
+
+  test('region:next / region:prev / region:parent move the caret to the first text position of the target region', async ({ page }) => {
+    await focusAt(page, 'Opening of the first section.', 3);
+    await exec(page, 'region:next');
+    await expectCaret(page, '|Text of the bank.');
+    await exec(page, 'region:parent');
+    await expectCaret(page, '|Opening of the first section.');
+    await exec(page, 'region:next', { region: await page.evaluate(() => (window as any).nabu.regions.list[2].marker.id) });
+    await expectCaret(page, '|Closing text.');
+  });
+
+  test('region:insert adds a marker after the region\'s whole range, one undo step', async ({ page }) => {
+    await focusAt(page, 'Text of the bank.', 0);
+    await exec(page, 'region:insert', { type: 'section-2', at: 'before', title: 'New' });
+    await expect.poll(() => seamTexts(page)).toEqual(['1. The ferryman', '1.1 New', '1.2 The bank', '1.3 The water', '2. The return']);
+    await undo(page);
+    await expect.poll(() => seamTexts(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return']);
+  });
+
+  test('region:merge-previous through exec runs directly (no hold); the live region keeps the last outcome', async ({ page }) => {
+    await focusAt(page, 'Text of the bank.', 2);
+    await exec(page, 'region:merge-previous');
+    await expect.poll(() => seamTexts(page)).toEqual(['1. The ferryman', '1.1 The water', '2. The return']);
+    expect(await pending(page)).toBeNull();
     await expectValid(page);
   });
 });

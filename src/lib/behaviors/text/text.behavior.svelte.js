@@ -424,6 +424,19 @@ export class TextBehavior {
         tick().then(() => this.nabu.selection.setCursor(this.block, sel.from + 1));
     }
     
+    /**
+     * Whether an extension vetoes the merge of two text blocks that Backspace / Delete at a block boundary is about to do
+     * (the `onBeforeMerge(nabu, survivor, victim)` hook; returning `nabu.BREAK` refuses: nothing is merged, nothing is
+     * deleted). The engine names no reason: an extension may protect a structural boundary between the two blocks.
+     * @param {Block} survivor @param {Block} victim
+     */
+    #mergeRefused(survivor, victim) {
+        const hooks = this.nabu.hooks.get("onBeforeMerge");
+        if (!hooks) return false;
+        for (const hook of hooks) if (hook(this.nabu, survivor, victim) === this.nabu.BREAK) return true;
+        return false;
+    }
+
     /** @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel] */
     handleDeleteContentBackward(event, sel = this.selection) {
         if (!sel) return;
@@ -433,6 +446,7 @@ export class TextBehavior {
             const previousBehavior = previousBlock?.behaviors.get("text");
             if (previousBehavior && previousBehavior instanceof TextBehavior) {
                 event.preventDefault();
+                if (this.#mergeRefused(previousBlock, this.block)) return true;
                 const previousLength = previousBehavior.text.length;
                 // previousBehavior.delta([
                 //     { retain: previousLength },
@@ -468,6 +482,7 @@ export class TextBehavior {
             const nextBehavior = nextBlock?.behaviors.get("text");
             if (nextBehavior && nextBehavior instanceof TextBehavior) {
                 event.preventDefault();
+                if (this.#mergeRefused(this.block, nextBlock)) return true;
                 // this.delta([
                 //     { retain: this.container.length },
                 //     ...nextBehavior.container.toDelta()

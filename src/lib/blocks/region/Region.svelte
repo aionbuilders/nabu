@@ -8,13 +8,26 @@
     const level = $derived(Math.min(6, Math.max(1, region?.level ?? 1)));
     // An empty label (untitled, unnumbered) still announces the division by its type.
     const text = $derived(region?.label || block.regionType);
+
+    // A protected merge asks to be HELD on this seam (ADR 017 `hold`, ADR 016 lot 2): the command's prompt shows above the
+    // label and the hairline drains in the warning tint while the key is down. Nothing remains once the marker is gone.
+    const pending = $derived.by(() => {
+        const p = block.nabu.pendingCommandOn(block);
+        return p?.strategy === 'hold' ? p : null;
+    });
 </script>
 
 <!--
     The default rendering of a region marker (ADR 016 §3.5): a discreet seam, the computed label and a hairline. Announced
     as a heading of the region's level so that screen readers navigate by division. No editing UI here: the integrator
     brings its own. Theming: --nb-region-color, --nb-region-rule-color, --nb-region-label-size, --nb-region-label-weight,
-    --nb-region-gap, --nb-region-margin (they default to the host's text colour, so light and dark pages both work).
+    --nb-region-gap, --nb-region-margin (they default to the host's text colour, so light and dark pages both work) and
+    --nb-region-warning (the tint of a pending merge, amber by default).
+
+    The hold hint (neutral version of the design of the "8b" board): left-aligned above the label, no bubble, no background,
+    no border, in the warning tint; the hairline drains with the progress (0 → 1). It is positioned ABSOLUTELY in the top
+    margin of the seam, so showing it shifts nothing; it needs `--nb-region-margin` to leave about one line above the seam
+    (the default does).
 -->
 <div
     bind:this={block.element}
@@ -29,9 +42,18 @@
     class="nabu-region"
     class:debug={block.nabu.debugging}
     class:selected={block.selected}
+    class:pending={!!pending}
+    data-region-pending={pending ? 'hold' : undefined}
+    style:--nb-region-progress={pending ? pending.progress : undefined}
 >
+    {#if pending}
+        <!-- Not read as part of the heading (the live region announces the prompt): decorative here. -->
+        <span class="nabu-region-hint" data-region-hint aria-hidden="true">{pending.message}</span>
+    {/if}
     <span class="nabu-region-label">{text}</span>
-    <span class="nabu-region-rule" aria-hidden="true"></span>
+    <span class="nabu-region-rule" aria-hidden="true">
+        {#if pending}<span class="nabu-region-drain"></span>{/if}
+    </span>
 </div>
 
 <style>
@@ -46,10 +68,33 @@
         line-height: 1.2;
         letter-spacing: 0.02em;
         user-select: none;
+        position: relative;
 
         &.debug.selected {
             background-color: rgba(59, 130, 246, 0.25);
         }
+
+        /* The pending hold is drawn by the hint and the draining hairline only: not by the engine's default target outline
+           (the extra attribute outranks it: its rule is as specific as a single attribute + the editor's scoped classes). */
+        &:global([data-command-target][data-block-type='region']) {
+            outline: none;
+            background-image: none;
+            border-radius: 0;
+        }
+    }
+
+    .nabu-region-hint {
+        position: absolute;
+        left: 0;
+        bottom: 100%;
+        max-width: 100%;
+        padding-bottom: 0.25em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--nb-region-warning, #b45309);
+        font-weight: var(--nb-region-label-weight, 500);
+        pointer-events: none;
     }
 
     .nabu-region-label {
@@ -62,6 +107,20 @@
 
     .nabu-region-rule {
         flex: 1;
+        position: relative;
         border-top: 1px solid var(--nb-region-rule-color, color-mix(in srgb, currentColor 18%, transparent));
+    }
+
+    /* The hairline in the warning tint, emptying from the right as the hold progresses. */
+    .nabu-region-drain {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: -1px;
+        height: 1px;
+        background: var(--nb-region-warning, #b45309);
+        transform: scaleX(calc(1 - var(--nb-region-progress, 0)));
+        transform-origin: left center;
+        pointer-events: none;
     }
 </style>

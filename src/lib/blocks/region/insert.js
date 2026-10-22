@@ -1,6 +1,6 @@
 /**
- * Programmatic insertion of a region marker (ADR 016). The keyboard actions (`region:split`, `region:insert`…) are
- * lot 2; this helper is the neutral building block they will use, and what tests / playgrounds call.
+ * Programmatic insertion of a region marker (ADR 016). The neutral building block of the region commands
+ * (`region:split`, `region:insert`…, see actions.js) and what tests / playgrounds call.
  *
  * @import { Nabu } from "../nabu.svelte.js";
  * @import { Block } from "../block.svelte.js";
@@ -15,13 +15,27 @@
  * @typedef {'start' | 'end' | number | Block | { after: Block } | { before: Block }} InsertRegionAt
  */
 
-/** @param {Nabu} nabu @param {Block} block @returns {number} */
-function rootIndexOf(nabu, block) {
+/** Root index of the top-level block holding `block` (the end of the document when it is not found). @param {Nabu} nabu @param {Block} block @returns {number} */
+export function rootIndexOf(nabu, block) {
     /** @type {Block} */
     let root = block;
     while (root.parent) root = /** @type {Block} */ (root.parent);
     const index = nabu.children.indexOf(root);
     return index < 0 ? nabu.children.length : index;
+}
+
+/**
+ * Creates a marker at a ROOT index WITHOUT committing: the caller owns the transaction (an action that splits a block and
+ * inserts a marker is one undo step). Throws on an unknown type or when the extension is not installed.
+ * @param {Nabu} nabu
+ * @param {{ type?: string, index: number, title?: string, fields?: Record<string, any> }} options
+ * @returns {import("./region.svelte.js").RegionBlock}
+ */
+export function createMarker(nabu, { type, index, title, fields }) {
+    const BlockClass = /** @type {any} */ (nabu.registry.get('region'));
+    if (!BlockClass) throw new Error('insertRegion: the Regions extension is not installed.');
+    if (type !== undefined && !BlockClass.config.types.has(type)) throw new Error(`insertRegion: region type "${type}" is not declared.`);
+    return BlockClass.create(nabu, 'region', { regionType: type, title, fields }, null, Math.max(0, Math.min(nabu.tree.roots().length, Math.trunc(index))));
 }
 
 /**
@@ -32,10 +46,6 @@ function rootIndexOf(nabu, block) {
  * @returns {Promise<import("./region.svelte.js").RegionBlock>}
  */
 export async function insertRegion(nabu, { type, at = 'end', title, fields } = {}) {
-    const BlockClass = /** @type {any} */ (nabu.registry.get('region'));
-    if (!BlockClass) throw new Error('insertRegion: the Regions extension is not installed.');
-    if (type !== undefined && !BlockClass.config.types.has(type)) throw new Error(`insertRegion: region type "${type}" is not declared.`);
-
     const count = nabu.children.length;
     let index = count;
     if (at === 'start') index = 0;
@@ -45,7 +55,7 @@ export async function insertRegion(nabu, { type, at = 'end', title, fields } = {
     else if (at && typeof at === 'object' && 'after' in at) index = rootIndexOf(nabu, at.after) + 1;
     else if (at) index = rootIndexOf(nabu, /** @type {Block} */ (at)) + 1;
 
-    const block = BlockClass.create(nabu, 'region', { regionType: type, title, fields }, null, index);
+    const block = createMarker(nabu, { type, index, title, fields });
     await nabu.commit();
-    return nabu.blocks.get(block.id) ?? block;
+    return /** @type {import("./region.svelte.js").RegionBlock} */ (nabu.blocks.get(block.id) ?? block);
 }
