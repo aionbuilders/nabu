@@ -47,16 +47,6 @@
   const currentType  = $derived(currentBlock?.type ?? null);
   const currentLevel = $derived(currentBlock?.level ?? null); // only on Heading
 
-  // ── Zone context ──────────────────────────────────────────
-  const currentZone = $derived.by(() => {
-    let node = currentBlock?.parent ?? null;
-    while (node) {
-      if (node.type === 'zone') return /** @type {any} */ (node);
-      node = node.parent;
-    }
-    return null;
-  });
-
   // ── Helpers ───────────────────────────────────────────────
   function exec(cmd) {
     engine?.exec(cmd);
@@ -200,30 +190,6 @@
       title="Inline code (Ctrl+E)"
       aria-label="Code"
     >&lt;/&gt;</button>
-  </div>
-
-  <div class="sep"></div>
-
-  <!-- Zone -->
-  <div class="group">
-    <button
-      class="btn label-btn"
-      onmousedown={(e) => press(e, 'zone:insert')}
-      title="Insérer une zone après le bloc courant"
-    >+ Zone</button>
-    {#if currentZone}
-      <button
-        class="btn label-btn"
-        onmousedown={(e) => press(e, 'zone:unwrap', { zoneId: currentZone.id })}
-        title="Retirer la zone (unwrap)"
-      >⊠ Zone</button>
-    {:else}
-      <button
-        class="btn label-btn"
-        onmousedown={(e) => press(e, 'zone:wrap')}
-        title="Envelopper le bloc courant dans une zone"
-      >⊞ Zone</button>
-    {/if}
   </div>
 
   <div class="sep"></div>

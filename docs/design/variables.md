@@ -1,3 +1,5 @@
+> Superseded: variables will be redesigned with Regions (see ADR 016).
+
 # Design Document : Variables — Réflexion Pré-ADR
 
 > **Statut** : Exploration — Mai 2026

@@ -1,8 +1,7 @@
 // @ts-nocheck
 /**
  * Integration tests for nabu.importMarkdown() / importJSON() (TÂCHE 9).
- * Uses a real Nabu instance with a minimal extension set (no ContextExtension,
- * which depends on SvelteKit's $app/environment alias).
+ * Uses a real Nabu instance with a minimal extension set.
  */
 
 import { describe, it, expect } from 'vitest';

@@ -11,7 +11,6 @@ export * from "./paragraph";
 export * from "./heading";
 export * from "./list";
 export * from "./dialogue";
-export * from "./zone";
 export * from "./blockquote";
 export * from "./divider";
 export * from "./code";

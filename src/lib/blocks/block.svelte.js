@@ -1,12 +1,10 @@
 /**
  * @import { Nabu, NabuNode } from "./nabu.svelte.js";
  * @import { MegaBlock } from "./megablock.svelte.js";
- * @import { VariableInit } from "./variable.svelte.js";
  */
 
 import { tick } from "svelte";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { Variable } from "./variable.svelte.js";
 import { resolvePlaceholderText } from "../utils/placeholders.js";
 
 
@@ -34,19 +32,6 @@ export class Block {
     /** @type {SvelteMap<string, function(any): void>} */
     serializers = new SvelteMap();
     behaviors = new SvelteMap();
-    /** @type {SvelteMap<string, Variable<this>>} */
-    variables = new SvelteMap();
-    
-    /**
-     * Declare a variable on this block, which can be used in serializers and behaviors.
-     * @param {string} name
-     * @param {VariableInit<this>} init
-     * @returns {Variable<this>}
-     */
-    var(name, init) {
-        const variable = new Variable(this, name, init);
-        return variable;
-    }
 
 
     selected = $state(false);

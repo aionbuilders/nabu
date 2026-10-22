@@ -147,7 +147,7 @@ export class NabuSelection extends SvelteSelection {
         const anchorEl = /** @type {Element | null} */ (anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentElement);
         const focusEl = /** @type {Element | null} */ (focus?.nodeType === Node.ELEMENT_NODE ? focus : focus?.parentElement);
 
-        // Skip normalization when the selection touches a UI element (e.g. zone title input).
+        // Skip normalization when the selection touches a UI element (e.g. a block's UI controls).
         if (anchorEl?.closest('[data-nabu-ui]') || focusEl?.closest('[data-nabu-ui]')) {
             this.#pendingDirection = null;
             return false;

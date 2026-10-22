@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Removed - Zone, Context overlay, Variable (breaking)
+- The **Zone block** is removed: `ZoneBlock`, `ZoneExtension`, `Zones`, `Templates`, `Counters`, the zone components and hooks, and the `:::` shortcut. Zone nodes are no longer rendered or created; `FullPreset` no longer includes `ZoneExtension`.
+- The **Context overlay** is removed: `ContextExtension`, `ContextMenu`, `CONTEXT_COLLECT_EVENT`, `setMenuContext`, `getMenuContext`, `collect` (it only served zones). `FullPreset` no longer includes `ContextExtension`.
+- The **`Variable` stub** is removed (`Block#variables`, `Block#var()`). `docs/design/variables.md` stays as a design reference only.
+- Nobody used them. They will be replaced later by a generic **Regions** system based on root-level markers (ADR 016).
+
 ### Editor options — `spellcheck` and `lang`
 - New init options (accepted by `new Nabu()`, `createEditor` / the factories and `createPersistedEditor`), both reactive at runtime (`nabu.spellcheck`, `nabu.lang`). `spellcheck` (default `true`) drives the root's `spellcheck` attribute; when `false` the root also gets `data-gramm="false"`, `data-gramm_editor="false"` and `data-enable-grammarly="false"` (opt-out hints of the Grammarly extension). Code blocks always stay `spellcheck="false"`. `lang` (BCP 47 tag, invalid -> ignored with `nabu.warn`) sets `lang` on the root for the browser's spellchecker / hyphenation / screen readers; unset = inherit the page language. See the README ("Spellcheck & language", including a privacy note about Chrome's enhanced spell check).
 

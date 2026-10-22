@@ -299,7 +299,7 @@ export class TextBehavior {
     handleBeforeInput(event, selection = this.selection) {
         // Hook system (Markdown shortcuts, de-transformation, structural guards…).
         // `transformsEnabled: false` (e.g. code blocks) only suppresses transforms,
-        // which fire on insertions — deletion hooks (block exit, zone guards) still run.
+        // which fire on insertions — deletion hooks (block exit, structural guards) still run.
         const isInsertion = event.inputType === "insertText"
             || event.inputType === "insertParagraph"
             || event.inputType === "insertLineBreak"

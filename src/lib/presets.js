@@ -11,8 +11,6 @@ import { ToggleExtension } from './blocks/toggle/index.js';
 import { RichTextExtension, TypographyExtension, MarkdownShortcutsExtension } from './behaviors/text/index.js';
 import { PlainTextPasteExtension, NabuPasteExtension, HtmlPasteExtension, MarkdownPasteExtension } from './paste/index.js';
 import { BlockExtension } from './blocks/block.extension.js';
-import { ZoneExtension } from './blocks/zone/zone.extension.js';
-import { ContextExtension } from './overlays/context/context.extension.js';
 import { ImageExtension } from './blocks/image/index.js';
 import { VideoExtension } from './blocks/video/index.js';
 import { FileExtension } from './blocks/file/index.js';
@@ -32,8 +30,7 @@ export const DocumentPreset = [ParagraphExtension, HeadingExtension, BlockquoteE
 
 /** All built-in block types + rich text. */
 export const FullPreset =     [
-    ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension, ImageExtension, VideoExtension, FileExtension, ListExtension, ListItemExtension, DialogueExtension, ZoneExtension, RichTextExtension, TypographyExtension, MarkdownShortcutsExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension,
-    ContextExtension
+    ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension, ImageExtension, VideoExtension, FileExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension, TypographyExtension, MarkdownShortcutsExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension,
 ];
 
 // ---------------------------------------------------------------------------

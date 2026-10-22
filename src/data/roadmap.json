@@ -302,26 +302,11 @@
       ]
     },
     {
-      "id": "zones-theming",
-      "label": "Zones & Theming UI",
+      "id": "theming-ui",
+      "label": "Theming UI",
       "status": "done",
-      "description": "Hierarchical document zones, isolated word count tracking, and a fully modular design system via CSS variables.",
+      "description": "A fully modular design system via CSS variables.",
       "tasks": [
-        {
-          "id": "zone-extension",
-          "text": "ZoneBlock & Extension: hierarchical wrappers that can nest other blocks and zones.",
-          "status": "done"
-        },
-        {
-          "id": "word-count-counters",
-          "text": "Parent-scoped Counters: isolated word count tracking for zones and templates without memory leaks.",
-          "status": "done"
-        },
-        {
-          "id": "max-target-logic",
-          "text": "Dynamic word count cap (maxTarget) based on the parent zone's available quota.",
-          "status": "done"
-        },
         {
           "id": "semantic-theming",
           "text": "Semantic Theme Variables (nabu-theme.css): fully modular UI colors, blurs, and shadows.",
