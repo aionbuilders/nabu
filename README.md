@@ -536,7 +536,7 @@ A command that is risky to run from a single key press declares how it asks for 
 
 ## Regions
 
-Regions divide one continuous text into parts, chapters, scenes… with **markers** (design: `docs/adr/016-regions.md`). The document stays flat; a `region` marker is a void block (the caret steps over it, like a divider) and a region runs from its marker to the next marker of the same or a higher level. Nabu stores and exposes the structure; what a division *means* (synopsis, status, views) is up to your app. The default rendering is a discreet seam (label + hairline, announced to screen readers as a heading of the region's level, themable with `--nb-region-*` CSS variables); there is no editing UI. Markdown / HTML and clipboard forms of a marker are not there yet.
+Regions divide one continuous text into parts, chapters, scenes… with **markers** (design: `docs/adr/016-regions.md`). The document stays flat; a `region` marker is a void block (the caret steps over it, like a divider) and a region runs from its marker to the next marker of the same or a higher level. Nabu stores and exposes the structure; what a division *means* (synopsis, status, views) is up to your app. The default rendering is a discreet seam (label + hairline, announced to screen readers as a heading of the region's level, themable with `--nb-region-*` CSS variables); there is no editing UI. A marker exports as markdown in two lines, a data comment plus a readable heading (`<!-- region:chapter {"title":"The ferryman"} -->` then `## Chapter 1 - The ferryman`), which Nabu reads back exactly (see "Regions in markdown, HTML and the clipboard" below).
 
 ```js
 import { RegionsExtension, insertRegion } from '@aionbuilders/nabu';
@@ -600,6 +600,17 @@ engine.exec('region:move', { direction: 'down' });
 Texts are overridable (English by default): `RegionsExtension({ types, messages: { split: 'Couper ici', mergePreamble: '…', mergePrevious: ({ title }) => `Fusionner avec « ${title} »`, hold: ({ keys, label }) => `Maintenez ${keys} : ${label}` } })`. The command facts available in `ctx` for your own commands: `region`, `previousRegion`, `nextRegion`, `atStartOfRegion`, `atEndOfRegion`, `inRootTextBlock`.
 
 Field kinds: `text`, `richtext` (a LoroText, `marker.richtext(name)`), `number`, `boolean`, `enum`, `date` (ISO 8601). An invalid value for a declared field is refused; fields a type does not declare are kept as they are. Markers only live at the root: one that ends up inside a container (a list, a toggle…) is moved out, right after it, in the same undo step.
+
+### Regions in markdown, HTML and the clipboard
+
+A marker is exported as **two markdown lines**: a data comment (the source of truth: type and fields as minimal JSON, keys sorted) and a readable heading (level = the region's level, text = its computed label):
+
+```md
+<!-- region:chapter {"status":"draft","synopsis":"A *short* summary","title":"La forêt"} -->
+## Chapitre 2 — La forêt
+```
+
+`nabu.serialize('markdown')`, the `text/plain` of a copy spanning several blocks, `importMarkdown()` and a markdown paste all use it, and `serialize -> importMarkdown -> serialize` is a fixed point. On the way in, **only this exact construct** makes a marker (a narrow exception, like the `<details>` toggle): the heading line right after the comment is consumed as its echo and its text is ignored (edit the title in the comment, not in the heading); a heading without the comment stays a heading, any other HTML comment (or one with invalid JSON) stays text, and an unknown region type falls back to your top-level type with the fields kept. Richtext fields are inline-markdown strings inside the JSON. The `text/html` of a copy writes `<h2 data-nabu-region="chapter" data-nabu-fields='…'>label</h2>`, and only an element with `data-nabu-region` is read back as a marker (a plain `<h2>` from the web is a heading). The internal clipboard fragment and `serialize('json')` carry markers exactly (richtext as Loro deltas). A marker pasted inside a list, toggle or callout is moved to the root, right after that container.
 
 ## Architecture
 

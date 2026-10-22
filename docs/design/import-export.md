@@ -7,7 +7,7 @@ format: see `clipboard-format.md`.
 Fidelity is checked by `tests/unit/roundtrip-structure.test.js` (kitchen-sink document, trees compared on the MODEL: every key stored on
 the Loro nodes) and `tests/e2e/import-export.spec.ts` (same, in the browser, into a fresh editor).
 
-Zone / variables / Context are out of scope (parked).
+Zone / variables / Context are out of scope (parked). Region markers (ADR 016) are covered below (JSON row, markdown row and the data-comment exception).
 
 ## 1. JSON
 
@@ -56,6 +56,7 @@ Zone / variables / Context are out of scope (parked).
 | `list` | `listType`: `bullet` `ordered` `todo`; `start` (ordered, only when not 1) | none | `list-item`s |
 | `list-item` | `checked` (only in a to-do list) | runs | sublists (zero or several, of different types: P-28) |
 | `image`, `video`, `file` | `ref`, `alt`, `name`, `status` (only when not `ready`) | none | none |
+| `region` (marker) | `regionType`, `fields` (`title` + the declared fields; richtext as Loro deltas, an unknown field as it is stored) | none | none |
 
 Older exports wrote the `checked` of a to-do item next to `type` (not in `props`); `importJSON` still reads it (any top-level key
 other than `id` / `type` / `props` / `content` / `children` is read as a prop).
@@ -98,6 +99,7 @@ idempotent (`serialize -> import -> serialize` gives the same string); this sect
 | image | `![alt](ref)` | **exact**: `ref`, `alt` (escaped; a ref with spaces or parentheses is written `<…>`). Lossy: `name`, `status` |
 | video | `[alt or name or video](ref)` | **lossy**: comes back as a *paragraph with a link* (type, `name` / `alt` distinction and `status` are lost) |
 | file | `[name or file](ref)` | **lossy**: a paragraph with a link, like the video |
+| region (marker) | data comment + readable heading (below) | **exact** for type + fields (the comment); the heading is a **readable echo**, recomputed on export and ignored on import. Lossy: richtext fields take the paragraph limits (whitespace at the edge of a mark moves outside it); an unknown region type falls back to the default top-level type |
 
 Other markdown limits: a `nabu-asset:<id>` ref is exported as is (the bytes are only exported by JSON): it is meaningful in the same
 document or a peer; elsewhere it imports as `missing`. A pending media exports as its label (no source). Everything markdown cannot
@@ -127,6 +129,47 @@ Toggle block with `collapsed = !open`, the summary parsed as inline markdown and
 `onclick`…), another case, no `<summary>`, no closing line, text after `</summary>`. Nothing of the markup is passed through to the
 model (a toggle has no prop but `collapsed`); no HTML is ever created, and the inline parser keeps `<script>` / `<img onerror>` as text.
 A `<details>` can interrupt a paragraph (CommonMark). The rule lives in `blocks/toggle/markdown.js`.
+
+### The region marker exception (data comment + heading)
+
+Nabu exports a region marker (ADR 016) as TWO lines:
+
+```
+<!-- region:chapter {"status":"draft","synopsis":"A *short* summary","title":"La forêt"} -->
+## Chapitre 2 — La forêt
+```
+
+- Line 1, the **data comment**, is the source of truth: `<!-- region:<type> <json> -->`. The type is the declared region type id (characters outside
+  `[A-Za-z0-9_-]` are percent-encoded). The JSON is `fields`: minimal (no whitespace), keys sorted at every level, with `<`, `>`, `&` and the line
+  separators written as `\uXXXX` escapes, so a field can never contain `-->` or markup. **Richtext** fields (declared `richtext`) are written as inline
+  markdown strings (a Loro delta would be unreadable) and parsed back with the inline parser: marks and links survive, with the same limits as a
+  paragraph (whitespace at the edge of a mark moves outside it). The other kinds (text, number, boolean, enum, date, unknown fields) are plain JSON.
+- Line 2, the **echo**, is an ATX heading of level `clamp(region level, 1, 6)` whose text is the computed label (`Chapitre 2 — La forêt`: the type's
+  label template, numbering and title; the type id when the label is empty, so the echo line is never missing). It is for humans and other markdown tools.
+
+Import and paste recognise **only this construct**: a line that is exactly `<!-- region:<type> {…} -->` whose JSON parses to an object, optionally
+followed IMMEDIATELY (next line, no blank line) by a heading, which is **consumed** as the marker's echo - it never becomes a heading block.
+Decisions:
+
+- **Edited heading**: the comment wins. If a human changes the heading text (or level) elsewhere, the title stays the comment's and the next export
+  rewrites the heading from it. To rename a region in the markdown, edit the `title` in the comment. (No warning is raised: the heading is not data.)
+- **Unknown region type** (a document from a richer editor): the marker takes the declared default type (the lowest level) and keeps its fields;
+  the original type id is lost. (JSON import and the internal clipboard keep an unknown type as it is; the registry treats it as an unnumbered leaf.)
+- **Invalid values** for a declared field (a wrong type, a value outside an `enum`) are dropped with `nabu.warn`; unknown fields are kept.
+- **A heading without the comment** is a heading; regions are never inferred from headings. **Any other HTML comment** and a comment with invalid
+  JSON, a JSON that is not an object, a different shape (extra text on the line, missing spaces) stay literal text, as before. A blank line between
+  the comment and a heading makes that heading a real heading block.
+- A marker inside a `<details>` body is read, then hoisted after the toggle (root-only rule).
+
+Idempotency: `serialize('markdown') -> importMarkdown -> serialize('markdown')` is a fixed point for documents with regions (pinned by
+`tests/unit/regions-io.test.js` and `tests/unit/roundtrip-structure.test.js`). The rule lives in `blocks/region/format.js`.
+
+### HTML
+
+The clipboard `text/html` writes a marker as `<hN data-nabu-region="chapter" data-nabu-fields='{…}'>label</hN>` (`N` = `clamp(level, 1, 6)`; the
+same minimal JSON and richtext form, escaped as an attribute). HTML paste turns ONLY an element carrying a non-empty `data-nabu-region` into a marker
+(type id read as text, an unknown one falls back to the default type, `data-nabu-fields` parsed as JSON - invalid, oversized or non-object data
+gives a marker without fields -, richtext links sanitized); the element's own content is ignored. A plain `<h2>` from the web is a heading.
 
 ### Lists: markers
 

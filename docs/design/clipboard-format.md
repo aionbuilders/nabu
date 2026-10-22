@@ -26,6 +26,23 @@ Status: implemented (P-52). Complements `copy-paste.md` (§3.3 sketches the form
   (the ref is `nabu-asset:sha256-<hex>`); the beta used a `<uuid>` and such keys / refs are still read. Older readers ignore the unknown field. Absent when the
   fragment has no such media, or when their total size exceeds `files.maxInlineSize` (then `nabu.warn`, and the blocks keep only the ref).
 
+## Region markers (ADR 016)
+
+A marker travels as an ordinary block: `{ "type": "region", "partial": false, "props": { "regionType": "chapter", "fields": { "title": "La forêt", "synopsis": [{ "insert": "un " }, { "insert": "résumé", "attributes": { "bold": true } }], "status": "draft" } }, "echo": { "label": "Chapitre 2 — La forêt", "level": 2 } }`.
+`fields` is exactly the stored map (richtext as Loro deltas). `echo` is NOT data and is ignored on paste: it is the label and heading level the
+registry computes at copy time, carried so that the static `text/plain` and `text/html` writers (which get blocks, not the document) can write the
+readable heading of the marker. The other two payloads of a copy:
+
+- `text/plain` (several blocks, so markdown): the data comment + heading of `import-export.md` ("The region marker exception"). A marker alone is
+  not a text block, so it is not the raw-text case: copying just a marker gives its two lines.
+- `text/html`: `<hN data-nabu-region="…" data-nabu-fields='…'>label</hN>`.
+
+Pasting reads, in this order, the internal fragment, the HTML, then the plain text; each of the three restores the marker (the last two through
+the exact constructs above). A marker pasted into a container (list item, toggle body, callout) follows the root-only rule: it is hoisted right
+AFTER the top-level container (a list is cut around it), in the same undo step as the paste. An unknown `regionType` in a fragment is kept
+as is (the registry treats it as an unnumbered leaf); the receiving editor without the Regions extension degrades the marker to an empty paragraph
+(`degradeUnknownBlocks`).
+
 ## Media stored in the document (P-51)
 
 A media block whose ref is `nabu-asset:sha256-<hex>` points at a file held by the asset store of the document it was copied from (ADR 014; the

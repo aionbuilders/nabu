@@ -2,6 +2,8 @@ import { LoroMap, LoroText } from "loro-crdt";
 import { Block } from "../block.svelte.js";
 import RegionComponent from "./Region.svelte";
 import { resolveConfig, fieldSpec, validateField } from "./types.js";
+import { Regions } from "./regions.svelte.js";
+import { regionToMarkdown, regionToHtml, parseRegionMarkdown, parseRegionHtml, sanitizeFieldDelta } from "./format.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -36,7 +38,7 @@ function writeField(map, spec, name, value) {
         const existing = map.get(name);
         const text = isContainer(existing) && existing.kind() === 'Text' ? /** @type {LoroText} */ (/** @type {unknown} */ (existing)) : map.setContainer(name, new LoroText());
         if (text.length) text.delete(0, text.length);
-        if (checked.value.length) text.applyDelta(checked.value);
+        if (checked.value.length) text.applyDelta(sanitizeFieldDelta(checked.value)); // an unsafe link mark never gets stored
         return true;
     }
     map.set(name, checked.value);
@@ -69,13 +71,21 @@ export class RegionBlock extends Block {
 
         // Document export: exact round trip (`importJSON` reads `props` back, see RegionBlock.create).
         this.serializers.set('json', () => ({ id: this.id, type: 'region', props: this.exportProps }));
-        this.serializers.set('application/x-nabu+json', () => ({ type: 'region', props: this.exportProps, partial: false }));
-        // TODO(ADR-016 lot 3): markdown form of a marker. For now a marker has no markdown (it is dropped from the export).
-        this.serializers.set('markdown', () => '');
+        // `echo` (label + heading level, as the registry computes them NOW) is not data: it only lets the static text forms
+        // (`toMarkdown` / `toHtml`, which get a PasteBlock and no document) write the readable heading of the copied marker.
+        this.serializers.set('application/x-nabu+json', () => ({ type: 'region', props: this.exportProps, partial: false, echo: this.#echo() }));
+        // Markdown: the data comment + the readable heading (see format.js).
+        this.serializers.set('markdown', () => regionToMarkdown(this.config, this.exportProps, this.#echo()));
     }
 
     /** @type {RegionsConfig} */
     get config() { return /** @type {typeof RegionBlock} */ (this.constructor).config; }
+
+    /** The computed label and level of this marker, for the readable echo of the text forms. @returns {{ label: string, level: number } | {}} */
+    #echo() {
+        const region = Regions.get(this.nabu).of(this);
+        return region ? { label: region.label, level: region.level } : {};
+    }
 
     component = $derived(this.nabu.components.get("region") || RegionComponent);
 
@@ -198,12 +208,53 @@ export class RegionBlock extends Block {
     /** @param {InputEvent} event */
     beforeinput(event) { return false; }
 
-    // TODO(ADR-016 lot 3): markdown / HTML forms of a marker (and the paste rules that read them back).
-    /** @param {import('../../utils/extensions.js').PasteBlock} pb */
-    static toMarkdown(pb) { return ''; }
+    /**
+     * Clipboard `text/plain` (several blocks) and static export: the data comment + the readable heading (format.js). The
+     * heading text is `pb.echo.label` (written by the live block on copy), else derived from the type's template.
+     * @param {import('../../utils/extensions.js').PasteBlock & { echo?: { label?: string, level?: number } }} pb
+     */
+    static toMarkdown(pb) { return regionToMarkdown(this.config, pb.props ?? {}, pb.echo ?? {}); }
 
-    /** @param {import('../../utils/extensions.js').PasteBlock} pb */
-    static toHtml(pb) { return ''; }
+    /** Clipboard `text/html`: a heading element carrying the data (format.js). @param {import('../../utils/extensions.js').PasteBlock & { echo?: { label?: string, level?: number } }} pb */
+    static toHtml(pb) { return regionToHtml(this.config, pb.props ?? {}, pb.echo ?? {}); }
+
+    /**
+     * Markdown (paste AND `importMarkdown`): ONLY the exact data comment `<!-- region:<type> {json} -->` (+ the heading line
+     * right after it, consumed as its readable echo). Invalid JSON, any other comment, a heading alone: not ours (format.js).
+     * A getter, because the detection needs the declared types of THIS class.
+     */
+    static get markdownRules() {
+        const config = this.config;
+        return [{
+            priority: 20,
+            interruptsParagraph: true,
+            detect: (/** @type {string} */ line, /** @type {string[]} */ lines, /** @type {number} */ i) => parseRegionMarkdown(config, lines, i) !== null,
+            consume: (/** @type {string[]} */ lines, /** @type {number} */ i) => parseRegionMarkdown(config, lines, i)?.length ?? 1,
+        }];
+    }
+
+    /**
+     * @param {string[]} lines
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromMarkdown(lines) {
+        const parsed = parseRegionMarkdown(this.config, lines, 0);
+        return parsed ? { type: 'region', props: { regionType: parsed.regionType, fields: parsed.fields }, partial: false } : null;
+    }
+
+    /** HTML paste: ONLY an element Nabu itself wrote (`data-nabu-region`); a plain `<h2>` is a heading as before. */
+    static get htmlRules() {
+        return [{ selector: '[data-nabu-region]', priority: 100, filter: (/** @type {Element} */ el) => !!el.getAttribute('data-nabu-region')?.trim() }];
+    }
+
+    /**
+     * @param {Element} el
+     * @returns {import('../../utils/extensions.js').PasteBlock | null}
+     */
+    static fromHTML(el) {
+        const parsed = parseRegionHtml(this.config, el);
+        return parsed ? { type: 'region', props: { regionType: parsed.regionType, fields: parsed.fields }, partial: false } : null;
+    }
 
     /**
      * @param {Nabu} nabu @param {string} type

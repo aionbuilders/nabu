@@ -24,8 +24,15 @@ import { DialogueExtension } from '$lib/blocks/dialogue/index.js';
 import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
 import { RichTextExtension } from '$lib/behaviors/text/index.js';
 import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
+import { RegionsExtension } from '$lib/blocks/region/index.js';
 
-const extensions = [ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension, ImageExtension, VideoExtension, FileExtension, DialogueExtension, ListExtension, ListItemExtension, RichTextExtension, MarkdownPasteExtension];
+// Region markers (ADR 016, lot 3): every field type, so that the JSON AND the markdown form of a marker are checked on the model.
+const REGION_TYPES = {
+    part: { level: 1, label: 'Part {index}' },
+    chapter: { level: 2, label: 'Chapter {index} - {title}', numbering: 'document', fields: { synopsis: 'richtext', status: { type: 'enum', values: ['draft', 'final'] }, due: 'date', words: 'number', done: 'boolean', pov: 'text' } },
+};
+
+const extensions = [ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension, ImageExtension, VideoExtension, FileExtension, DialogueExtension, ListExtension, ListItemExtension, RichTextExtension, MarkdownPasteExtension, RegionsExtension({ types: REGION_TYPES })];
 
 const t = (s, attributes) => (attributes ? { insert: s, attributes } : { insert: s });
 const item = (delta, extra = {}) => ({ type: 'list-item', delta: typeof delta === 'string' ? [t(delta)] : delta, partial: false, ...extra });
@@ -33,13 +40,16 @@ const list = (listType, items, start) => ({ type: 'list', props: start ? { listT
 const todo = (text, checked, children) => item(text, { props: { checked }, ...(children ? { children } : {}) });
 const p = (...delta) => ({ type: 'paragraph', delta: delta.map((d) => (typeof d === 'string' ? t(d) : d)) });
 
+/** A Loro map as plain data (a text container inside is its delta: marks included). */
+const dumpMap = (map) => Object.fromEntries(map.keys().sort().map((k) => { const v = map.get(k); return [k, v && typeof v.toDelta === 'function' ? v.toDelta() : v]; }));
+
 /** Every key stored on a node, recursively (text containers as deltas). Ids are not part of the comparison. */
 export function dump(node) {
     const props = {};
     for (const key of node.data.keys()) {
         if (key === 'type') continue;
         const v = node.data.get(key);
-        props[key] = v && typeof v.toDelta === 'function' ? v.toDelta() : v;
+        props[key] = v && typeof v.toDelta === 'function' ? v.toDelta() : v && typeof v.kind === 'function' && v.kind() === 'Map' ? dumpMap(v) : v;
     }
     return { type: node.data.get('type'), props, children: (node.children() ?? []).map(dump) };
 }
@@ -58,6 +68,11 @@ const SINK = [
     p('line one\nline two'),
     { type: 'blockquote', delta: [t('A '), t('quote', { italic: true })] },
     { type: 'divider' },
+    // markers: a part, a chapter with every field type (richtext with marks and a link), directly followed by a real heading, an empty one
+    { type: 'region', props: { regionType: 'part', fields: { title: 'Part --> <b>one</b> & "q"' } } },
+    { type: 'region', props: { regionType: 'chapter', fields: { title: 'La forêt', synopsis: [t('Elle', { italic: true }), t(' entre dans '), t('le bois', { bold: true, link: 'https://example.com/a_(b)' }), t('.\nSuite *étoile* \\ [x]')], status: 'final', due: '2026-10-22', words: 1234.5, done: false, pov: 'Anna', extra: { k: [1, null, 'z'] } } } },
+    { type: 'heading', props: { level: 2 }, delta: [t('A real heading right after a marker')] },
+    { type: 'region', props: { regionType: 'chapter', fields: {} } },
     { type: 'code', props: { language: 'js' }, delta: [t('let a = 1;\n\nconsole.log(`a`);')] },
     { type: 'code', props: { language: null }, delta: [t('no language')] },
     { type: 'code', props: { language: 'md' }, delta: [t('```\nfence inside\n```')] },
@@ -118,6 +133,15 @@ describe('JSON round trip (structure)', () => {
         const c = new Nabu({ extensions });
         await c.importJSON(JSON.stringify(b.serialize('json')));
         expect(tree(c)).toEqual(before);
+    });
+
+    it('the markers of the sink keep every field (the model is compared, richtext with its marks)', async () => {
+        const a = await make();
+        const regions = tree(a).filter((n) => n.type === 'region');
+        expect(regions.length).toBe(3);
+        expect(regions[1].props.regionType).toBe('chapter');
+        expect(regions[1].props.fields.synopsis[0]).toEqual({ insert: 'Elle', attributes: { italic: true } });
+        expect(regions[1].props.fields).toMatchObject({ status: 'final', due: '2026-10-22', words: 1234.5, done: false, pov: 'Anna', title: 'La forêt' });
     });
 
     it('every block type of the sink is covered (guard: a new block type must join the kitchen sink)', async () => {

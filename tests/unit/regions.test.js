@@ -607,13 +607,13 @@ describe('JSON round trip', () => {
     expect(other.regions.list[1].marker.richtext('synopsis').toDelta()).toEqual([{ insert: 'rich', attributes: { bold: true } }]);
   });
 
-  it('does not break the markdown export (markers have no markdown yet) nor the clipboard serializer', async () => {
+  it('the markdown export holds the marker (data comment + readable heading, lot 3) and the clipboard serializer adds the label echo', async () => {
     const engine = await makeEditor(BOOK);
     await para(engine, 'a');
     await region(engine, 'part', 'P');
     await para(engine, 'b');
-    expect(engine.serialize('markdown')).toBe('a\n\nb');
-    expect(engine.children[1].serialize('application/x-nabu+json')).toEqual({ type: 'region', props: { regionType: 'part', fields: { title: 'P' } }, partial: false });
-    expect(RegionBlock.toMarkdown({})).toBe('');
+    expect(engine.serialize('markdown')).toBe('a\n\n<!-- region:part {"title":"P"} -->\n# Part 1\n\nb');
+    expect(engine.children[1].serialize('application/x-nabu+json')).toEqual({ type: 'region', props: { regionType: 'part', fields: { title: 'P' } }, partial: false, echo: { label: 'Part 1', level: 1 } });
+    expect(engine.registry.get('region').toMarkdown({})).toBe('<!-- region:part {} -->\n# part'); // a hand-made block without a type: the default type
   });
 });

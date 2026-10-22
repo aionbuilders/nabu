@@ -79,7 +79,7 @@ RegionsExtension({
 
 - **JSON** : `{ type: 'region', props: { regionType, fields } }` — aller-retour exact.
 - **Presse-papiers interne** : les repères voyagent comme des blocs ; collés ailleurs, ils retrouvent leur rôle.
-- **Markdown** : forme à décider (questions ouvertes) ; contrainte : aller-retour structurel exact pour les documents Nabu, lisible pour un humain.
+- **Markdown** : commentaire de données + titre lisible (décidé, question 4 ; voir les notes du lot 3).
 - Collage d'un repère dans un conteneur (liste, toggle) : règle du §3.1.
 
 ### 3.7 Collaboration et historique
@@ -104,8 +104,8 @@ RegionsExtension({
 
 1. ~~**Backspace au début de la première ligne d'une région**~~ — **décidé (2026-10-22, propriétaire)** : **protéger**. Un Backspace au tout début du premier bloc de texte d'une région ne fusionne jamais le texte à travers le repère ; la fusion est un **maintien** de la touche (ADR 017 `hold`, 700 ms) sur la couture, commande `region:merge-previous` ; symétrique pour Suppr (`region:merge-next`, le repère SUIVANT disparaît). Première région sans préambule : rien (pas de cible, pas de maintien).
 2. ~~**Raccourci « couper ici »**~~ — **décidé** : `Mod+Entrée` (`region:split`, sans confirmation), qui cohabite avec `todo:toggle` (celui-ci, limité aux éléments de liste, garde `Mod+Entrée` dans une liste de tâches).
-3. **Repère collé dans un toggle** (conteneur qui ne peut pas être coupé comme une liste) : remonter le repère après le toggle, ou le convertir en simple titre ?
-4. **Markdown** : un commentaire HTML porteur des données (`<!-- region:chapter {"title":"La forêt"} -->`), éventuellement suivi d'un titre lisible ? Rappel : le HTML embarqué reste du texte, sauf exceptions ciblées (comme `<details>` pour le toggle).
+3. ~~Repère collé dans un toggle~~ — **décidé** : remonté juste après le toggle (comme pour les listes ; la structure n'est jamais perdue).
+4. ~~Markdown~~ — **décidé** : un commentaire HTML porteur des données (`<!-- region:chapter {"title":"La forêt"} -->`), relu exactement par Nabu (exception ciblée, comme `<details>`), **suivi d'un titre lisible** (`## Chapitre 2 — La forêt`) pour les humains et les autres outils.
 5. ~~**Préambule**~~ — **décidé** : autorisé tel quel (contenu avant le premier repère = hors région).
 
 ---
@@ -145,3 +145,19 @@ Code: `src/lib/blocks/region/` — `commands.js` (the commands), `facts.js` (`co
 - **Hold rendering (default seam)**: `Region.svelte` reads `nabu.pendingCommandOn(block)`; when it is a hold it shows the pending message (`Hold Backspace to merge with “One”`; the controller's `hold` text built from the command label) in a `[data-region-hint]` span, `position: absolute; bottom: 100%` inside the seam's top margin (left-aligned, no bubble / background / border, `--nb-region-warning`, default `#B45309`), and a 1 px warning-tint overlay on the hairline whose `scaleX` is `1 - progress` (it drains). Nothing is in the flow, so the seam does not move (e2e compares the bounding box); it relies on `--nb-region-margin` leaving about one line above the seam (the default does). The engine's default target outline / fill is switched off on a seam. The hint is `aria-hidden` (the live region announces the same text). Nothing remains once the marker is gone. The "Merged with … · Ctrl+Z to undo" confirmation line (board 8b, state 3) is NOT done: it needs a transient element that belongs to no marker.
 - **Texts**: `RegionsExtension({ messages })` (`messages.js`): labels of the commands and the hold prompt, English by default.
 - **Left for lot 3**: serialization (JSON is done; markdown / HTML), clipboard and paste rules for markers, the open question 3 (marker pasted into a toggle). Not covered by the protection: the first item of a list or the first child of a container at the start of a region keeps its own Backspace (outdent / convert), as it does not merge text through the marker.
+
+---
+
+## 9. Implementation notes — lot 3 (2026-10-22)
+
+Code: `src/lib/blocks/region/format.js` (pure text forms: comment, echo, HTML), `region.svelte.js` (serializers, `toMarkdown` / `toHtml`, `markdownRules` / `fromMarkdown`, `htmlRules` / `fromHTML`). The core is untouched (the guard test stays green): the engine already dispatches `BlockClass.toMarkdown` / `toHtml` / `markdownRules` / `htmlRules`. Tests: `tests/unit/regions-io.test.js`, `tests/unit/roundtrip-structure.test.js` (the kitchen sink holds markers), `tests/e2e/regions-clipboard.spec.ts`. Reference of the forms: `docs/design/import-export.md` ("The region marker exception"), `docs/design/clipboard-format.md`.
+
+- **Markdown**: `<!-- region:<type> <json> -->` then an ATX heading of level `clamp(level, 1, 6)` holding the computed label. The comment is the source of truth; the JSON is the `fields`, minimal, keys sorted, `<` `>` `&` and U+2028/9 as `\uXXXX` (so `-->` can never appear inside). The type id is written as is when it matches `[A-Za-z0-9_-]+`, percent-encoded otherwise (decoded on import).
+- **Richtext fields** are inline-markdown strings inside the JSON (`deltaToMarkdown` / the inline parser), in the comment AND in the HTML attribute; the clipboard fragment and JSON keep the Loro delta. Lossy like a paragraph (whitespace at the edge of a mark). Links are sanitized with `sanitizeUrl` whenever a richtext delta is stored (`writeField`), so no path (paste, import, `setField`) can store a `javascript:` link.
+- **Import is strict and local**: a rule (priority 20, may interrupt a paragraph) detects the exact line and valid-object JSON; the heading line IMMEDIATELY after is consumed. Everything else keeps its previous meaning (heading, other comment, invalid JSON = literal text).
+- **Edited heading policy**: the comment wins, the heading text and level are ignored on import (the next export rewrites it); no warning (the heading is not data). **Unknown type**: falls back to the default (lowest-level) declared type, fields kept (JSON import and the internal clipboard keep an unknown type, which the registry tolerates). Invalid declared-field values: dropped by `create` with `nabu.warn`.
+- **Label in static serializers**: the clipboard `toMarkdown(pb)` / `toHtml(pb)` get PasteBlocks, not the document, so the live block writes `echo: { label, level }` (from the registry) next to `props` in the `application/x-nabu+json` serialization. It is ignored on paste. Without it (a hand-made block) the echo is derived from the type (`level` of the declaration, the label template without numbering, else the type id).
+- **HTML**: `<hN data-nabu-region data-nabu-fields>`; a high-priority rule (100) with `[data-nabu-region]` (non-empty) beats `h1`-`h6`; hostile or invalid attributes degrade to a marker without fields, never to markup. Type ids and fields are text; nothing from the element is passed through.
+- **Root-only paste**: pinned in unit and e2e. Pasting `[p x, marker, p y]` in a toggle body at "body|one" gives: the text before the marker lands in the body, the text after the marker too, and ONLY the marker is hoisted right after the toggle (the content order across the marker is therefore not kept inside a container: the marker cannot be there). In a list item the list normalizer cuts the list around the marker (the rest of the list follows it); in a nested list the marker goes after the top-level list structure; in a callout it is hoisted after the callout.
+- **Copying only a marker** (selection reduced to a marker) gives its two markdown lines as `text/plain` and the heading element as `text/html` (it is not a text block, so the "raw selected text" rule does not apply).
+- **Left out**: no warning on an edited echo; richtext of UNDECLARED fields (an unknown field holding a text container) is exported as a delta array and comes back as a plain JSON array.
