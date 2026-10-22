@@ -20,5 +20,6 @@ export * from "./image";
 export * from "./media";
 export * from "./video";
 export * from "./file";
+export * from "./region";
 
 export * from "./selection.svelte.js";

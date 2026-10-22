@@ -14,6 +14,7 @@ import { BlockExtension } from './blocks/block.extension.js';
 import { ImageExtension } from './blocks/image/index.js';
 import { VideoExtension } from './blocks/video/index.js';
 import { FileExtension } from './blocks/file/index.js';
+import { RegionsExtension } from './blocks/region/index.js';
 
 // ---------------------------------------------------------------------------
 // Presets — composable extension arrays
@@ -30,7 +31,7 @@ export const DocumentPreset = [ParagraphExtension, HeadingExtension, BlockquoteE
 
 /** All built-in block types + rich text. */
 export const FullPreset =     [
-    ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension, ImageExtension, VideoExtension, FileExtension, ListExtension, ListItemExtension, DialogueExtension, RichTextExtension, TypographyExtension, MarkdownShortcutsExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension,
+    ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension, ImageExtension, VideoExtension, FileExtension, ListExtension, ListItemExtension, DialogueExtension, RegionsExtension(), RichTextExtension, TypographyExtension, MarkdownShortcutsExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension,
 ];
 
 // ---------------------------------------------------------------------------

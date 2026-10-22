@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added - Regions, lot 1 (ADR 016)
+- New extension `RegionsExtension(options)` (factory, `src/lib/blocks/region/`; `createRegionsExtension` alias; included in `FullPreset` as `RegionsExtension()`). It structures one continuous text with **markers**: a void `region` block (`RegionBlock`; Loro data `regionType` + a `fields` map, `title` being a base field), rendered as a discreet seam (computed label + hairline) announced as `role="heading"` / `aria-level`, themable with `--nb-region-*` CSS variables. No editing UI.
+- **Types** declared by the integrator: `level`, `label` template (`{index}`, `{path}`, `{title}`, `{type}`, `{level}`), `numbering` (`'parent'` default, `'document'`, `'none'`), typed `fields` (`text`, `richtext`, `number`, `boolean`, `enum`, `date`; values validated on `setField` and on creation, unknown fields kept as-is). Without options: generic `section-1` / `section-2` / `section-3` types.
+- **Reactive registry** `Regions.get(nabu)` / `nabu.regions` (installed by the extension, the engine knows nothing about it): `list`, `tree`, `preamble`, `at(block | selection)`, `of(marker)`, `next` / `prev` / `parentOf`; each region has `type`, `level`, `index`, `path`, `label`, `fields`, `parent`, `children`, `first` / `last`, `blocks` / `ownBlocks`, `wordCount` / `ownWordCount`. One linear pass over the root blocks; typing does not recompute the structure.
+- **Root-only rule**: a marker that ends up inside a container (list, toggle…) is moved to the root, right after the top-level container that holds it, by an `onBeforeTransaction` normalizer (same undo step as the operation that displaced it).
+- `insertRegion(nabu, { type, at, title, fields })` helper; `marker.setField()`, `marker.setRegionType()`, `marker.richtext(name)`. JSON export / import round-trip exactly (`{ type: 'region', props: { regionType, fields } }`); the markdown form of a marker is empty for now.
+- Not in this lot: keyboard actions (`region:split`, `region:merge`, `region:move`…), markdown / HTML / clipboard forms, and the Backspace / Delete policy next to a marker (today the text merge goes through it).
+- Dev route `/e2e?seed=regions` seeds a small document with markers.
+
 ### Removed - Zone, Context overlay, Variable (breaking)
 - The **Zone block** is removed: `ZoneBlock`, `ZoneExtension`, `Zones`, `Templates`, `Counters`, the zone components and hooks, and the `:::` shortcut. Zone nodes are no longer rendered or created; `FullPreset` no longer includes `ZoneExtension`.
 - The **Context overlay** is removed: `ContextExtension`, `ContextMenu`, `CONTEXT_COLLECT_EVENT`, `setMenuContext`, `getMenuContext`, `collect` (it only served zones). `FullPreset` no longer includes `ContextExtension`.

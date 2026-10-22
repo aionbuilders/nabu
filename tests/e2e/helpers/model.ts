@@ -95,7 +95,7 @@ export async function outline(page: Page): Promise<string> {
 }
 
 /**
- * Structural invariants of the model tree + render: list-items only under lists, lists only at root or under
+ * Structural invariants of the model tree + render: region markers only at the root (and childless), list-items only under lists, lists only at root or under
  * a list-item, no empty list, every Loro node has a live Block instance whose `children` match the tree, and
  * the DOM holds exactly one `[data-block-id]` element per node. Returns the list of violations (empty = valid).
  */
@@ -119,6 +119,9 @@ export async function violations(page: Page): Promise<string[]> {
       // directly inside another list.
       if (type === 'list' && ptype === 'list') out.push(`list ${id} has parent ${ptype}`);
       if (type === 'list' && kids.length === 0) out.push(`empty list ${id}`);
+      // ADR 016: a region marker is a void block that lives at the ROOT only (the normalizer hoists it out of any container)
+      if (type === 'region' && parent) out.push(`region marker ${id} has parent ${ptype}`);
+      if (type === 'region' && kids.length) out.push(`region marker ${id} has children`);
       if (type === 'list') for (const k of kids) if (k.data.get('type') !== 'list-item') out.push(`list ${id} has child ${k.data.get('type')}`);
       if (type === 'list-item') {
         const lists = kids.filter((k) => k.data.get('type') === 'list');

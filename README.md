@@ -486,6 +486,44 @@ todos.uncheckAll();
 todos.goTo(item);   // move the editor cursor to a specific to-do
 ```
 
+## Regions
+
+Regions divide one continuous text into parts, chapters, scenes… with **markers** (design: `docs/adr/016-regions.md`). The document stays flat; a `region` marker is a void block (the caret steps over it, like a divider) and a region runs from its marker to the next marker of the same or a higher level. Nabu stores and exposes the structure; what a division *means* (synopsis, status, views) is up to your app. The default rendering is a discreet seam (label + hairline, announced to screen readers as a heading of the region's level, themable with `--nb-region-*` CSS variables); there is no editing UI. Keyboard actions, markdown / HTML and clipboard forms of a marker are not there yet.
+
+```js
+import { RegionsExtension, insertRegion } from '@aionbuilders/nabu';
+
+const engine = createEditor({
+  extensions: [RegionsExtension({
+    types: {
+      part:    { level: 1, label: 'Part {index}' },
+      chapter: { level: 2, label: 'Chapter {index}', numbering: 'document' },
+      scene:   { level: 3, fields: { pov: 'text', mood: { type: 'enum', values: ['calm', 'tense'] } } },
+    },
+  })],
+});
+// `FullPreset` already includes `RegionsExtension()`: without options, a generic section division over
+// three levels, the types `section-1`, `section-2`, `section-3` (labels "1.", "1.1", "1.1.1").
+
+await insertRegion(engine, { type: 'chapter', at: 'end', title: 'The ferryman' });
+
+engine.regions.list;            // every region, in document order (also: Regions.get(engine))
+engine.regions.tree;            // top-level regions, each with `children`
+engine.regions.preamble;        // the blocks before the first marker (outside any region)
+engine.regions.at(block);       // the deepest region containing a block (no argument: the selection)
+engine.regions.of(marker);      // the region a marker opens; also next(r), prev(r), parentOf(r)
+
+const r = engine.regions.list[0];
+r.type; r.level; r.index; r.path;   // path: [2, 1], r.pathString: "2.1"
+r.label;                            // "Chapter 2": the template applied
+r.fields;                           // { title, ...your fields }, reactive
+r.setField('pov', 'Anna');          // validated against the declared type, own undo step
+r.blocks; r.first; r.last;          // the range (sub-regions included), marker .. last block
+r.wordCount;                        // words of the range, no rendering needed
+```
+
+Field kinds: `text`, `richtext` (a LoroText, `marker.richtext(name)`), `number`, `boolean`, `enum`, `date` (ISO 8601). An invalid value for a declared field is refused; fields a type does not declare are kept as they are. Markers only live at the root: one that ends up inside a container (a list, a toggle…) is moved out, right after it, in the same undo step.
+
 ## Architecture
 
 ### Single ContentEditable

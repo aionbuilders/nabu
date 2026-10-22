@@ -180,10 +180,12 @@ async function bootWithRetry(page: Page, navigate: () => Promise<unknown>, timeo
  */
 export async function gotoEditor(
   page: Page,
-  opts: { persist?: string; options?: Record<string, unknown> } = {},
+  opts: { persist?: string; options?: Record<string, unknown>; seed?: 'regions' } = {},
 ) {
   const params = new URLSearchParams();
   if (opts.persist) params.set('persist', opts.persist);
+  // Dev-only seed document of the /e2e route (`regions`: a small document with region markers, ADR 016).
+  if (opts.seed) params.set('seed', opts.seed);
   // JSON-able Nabu init options (e.g. { placeholders: { show: 'empty' } }), merged into the editor init.
   if (opts.options) params.set('options', JSON.stringify(opts.options));
   const query = params.toString();

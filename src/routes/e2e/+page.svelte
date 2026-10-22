@@ -70,12 +70,36 @@
       };
     }
 
+    // Test / playground only: `?seed=regions` seeds a small document with region markers (ADR 016): a preamble, two
+    // top-level sections and two sub-sections. In-memory editors only. (Markers can also be added by hand:
+    // `nabu.insert('region', { regionType: 'section-1', title: 'X' }, null, index)`.)
+    const seed = page.url.searchParams.get('seed');
+    /** @param {import('$lib/blocks/nabu.svelte.js').Nabu} eng */
+    const seedRegions = async (eng) => {
+      const doc = [
+        ['paragraph', { text: 'Preamble, outside any region.' }],
+        ['region', { regionType: 'section-1', title: 'The ferryman' }],
+        ['paragraph', { text: 'Opening of the first section.' }],
+        ['region', { regionType: 'section-2', title: 'The bank' }],
+        ['paragraph', { text: 'Text of the bank.' }],
+        ['region', { regionType: 'section-2', title: 'The water' }],
+        ['paragraph', { text: 'Text of the water.' }],
+        ['region', { regionType: 'section-1', title: 'The return' }],
+        ['paragraph', { text: 'Closing text.' }],
+      ];
+      for (const child of [...eng.children]) eng.delete(child);
+      doc.forEach(([type, props], i) => eng.insert(/** @type {string} */ (type), /** @type {any} */ (props), null, i));
+      await eng.commit();
+      eng.undoManager.clear();
+    };
+
     (async () => {
       // No `persist` param: fresh in-memory editor. Otherwise: persisted under that docId (no seeding).
       const eng = docId
         ? await createPersistedEditor({ docId, preset: FullPreset, ...options })
         : createFullEditor(options);
       if (cancelled) return;
+      if (seed === 'regions' && !docId && eng.registry.has('region')) await seedRegions(eng);
       engine = eng;
       // Expose only once the engine is fully created.
       const w = /** @type {any} */ (window);
