@@ -5,6 +5,8 @@
 import { Extension } from '../../utils/extensions.js';
 import { TextBehavior } from './text.behavior.svelte.js';
 import { sanitizeUrl } from '../../utils/html.js';
+import { livePoints, placePoints } from '../../blocks/undo-selection.js';
+import { tick } from 'svelte';
 
 /**
  * Collect all selected blocks with a TextBehavior and a non-collapsed selection.
@@ -26,16 +28,27 @@ function collectMarkTargets(nabu) {
 }
 
 /**
+ * Run a mark mutation as one transaction and leave the selection EXACTLY on the same characters (anchor, focus and so the
+ * direction). A mark rewrites the spans of the text, so the DOM point of an offset changes (a plain text node becomes
+ * text / `<strong>` / text): the selection is kept as MODEL points (block + text offset) and put back on the new DOM once it
+ * is rendered. Never derive a model offset from a DOM point.
+ * @param {Nabu} nabu
+ * @param {() => void} mutate
+ */
+async function markTransaction(nabu, mutate) {
+    const kept = livePoints(nabu);
+    await nabu.transact(mutate);
+    if (!kept) return;
+    await tick();
+    placePoints(nabu, kept);
+}
+
+/**
  * Toggle a mark on all selected text targets.
  * @param {Nabu} nabu
  * @param {string} markName
  */
 async function toggleMark(nabu, markName) {
-    const startBlock = nabu.selection.startBlock;
-    const endBlock = nabu.selection.endBlock;
-    const startFocusData = startBlock?.focus(null, true);
-    const endFocusData = endBlock?.focus(null, true);
-
     const targets = collectMarkTargets(nabu);
     if (!targets.length) {
         // Collapsed cursor: toggle the pending stored mark for the next typed char.
@@ -44,7 +57,7 @@ async function toggleMark(nabu, markName) {
     }
 
     const isFullyActive = targets.every(({ behavior, sel }) => behavior.isMarkActive(markName, sel));
-    await nabu.transact(() => {
+    await markTransaction(nabu, () => {
         for (const { behavior, sel } of targets) {
             if (isFullyActive) {
                 behavior.removeMark(markName, sel);
@@ -53,13 +66,6 @@ async function toggleMark(nabu, markName) {
             }
         }
     });
-
-    if (startBlock && endBlock) {
-        nabu.focus({
-            from: { block: startBlock, offset: startFocusData?.start?.offset ?? 0 },
-            to: { block: endBlock, offset: endFocusData?.end?.offset ?? 0 }
-        });
-    }
     return true;
 }
 
@@ -72,7 +78,7 @@ async function toggleMark(nabu, markName) {
 function applyMark(nabu, markName, value = true) {
     const targets = collectMarkTargets(nabu);
     if (!targets.length) return;
-    return nabu.transact(() => {
+    return markTransaction(nabu, () => {
         for (const { behavior, sel } of targets) {
             behavior.applyMark(markName, value, sel);
         }
@@ -87,7 +93,7 @@ function applyMark(nabu, markName, value = true) {
 function removeMark(nabu, markName) {
     const targets = collectMarkTargets(nabu);
     if (!targets.length) return;
-    return nabu.transact(() => {
+    return markTransaction(nabu, () => {
         for (const { behavior, sel } of targets) {
             behavior.removeMark(markName, sel);
         }
@@ -141,7 +147,7 @@ function onBeforeInput(nabu, event) {
                 nabu.storedMarks = Object.fromEntries(FORMAT_REMOVE_MARKS.map((name) => [name, false]));
             }
         } else {
-            nabu.transact(() => {
+            markTransaction(nabu, () => {
                 for (const { behavior, sel } of targets) for (const name of FORMAT_REMOVE_MARKS) behavior.removeMark(name, sel);
             });
         }

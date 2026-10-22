@@ -202,6 +202,16 @@ export class RegionBlock extends Block {
         return true;
     }
 
+    /**
+     * Dragging a seam moves its WHOLE region: the marker, its own content and its sub-regions (the same blocks as
+     * `region:move-up` / `-down`, see `moveRegion`). A marker the registry does not know (not yet in the document) moves alone.
+     * @returns {Block[]}
+     */
+    dragRange() {
+        const region = Regions.get(this.nabu).of(this);
+        return region ? this.nabu.children.slice(region.start, region.end) : [this];
+    }
+
     /** @param {number} offset @returns {{node: Node, offset: number} | null} */
     getDOMPoint(offset) { return null; }
 

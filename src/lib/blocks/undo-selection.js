@@ -94,6 +94,42 @@ function locate(nabu, node, offset) {
 }
 
 /**
+ * The live DOM selection as MODEL points (block + text offset), anchor and focus kept apart so the direction survives.
+ * The only reliable way to carry a selection across a change that rewrites the DOM of its blocks (a mark toggled, a text
+ * rewritten): DOM offsets are relative to a text node, and the text nodes change with the spans.
+ * @param {Nabu} nabu
+ * @returns {{ anchor: { block: Block, offset: number }, focus: { block: Block, offset: number } } | null}
+ */
+export function livePoints(nabu) {
+    if (typeof window === 'undefined' || !window.getSelection) return null;
+    const live = window.getSelection();
+    if (!live || live.rangeCount === 0 || !live.anchorNode || !live.focusNode) return null;
+    const anchor = locate(nabu, live.anchorNode, live.anchorOffset);
+    const focus = locate(nabu, live.focusNode, live.focusOffset);
+    return anchor && focus ? { anchor, focus } : null;
+}
+
+/**
+ * Put a selection given as model points (see {@link livePoints}) on the rendered DOM, direction included. Offsets are clamped to
+ * the text. Does nothing when a block has no DOM point (not rendered).
+ * @param {Nabu} nabu
+ * @param {{ anchor: { block: Block, offset: number }, focus: { block: Block, offset: number } }} points
+ * @returns {boolean} whether the selection was placed
+ */
+export function placePoints(nabu, { anchor, focus }) {
+    /** @param {{ block: Block, offset: number }} p */
+    const point = (p) => {
+        const len = /** @type {any} */ (p.block.behaviors?.get('text'))?.text?.length ?? p.offset;
+        return /** @type {any} */ (p.block).getDOMPoint?.(Math.max(0, Math.min(p.offset, len))) ?? null;
+    };
+    const a = point(anchor);
+    const f = point(focus);
+    if (!a || !f) return false;
+    nabu.selection.setBaseAndExtent(a.node, a.offset, f.node, f.offset);
+    return true;
+}
+
+/**
  * Capture the live DOM selection as an {@link UndoSelection}. The cursors are created on the CURRENT text, so call it while the
  * model and the DOM agree and before the change to be undone is applied (see `Nabu#captureUndoSelection`).
  * @param {Nabu} nabu

@@ -372,6 +372,15 @@ export class Block {
      */
     acceptPaste(blocks, ctx) { return null; }
 
+    /**
+     * The blocks that travel together when THIS block is dragged by its handle (P-81): this block and anything the drag must carry
+     * with it, in document order, all in the same parent. The default is the block alone (a container carries its own children:
+     * they are its tree children). A block whose "extent" is not its subtree overrides it (a region marker carries the blocks of its
+     * region). The drop rules are the same for any range: it cannot land inside itself.
+     * @returns {Block[]}
+     */
+    dragRange() { return [this]; }
+
     /** @param {{from?: number, to?: number, index?: number, length?: number, offset?: number}} options @returns {{block: Block} | null} */
     split(options) {
         this.nabu.warn("Not implemented: split block", this.id, "with options", options);

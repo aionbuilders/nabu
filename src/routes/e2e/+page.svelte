@@ -10,6 +10,10 @@
   /** @type {import('$lib/blocks/nabu.svelte.js').Nabu | null} */
   let engine = $state(null);
 
+  const layout = page.url.searchParams.get('layout');
+  const theme = page.url.searchParams.get('theme');
+  const vars = page.url.searchParams.get('vars');
+
   onMount(() => {
     let cancelled = false;
     const docId = page.url.searchParams.get('persist');
@@ -94,6 +98,14 @@
       eng.undoManager.clear();
     };
 
+    // Test / playground only: `?seed=long` seeds 80 numbered paragraphs ("Long line 00 …") so that the page / a scroll container scrolls.
+    const seedLong = async (/** @type {import('$lib/blocks/nabu.svelte.js').Nabu} */ eng) => {
+      for (const child of [...eng.children]) eng.delete(child);
+      for (let i = 0; i < 80; i++) eng.insert('paragraph', { text: `Long line ${String(i).padStart(2, '0')} with some words to select` }, null, i);
+      await eng.commit();
+      eng.undoManager.clear();
+    };
+
     // Test-only: `?commands=demo` installs the demo commands of the confirmation strategies (./demo-commands.js).
     if (page.url.searchParams.get('commands') === 'demo') options.extensions = [...(options.extensions ?? []), DemoConfirmExtension];
 
@@ -104,6 +116,7 @@
         : createFullEditor(options);
       if (cancelled) return;
       if (seed === 'regions' && !docId && eng.registry.has('region')) await seedRegions(eng);
+      if (seed === 'long' && !docId) await seedLong(eng);
       engine = eng;
       // Expose only once the engine is fully created.
       const w = /** @type {any} */ (window);
@@ -117,15 +130,27 @@
   });
 </script>
 
-<main class="e2e-root">
+<!--
+  Test-only layout options (this route only exists in dev / `build:e2e`):
+   - `?layout=scroll`: the editor lives in a fixed-height (360px) `overflow: auto` container (`.e2e-scroll-host`) under an
+     opaque `position: fixed` top bar (`.e2e-topbar`, 48px, z-index 1000), like an app shell with a sticky header.
+   - `?theme=dark`: a dark HOST page (dark background, light text) that relies on the OS colour scheme only (pair it with
+     Playwright's `colorScheme: 'dark'`); `?theme=dark-attr`: the same host + the explicit `data-nabu-theme="dark"` attribute;
+     `?theme=light`: a light host with a white background.
+   - `?vars=--nb-x:value;--nb-y:value`: custom properties set on the host element (`.e2e-root`).
+-->
+<main class="e2e-root" class:scroll={layout === 'scroll'} data-e2e-theme={theme || undefined} data-nabu-theme={theme === 'dark-attr' ? 'dark' : undefined} style={vars || undefined}>
+  {#if layout === 'scroll'}<div class="e2e-topbar">Top bar (sticky)</div>{/if}
   {#if engine}
-    <div class="editor-body">
-      <FloatingToolbar {engine} />
-      <SlashMenu {engine} />
-      <DragHandle {engine} />
-      <CommandInvite {engine} />
-      <CommandChooser {engine} />
-      <NabuEditor {engine} />
+    <div class={layout === 'scroll' ? 'e2e-scroll-host' : undefined}>
+      <div class="editor-body">
+        <FloatingToolbar {engine} />
+        <SlashMenu {engine} />
+        <DragHandle {engine} />
+        <CommandInvite {engine} />
+        <CommandChooser {engine} />
+        <NabuEditor {engine} />
+      </div>
     </div>
   {/if}
 </main>
@@ -145,4 +170,16 @@
     max-width: 660px;
     margin: 0 auto;
   }
+
+  .e2e-topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px; z-index: 1000;
+    background: #222; color: #fff; display: flex; align-items: center; padding: 0 24px;
+  }
+  .e2e-scroll-host {
+    margin-top: 56px; height: 360px; overflow: auto; border: 1px solid #888;
+  }
+
+  .e2e-root[data-e2e-theme='dark'], .e2e-root[data-e2e-theme='dark-attr'] { background: #121212; color: #e8e8e8; }
+  .e2e-root[data-e2e-theme='light'] { background: #fff; color: #111; }
+  :global(body:has(.e2e-root[data-e2e-theme='dark'])), :global(body:has(.e2e-root[data-e2e-theme='dark-attr'])) { background: #121212; }
 </style>

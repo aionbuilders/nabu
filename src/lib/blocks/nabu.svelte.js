@@ -13,6 +13,7 @@ import { CommandRegistry } from '../utils/commands.js';
 import { CommandConfirmation } from '../utils/command-confirm.svelte.js';
 import { normalizePlaceholders } from '../utils/placeholders.js';
 import { normalizeLang } from '../utils/spellcheck.js';
+import { moveBlocks } from './move.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection } from './undo-selection.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
@@ -184,6 +185,9 @@ export class Nabu {
         this.#registerCommands('core', {
             undo: { label: 'Undo', keys: ['Mod-z'], run: () => { this.undo(); } },
             redo: { label: 'Redo', keys: ['Mod-Shift-z', 'Mod-y'], run: () => { this.redo(); } },
+            // Keyboard alternative to dragging (see move.js): `data.block` (a Block or its id) moves that block instead.
+            'block:move-up': { label: 'Move block up', keys: ['Mod-Shift-ArrowUp'], run: (_nabu, _ctx, data) => moveBlocks(this, 'up', data?.block ?? null) },
+            'block:move-down': { label: 'Move block down', keys: ['Mod-Shift-ArrowDown'], run: (_nabu, _ctx, data) => moveBlocks(this, 'down', data?.block ?? null) },
         });
         
         if (this.extensions?.length) {
@@ -278,6 +282,10 @@ export class Nabu {
                                 const oldParentId = action.oldParent.toString();
                                 const oldParentBlock = this.blocks.get(oldParentId);
                                 if (oldParentBlock) oldParentBlock.updateChildren?.();
+                            } else if (action.action === 'move' && action.parent) {
+                                // A node that LEAVES the root for a container has no `oldParent` (the root is no node): the
+                                // root list must be refreshed too, else the old element stays rendered next to the new one.
+                                this.updateRoots();
                             }
                         }
                     })

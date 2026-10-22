@@ -617,3 +617,17 @@ describe('JSON round trip', () => {
     expect(engine.registry.get('region').toMarkdown({})).toBe('<!-- region:part {} -->\n# part'); // a hand-made block without a type: the default type
   });
 });
+
+describe('Block#dragRange (P-81: what the drag handle moves together)', () => {
+  it('a plain block drags alone; a region marker drags its whole region (content + sub-regions)', async () => {
+    const engine = await makeEditor();
+    await build(engine, ['p:Pre', 'r:section-1:One', 'p:a', 'r:section-2:Two', 'p:b', 'r:section-1:Three', 'p:c']);
+    const kids = engine.children;
+    const names = (blocks) => blocks.map((b) => (b.type === 'region' ? `R:${b.title}` : b.behaviors.get('text').text));
+    expect(names(kids[0].dragRange())).toEqual(['Pre']);
+    expect(names(kids[1].dragRange())).toEqual(['R:One', 'a', 'R:Two', 'b']);
+    expect(names(kids[3].dragRange())).toEqual(['R:Two', 'b']);
+    expect(names(kids[5].dragRange())).toEqual(['R:Three', 'c']);
+    expect(kids[0].dragRange()[0]).toBe(kids[0]);
+  });
+});

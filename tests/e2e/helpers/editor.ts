@@ -180,7 +180,7 @@ async function bootWithRetry(page: Page, navigate: () => Promise<unknown>, timeo
  */
 export async function gotoEditor(
   page: Page,
-  opts: { persist?: string; options?: Record<string, unknown>; seed?: 'regions'; commands?: 'demo' } = {},
+  opts: { persist?: string; options?: Record<string, unknown>; seed?: 'regions' | 'long'; commands?: 'demo'; layout?: 'scroll'; theme?: 'dark' | 'dark-attr' | 'light'; vars?: string } = {},
 ) {
   const params = new URLSearchParams();
   if (opts.persist) params.set('persist', opts.persist);
@@ -188,6 +188,11 @@ export async function gotoEditor(
   if (opts.seed) params.set('seed', opts.seed);
   // Dev-only demo commands of the confirmation strategies (ADR 017 lot 2; src/routes/e2e/demo-commands.js).
   if (opts.commands) params.set('commands', opts.commands);
+  // Dev-only layout / theme / custom properties of the /e2e route (see src/routes/e2e/+page.svelte): `layout: 'scroll'` puts the
+  // editor in a fixed-height scroll container under a sticky top bar; `theme` makes the host page dark / light; `vars` sets CSS custom properties on the host.
+  if (opts.layout) params.set('layout', opts.layout);
+  if (opts.theme) params.set('theme', opts.theme);
+  if (opts.vars) params.set('vars', opts.vars);
   // JSON-able Nabu init options (e.g. { placeholders: { show: 'empty' } }), merged into the editor init.
   if (opts.options) params.set('options', JSON.stringify(opts.options));
   const query = params.toString();

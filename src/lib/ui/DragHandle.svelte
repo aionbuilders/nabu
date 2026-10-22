@@ -9,6 +9,8 @@
   /** @type {{ blockId: string, position: 'before'|'after' } | null} */
   let dropTarget = null;
   let draggedId = /** @type {string|null} */ (null);
+  /** Ids of every block travelling with the dragged one (see `Block#dragRange`): hidden from the drop targets, dimmed while dragging. */
+  let draggedIds = /** @type {Set<string>} */ (new Set());
 
   const HANDLE_W = 24;
 
@@ -16,16 +18,16 @@
    * Find the nearest block element under a point (skipping the dragged one + UI islands).
    * @param {number} x
    * @param {number} y
-   * @param {string|null} excludeId
+   * @param {Set<string> | null} excluded
    * @returns {Element|null}
    */
-  function blockElAt(x, y, excludeId) {
+  function blockElAt(x, y, excluded) {
     let el = /** @type {Element|null} */ (document.elementFromPoint(x, y));
     const root = el?.closest?.('.nabu-editor');
     if (!root) return null;
     const b = el?.closest?.('[data-block-id]');
     if (!b) return null;
-    if (excludeId && b.getAttribute('data-block-id') === excludeId) return null;
+    if (excluded && excluded.has(/** @type {string} */ (b.getAttribute('data-block-id')))) return null;
     // don't target a UI island
     if (b.closest('[data-nabu-ui]')) return null;
     return b;
@@ -52,16 +54,17 @@
     draggedId = handle.blockId;
     if (!draggedId) return;
     dragging = true;
-    // dim the dragged block
-    const el = document.querySelector(`[data-block-id="${cssEscape(draggedId)}"]`);
-    el?.classList.add('nabu-dragging');
+    // the dragged block and what travels with it (a region seam carries its region): dimmed, and not a drop target
+    draggedIds = new Set((engine.blocks.get(draggedId)?.dragRange() ?? []).map((b) => b.id));
+    draggedIds.add(draggedId);
+    for (const id of draggedIds) document.querySelector(`[data-block-id="${cssEscape(id)}"]`)?.classList.add('nabu-dragging');
     try { /** @type {any} */ (e.target).setPointerCapture?.(e.pointerId); } catch {}
   }
 
   /** @param {PointerEvent} e */
   function onDragMove(e) {
     handle.visible = false;
-    const b = blockElAt(e.clientX, e.clientY, draggedId);
+    const b = blockElAt(e.clientX, e.clientY, draggedIds);
     if (!b) { indicator.visible = false; dropTarget = null; return; }
     const r = b.getBoundingClientRect();
     const after = e.clientY > r.top + r.height / 2;
@@ -71,23 +74,34 @@
 
   function onPointerUp() {
     if (dragging) {
-      const el = draggedId ? document.querySelector(`[data-block-id="${cssEscape(draggedId)}"]`) : null;
-      el?.classList.remove('nabu-dragging');
+      for (const id of draggedIds) document.querySelector(`[data-block-id="${cssEscape(id)}"]`)?.classList.remove('nabu-dragging');
       performDrop();
     }
-    dragging = false; draggedId = null; indicator.visible = false; dropTarget = null;
+    dragging = false; draggedId = null; draggedIds = new Set(); indicator.visible = false; dropTarget = null;
   }
 
   function performDrop() {
     const id = draggedId;
     if (!dropTarget || !id) return;
     const dragged = engine.blocks.get(id);
-    const target = engine.blocks.get(dropTarget.blockId);
-    if (!dragged || !target || dragged === target) return;
-    // never drop a block into its own subtree (cycle)
-    if (target.parents?.some((p) => p.id === dragged.id)) return;
-    if (dropTarget.position === 'after') dragged.node.moveAfter(target.node);
-    else dragged.node.moveBefore(target.node);
+    const hit = engine.blocks.get(dropTarget.blockId);
+    if (!dragged || !hit) return;
+    // The range travelling with the block (itself alone, or e.g. a region seam + its region), in document order.
+    const moving = dragged.dragRange();
+    // never drop a block into itself or into its own subtree (cycle)
+    if (moving.some((m) => m === hit || hit.parents?.some((p) => p.id === m.id))) return;
+    // A range of several blocks keeps its level (a region's blocks all live at the root): a drop on a block nested in another
+    // parent lands next to the ancestor of that block which sits at the range's own level.
+    let target = hit;
+    if (moving.length > 1) {
+      while (target.parent && target.parent !== dragged.parent) target = /** @type {typeof hit} */ (target.parent);
+    }
+    if (dropTarget.position === 'after') {
+      let anchor = target.node;
+      for (const m of moving) { m.node.moveAfter(anchor); anchor = m.node; }
+    } else {
+      for (const m of moving) m.node.moveBefore(target.node);
+    }
     // repair structural integrity (e.g. a list-item dropped at root → wrap in a list).
     // No-op for blocks without a requiredParent (paragraph, heading, …).
     const orphan = /** @type {any} */ (dragged);
