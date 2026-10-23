@@ -545,7 +545,7 @@ test.describe('FloatingToolbar', () => {
       await press(page, key);
       reached.push(`${key}→${await page.evaluate(() => (document.activeElement?.closest('.nabu-toolbar') ? 'TOOLBAR' : document.activeElement?.closest('[contenteditable="true"]') ? 'editor' : document.activeElement?.tagName))}`);
     }
-    note('CURRENT', `toolbar keyboard access: ${reached.join(', ')}; button semantics ${JSON.stringify(attrs)} — no role=toolbar, no aria-pressed (state is class-only), accessible name = visible glyph; formatting is available through the shortcuts (Mod+B…)`);
+    note('CURRENT', `toolbar keyboard access: ${reached.join(', ')}; button semantics ${JSON.stringify(attrs)} — the container is role=toolbar (aria-label), buttons carry aria-pressed + aria-label; still not reachable by Tab (keyboard navigation is a design topic); formatting is available through the shortcuts (Mod+B…)`);
     await expect(bold).toBeVisible();
   });
 
@@ -915,7 +915,7 @@ test.describe('Region seam', () => {
     expect(await seamProblems(page)).toEqual([]);
     // the full title stays available to assistive tech (it is the heading's text), even when truncated visually
     const full = await page.locator('[data-block-type="region"]').nth(1).evaluate((el) => ({ text: el.textContent?.trim().length ?? 0, title: el.getAttribute('title') }));
-    note('CURRENT', `a truncated seam label has no tooltip (title attribute = ${JSON.stringify(full.title)}): sighted users cannot read the full title; textContent length ${full.text}`);
+    note('CURRENT', `the seam label span carries the full title as a tooltip (title attribute on the heading itself = ${JSON.stringify(full.title)}); textContent length ${full.text}`);
     expect(full.text).toBeGreaterThan(150);
     expect(await violations(page)).toEqual([]);
   });

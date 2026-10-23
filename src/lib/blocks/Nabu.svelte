@@ -107,7 +107,7 @@
     }
     .nabu-editor :global([data-block-id][data-placeholder]:not([data-placeholder=''])::after) {
         content: attr(data-placeholder);
-        color: var(--nb-text-placeholder, color-mix(in srgb, currentColor 35%, transparent));
+        color: var(--nb-text-placeholder, color-mix(in srgb, currentColor 60%, transparent));
         pointer-events: none;
         position: absolute;
         top: 0;

@@ -18,7 +18,7 @@
     /* Text Colors */
     --nb-text-primary: hsla(0, 0%, 0%, 0.9);
     --nb-text-secondary: hsla(0, 0%, 0%, 0.6);
-    --nb-text-muted: hsla(0, 0%, 0%, 0.4);
+    --nb-text-muted: hsla(0, 0%, 0%, 0.5); /* >= 3:1 on white (non-text glyphs such as the drag handle) */
     
     /* Accent & Status Colors */
     --nb-accent: hsla(210, 100%, 50%, 0.2);
@@ -26,6 +26,7 @@
     --nb-success-bg: hsla(150, 100%, 40%, 0.15);
     --nb-warning: rgba(245, 158, 11, 0.4);
     --nb-danger: rgba(239, 68, 68, 0.4);
+    --nb-region-warning: #b45309; /* region seam: tint of a pending merge (4.9:1 on white) */
     
     /* Shadows */
     --nb-shadow-lg: 0 16px 32px -12px rgba(0,0,0,0.15);
@@ -58,6 +59,7 @@
         --nb-success-bg: hsla(150, 100%, 60%, 0.15);
         --nb-warning: rgba(245, 158, 11, 0.4);
         --nb-danger: rgba(239, 68, 68, 0.4);
+        --nb-region-warning: #f59e0b; /* amber 500: 8:1 on a dark page (the light #b45309 is 3.7:1) */
         
         --nb-shadow-lg: 0 16px 32px -12px rgba(0,0,0,0.5);
         --nb-shadow-inset: inset 0 2px 4px rgba(0,0,0,0.2);
@@ -85,6 +87,7 @@
     --nb-success-bg: hsla(150, 100%, 60%, 0.15);
     --nb-warning: rgba(245, 158, 11, 0.4);
     --nb-danger: rgba(239, 68, 68, 0.4);
+    --nb-region-warning: #f59e0b;
     
     --nb-shadow-lg: 0 16px 32px -12px rgba(0,0,0,0.5);
     --nb-shadow-inset: inset 0 2px 4px rgba(0,0,0,0.2);

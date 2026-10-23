@@ -22,7 +22,8 @@
     as a heading of the region's level so that screen readers navigate by division. No editing UI here: the integrator
     brings its own. Theming: --nb-region-color, --nb-region-rule-color, --nb-region-label-size, --nb-region-label-weight,
     --nb-region-gap, --nb-region-margin (they default to the host's text colour, so light and dark pages both work) and
-    --nb-region-warning (the tint of a pending merge, amber by default).
+    --nb-region-warning (the tint of a pending merge: amber; nabu-theme.css gives it a darker amber for light pages and a lighter
+    one for dark pages, so the hint keeps a 4.5:1 contrast on both — the #b45309 fallback assumes a light page).
 
     The hold hint (neutral version of the design of the "8b" board): left-aligned above the label, no bubble, no background,
     no border, in the warning tint; the hairline drains with the progress (0 → 1). It is positioned ABSOLUTELY in the top
@@ -50,7 +51,7 @@
         <!-- Not read as part of the heading (the live region announces the prompt): decorative here. -->
         <span class="nabu-region-hint" data-region-hint aria-hidden="true">{pending.message}</span>
     {/if}
-    <span class="nabu-region-label">{text}</span>
+    <span class="nabu-region-label" title={text}>{text}</span>
     <span class="nabu-region-rule" aria-hidden="true">
         {#if pending}<span class="nabu-region-drain"></span>{/if}
     </span>
@@ -62,7 +63,7 @@
         align-items: center;
         gap: var(--nb-region-gap, 0.75em);
         margin: var(--nb-region-margin, 1.75em 0 0.75em);
-        color: var(--nb-region-color, color-mix(in srgb, currentColor 55%, transparent));
+        color: var(--nb-region-color, color-mix(in srgb, currentColor 62%, transparent));
         font-size: var(--nb-region-label-size, 0.75em);
         font-weight: var(--nb-region-label-weight, 500);
         line-height: 1.2;

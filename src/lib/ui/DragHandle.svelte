@@ -13,6 +13,67 @@
   let draggedIds = /** @type {Set<string>} */ (new Set());
 
   const HANDLE_W = 24;
+  const HANDLE_H = 22; // keep in sync with the CSS height
+  /** First lines at least this tall (body text and up) keep the handle flush with the block's top (+2px), see `handleTop`. */
+  const FLUSH_LINE = 16;
+  /** Blocks thinner than this (dividers, region seams) are a hard target: the pointer may be within `NEAR` px of them. */
+  const THIN = 14;
+  const NEAR = 6;
+
+  /**
+   * The block's FIRST line box, in viewport coordinates: the client rect of its own first text (not a nested block's), else
+   * — void blocks (divider, media, empty text) — the block's top strip: its computed line height (the whole block when it is
+   * thinner than that).
+   * @param {Element} b
+   * @returns {{ cy: number, h: number }}  vertical centre and height of the first line
+   */
+  function firstLine(b) {
+    const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.nodeValue?.trim() && n.parentElement?.closest('[data-block-id]') === b && !n.parentElement?.closest('[data-nabu-ui]'))
+        ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT,
+    });
+    const text = walker.nextNode();
+    if (text) {
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const line = range.getClientRects()[0];
+      if (line && line.height) return { cy: line.top + line.height / 2, h: line.height };
+    }
+    const r = b.getBoundingClientRect();
+    const cs = getComputedStyle(b);
+    const lh = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) || 16) * 1.2;
+    const h = Math.min(lh, r.height);
+    return { cy: r.top + h / 2, h };
+  }
+
+  /**
+   * Viewport `top` of the handle for block `b`: its centre on the centre of the block's first line. Blocks with a normal-size
+   * first line (body text, headings, media) keep the handle from sticking out above the block (flush at +2px, as for every
+   * paragraph); a small first line (a region seam's caption) or a hairline block (divider) is centred exactly.
+   * @param {Element} b
+   */
+  function handleTop(b) {
+    const { cy, h } = firstLine(b);
+    const top = cy - HANDLE_H / 2;
+    return h >= FLUSH_LINE ? Math.max(top, b.getBoundingClientRect().top + 2) : top;
+  }
+
+  /**
+   * The block under the pointer; failing that, a THIN block (divider, seam) within `NEAR` px above / below it — a 1px hairline
+   * would otherwise be nearly impossible to hover.
+   * @param {number} x
+   * @param {number} y
+   * @returns {Element|null}
+   */
+  function hoveredBlock(x, y) {
+    const b = blockElAt(x, y, null);
+    if (b) return b;
+    for (const d of [3, -3, NEAR, -NEAR]) {
+      const near = blockElAt(x, y + d, null);
+      if (near && near.getBoundingClientRect().height < THIN) return near;
+    }
+    return null;
+  }
 
   /**
    * Find the nearest block element under a point (skipping the dragged one + UI islands).
@@ -40,11 +101,11 @@
     // itself, keep it visible — else moving onto it to grab it would hide it.
     const over = document.elementFromPoint(e.clientX, e.clientY);
     if (over?.closest?.('.nabu-drag-handle')) return;
-    const b = blockElAt(e.clientX, e.clientY, null);
+    const b = hoveredBlock(e.clientX, e.clientY);
     if (!b) { handle.visible = false; return; }
     const r = b.getBoundingClientRect();
-    // Flush against the block's left edge — no dead gap to cross when grabbing.
-    handle = { visible: true, top: r.top + 2, left: r.left - HANDLE_W, blockId: b.getAttribute('data-block-id') };
+    // Flush against the block's left edge — no dead gap to cross when grabbing; centred on the block's first line.
+    handle = { visible: true, top: handleTop(b), left: r.left - HANDLE_W, blockId: b.getAttribute('data-block-id') };
   }
 
   /** @param {PointerEvent} e */

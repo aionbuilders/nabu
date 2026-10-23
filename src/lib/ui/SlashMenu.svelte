@@ -1,46 +1,37 @@
 <script>
   import { SlashMenuController, DEFAULT_SLASH_COMMANDS } from './slash-menu.svelte.js';
+  import { anchorRect, placeNear, clipBounds, isOutside } from './anchor.js';
   /** @type {{ engine: import('../blocks/nabu.svelte.js').Nabu, commands?: import('./slash-menu.svelte.js').SlashCommand[] }} */
   let { engine, commands = DEFAULT_SLASH_COMMANDS } = $props();
   const ctrl = new SlashMenuController(engine, commands);
   /** @type {HTMLElement | null} */
   let menuEl = $state(null);
   /** Viewport coordinates (the menu is `position: fixed`): anchored by `top` (below the caret) or `bottom` (above it). */
-  /** @type {{ top: number | null, bottom: number | null, left: number, maxHeight: number }} */
+  /** @type {import('./anchor.js').Placement} */
   let pos = $state({ top: 0, bottom: null, left: 0, maxHeight: 320 });
 
-  const GAP = 4;      // space between the caret line and the menu
-  const MARGIN = 8;   // minimum distance to the viewport edges
+  /**
+   * `true` while the caret line is entirely scrolled out of its visible scroll container (or off the viewport): the menu is then
+   * NOT rendered (it would float over the page at a stale anchor) — the slash command stays pending, and the menu is back as
+   * soon as the caret line is visible again. Keyboard navigation (arrows / Enter / Tab) is not captured while it is hidden.
+   */
+  let hidden = $state(false);
+
   const MAX_HEIGHT = 320; // keep in sync with the CSS max-height
   const MIN_HEIGHT = 100; // never squash the menu below this, even in a tiny viewport
 
   // Reset the highlighted item whenever the query changes.
   $effect(() => { ctrl.query; ctrl.selectedIndex = 0; });
 
-  // Place the popup next to the caret, in viewport coordinates, inside the viewport:
-  // below the caret line, or flipped above it when there is no room below; clamped horizontally.
+  // Place the popup next to the caret, in viewport coordinates, inside the viewport (shared rules: anchor.js):
+  // below the caret line, or flipped above it when there is no room below; clamped horizontally. Hidden while the caret
+  // line is out of the visible area of its scroll container.
   function place() {
-    const range = engine.selection?.firstRange;
-    if (!range || !menuEl) return;
-    let r = range.getBoundingClientRect();
-    // A collapsed range on an empty line can report an all-zero rect: fall back to the block.
-    if (!r.width && !r.height) {
-      const el = ctrl.match?.block?.element;
-      if (el) r = el.getBoundingClientRect();
-    }
-    const vw = document.documentElement.clientWidth;
-    const vh = document.documentElement.clientHeight;
-    // Natural height: full content (scrollHeight) + borders, capped like the CSS max-height.
-    const full = menuEl.scrollHeight + (menuEl.offsetHeight - menuEl.clientHeight);
-    const natural = Math.min(MAX_HEIGHT, full);
-    const spaceBelow = vh - r.bottom - GAP - MARGIN;
-    const spaceAbove = r.top - GAP - MARGIN;
-    const left = Math.max(MARGIN, Math.min(r.left, vw - MARGIN - menuEl.offsetWidth));
-    if (natural <= spaceBelow || spaceBelow >= spaceAbove) {
-      pos = { top: r.bottom + GAP, bottom: null, left, maxHeight: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, spaceBelow)) };
-    } else {
-      pos = { top: null, bottom: vh - r.top + GAP, left, maxHeight: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, spaceAbove)) };
-    }
+    const rect = anchorRect(engine, ctrl.match?.block?.element ?? null);
+    if (!rect) return;
+    hidden = isOutside(rect, clipBounds(engine.selection?.firstRange?.commonAncestorContainer ?? ctrl.match?.block?.element));
+    if (hidden || !menuEl) return;
+    pos = placeNear(rect, menuEl, { maxHeight: MAX_HEIGHT, minHeight: MIN_HEIGHT });
   }
 
   $effect(() => {
@@ -51,7 +42,7 @@
     place();
   });
 
-  // The menu is fixed: follow the caret when the page scrolls / resizes while it is open.
+  // The menu is fixed: follow the caret when the page (or a scroll container) scrolls / resizes while it is open.
   $effect(() => {
     if (!ctrl.open) return;
     /** @param {Event} e */
@@ -70,6 +61,7 @@
     if (!ctrl.open) return;
     /** @param {KeyboardEvent} ev */
     const onKey = (ev) => {
+      if (hidden && ev.key !== 'Escape') return; // not on screen: the keys keep their normal meaning
       if (ev.key === 'ArrowDown') { ev.preventDefault(); ev.stopImmediatePropagation(); ctrl.moveSelection(1); }
       else if (ev.key === 'ArrowUp') { ev.preventDefault(); ev.stopImmediatePropagation(); ctrl.moveSelection(-1); }
       else if (ev.key === 'Enter' || ev.key === 'Tab') { ev.preventDefault(); ev.stopImmediatePropagation(); ctrl.select(); }
@@ -80,7 +72,7 @@
   });
 </script>
 
-{#if ctrl.open}
+{#if ctrl.open && !hidden}
 <div
   bind:this={menuEl}
   class="nabu-slash"

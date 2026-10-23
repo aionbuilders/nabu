@@ -1,9 +1,21 @@
 <script>
+    import { clipBounds, isOutside, placeAround } from './anchor.js';
+
     /**
      * Floating mark toolbar. Appears above the current (non-collapsed) selection.
      * Positioned with `position: fixed` in viewport coordinates, so it works
      * inside any layout (scrollable containers, overflow: hidden ancestors…)
      * without a positioning wrapper.
+     *
+     * Placement (see `anchor.js`): centred above the selection; flipped BELOW it when there is no room above, measured against
+     * the part of the viewport where the selection is visible (the viewport intersected with its scroll containers, so a
+     * selection at the top edge of a scroll container gets the toolbar below it); clamped horizontally inside the viewport
+     * (and the container); repositioned on scroll (window or any scrollable ancestor) and resize; hidden while the selection
+     * is entirely scrolled out of view.
+     *
+     * A host with a sticky / fixed header over the top of the viewport (outside any scroll container) can reserve room for it
+     * with the CSS custom property `--nb-toolbar-inset-top` (a length in px, set on the toolbar or any ancestor, e.g.
+     * `--nb-toolbar-inset-top: 56px`): the toolbar never goes above that line, and a selection hidden under it hides the toolbar.
      *
      * @type {{ engine: import('../blocks/nabu.svelte.js').Nabu }}
      */
@@ -12,40 +24,61 @@
     /** @type {HTMLElement | null} */
     let toolbarEl = $state(null);
     let visible = $state(false);
+    /** A drag is in progress (dragging the selected text, a file…): the toolbar steps aside, it would sit over the drop targets. */
+    let dragging = $state(false);
     let position = $state({ top: 0, left: 0 });
+    let lastTop = 0;
+    let lastLeft = 0;
 
-    $effect(() => {
+    /** Recompute visibility + placement from the current selection (viewport coordinates; no reactive state is read). */
+    function update() {
         const sel = engine.selection;
-        if (!sel || sel.isCollapsed) {
-            visible = false;
-            return;
-        }
+        if (!sel || sel.isCollapsed) { visible = false; return; }
         // Position above the selection via Range.getBoundingClientRect()
         const range = sel.firstRange;
-        if (!range) {
-            visible = false;
-            return;
-        }
+        if (!range) { visible = false; return; }
         const rect = range.getBoundingClientRect();
         // Collapsed-looking rect (e.g. selection cleared mid-update) → hide
-        if (rect.width === 0 && rect.height === 0) {
-            visible = false;
-            return;
-        }
+        if (rect.width === 0 && rect.height === 0) { visible = false; return; }
+        const inset = toolbarEl ? parseFloat(getComputedStyle(toolbarEl).getPropertyValue('--nb-toolbar-inset-top')) : 0;
+        const bounds = clipBounds(range.commonAncestorContainer, { topInset: Number.isFinite(inset) ? inset : 0 });
+        // scrolled out of its container / off the viewport: nothing to point at
+        if (isOutside(rect, bounds)) { visible = false; return; }
         visible = true;
-        // Viewport coordinates — the toolbar is position: fixed
-        position = {
-            top: Math.max(8, rect.top - (toolbarEl?.offsetHeight ?? 40) - 8),
-            left: rect.left + rect.width / 2,
+        if (!toolbarEl) return; // placed once mounted (this effect re-runs on `toolbarEl`)
+        const { top, left } = placeAround(rect, toolbarEl, bounds);
+        if (top !== lastTop || left !== lastLeft) { lastTop = top; lastLeft = left; position = { top, left }; }
+    }
+
+    $effect(() => {
+        toolbarEl; // re-place once the element is mounted (its size is needed)
+        update();
+    });
+
+    // The toolbar is fixed: follow the selection when the window or any scroll container scrolls, and on resize.
+    $effect(() => {
+        if (!visible) return;
+        /** @param {Event} e */
+        const onScroll = (e) => { if (!toolbarEl || !(e.target instanceof Node) || !toolbarEl.contains(e.target)) update(); };
+        window.addEventListener('scroll', onScroll, true);
+        window.addEventListener('resize', update);
+        return () => {
+            window.removeEventListener('scroll', onScroll, true);
+            window.removeEventListener('resize', update);
         };
     });
 
+    /** The drop is handled after this listener (capture phase): the toolbar comes back only once it is done, else it would cover the drop point. */
+    function endDrag() {
+        setTimeout(() => { dragging = false; update(); }, 0);
+    }
+
     const marks = [
-        { key: 'bold',          label: 'B',  title: 'Bold (Ctrl+B)' },
-        { key: 'italic',        label: 'I',  title: 'Italic (Ctrl+I)' },
-        { key: 'underline',     label: 'U',  title: 'Underline (Ctrl+U)' },
-        { key: 'code',          label: '<>', title: 'Code (Ctrl+E)' },
-        { key: 'strikethrough', label: 'S',  title: 'Strikethrough (Ctrl+Shift+X)' },
+        { key: 'bold',          label: 'B',  name: 'Bold',          title: 'Bold (Ctrl+B)' },
+        { key: 'italic',        label: 'I',  name: 'Italic',        title: 'Italic (Ctrl+I)' },
+        { key: 'underline',     label: 'U',  name: 'Underline',     title: 'Underline (Ctrl+U)' },
+        { key: 'code',          label: '<>', name: 'Code',          title: 'Code (Ctrl+E)' },
+        { key: 'strikethrough', label: 'S',  name: 'Strikethrough', title: 'Strikethrough (Ctrl+Shift+X)' },
     ];
 
     function toggleLink() {
@@ -58,18 +91,30 @@
     }
 </script>
 
-{#if visible}
+<svelte:window
+    ondragstart={() => { dragging = true; }}
+    ondragend={() => { dragging = false; update(); }}
+    ondropcapture={endDrag}
+    onpointerdowncapture={() => { dragging = false; }}
+/>
+
+{#if visible && !dragging}
 <div
     bind:this={toolbarEl}
     class="nabu-toolbar"
+    role="toolbar"
+    aria-label="Text formatting"
     style="top: {position.top}px; left: {position.left}px;"
     contenteditable="false"
     data-nabu-ui
 >
     {#each marks as mark}
         <button
+            type="button"
             class="nabu-toolbar-btn"
             class:active={engine.isMarkActive(mark.key)}
+            aria-pressed={engine.isMarkActive(mark.key)}
+            aria-label={mark.name}
             title={mark.title}
             onmousedown={(e) => { e.preventDefault(); engine.exec('mark:toggle', { mark: mark.key }); }}
         >
@@ -77,8 +122,11 @@
         </button>
     {/each}
     <button
+        type="button"
         class="nabu-toolbar-btn"
         class:active={engine.isMarkActive('link')}
+        aria-pressed={engine.isMarkActive('link')}
+        aria-label="Link"
         title="Link"
         onmousedown={(e) => { e.preventDefault(); toggleLink(); }}
     >
@@ -90,7 +138,6 @@
 <style>
 .nabu-toolbar {
     position: fixed;
-    transform: translateX(-50%);
     display: flex;
     gap: 2px;
     padding: 4px;
