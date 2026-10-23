@@ -12,19 +12,19 @@
  * asserted or annotated, never silently ignored); a test is left FAILING only for clearly broken behaviour. Several
  * scenarios gather every violation they find in `problems` so a single failure reports all the numbers.
  *
- *  DragHandle   1 position per block type  2 drag a paragraph  3a-3d nested list / toggle / region marker / invalid drops
+ *  DragHandle   1 position per block type  2 drag a paragraph  3a-3d nested list / toggle / region container / invalid drops
  *               4 scroll while hovering  5 keyboard alternative (WCAG 2.5.7)  6 control semantics
  *  FloatingToolbar  7 position / flip  8 follows the selection on scroll  9 multi-block  10 click & keyboard  11 hide / flicker
  *  SlashMenu / Invite / Chooser   12 slash in a scroll container  13 invite + chooser in a scroll container
  *  Theming      14 contrast (light, dark OS scheme, dark attribute)  15 --nb-* custom properties
- *  Region seam  16 long labels, narrow viewport (375px)
+ *  Region seam  16 long titles WRAP (an editable title is never truncated), narrow viewport (375px)
  */
 
 import { test, expect, type Page } from '@playwright/test';
 import { gotoEditor, press, flushRender } from './helpers/editor.js';
 import { undo, redo } from './helpers/keyboard.js';
 import { buildTree, Tog, Pp, tree, type TreeSpec } from './helpers/blocks.js';
-import { outline, violations, allText, caret, focusAt, focusEmpty, selectRange, collectErrors } from './helpers/model.js';
+import { outline, violations, allText, caret, focusAt, focusEnd, focusEmpty, selectRange, collectErrors } from './helpers/model.js';
 import {
   PNG_DATA_URL, rect, mustRect, selectionRect, caretRect, pointOfText, dblclickWord, wheelScroll, dragWithHandle, contrast,
   blockBox, hoverPoint, dropPoint, type Box,
@@ -46,18 +46,8 @@ const fmt = (b: Box | null) => (b ? `[x=${b.left.toFixed(1)} y=${b.top.toFixed(1
 const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol;
 const overlap = (a: Box, b: Box) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
 
-/** One-line outline of the root blocks, markers included: `p(text)`, `R:type(title)`, `ul[…]`. */
-async function rootsWithRegions(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const n = (window as any).nabu;
-    return n.tree.roots().map((node: any) => {
-      const type = node.data.get('type');
-      if (type === 'region') return `R:${node.data.get('regionType')}(${node.data.get('fields')?.get('title') ?? ''})`;
-      const t = node.data.get('text');
-      return `${type === 'paragraph' ? 'p' : type}(${t ? t.toString() : ''})${(node.children() ?? []).length ? '{…}' : ''}`;
-    }).join(' ; ');
-  });
-}
+/** One-line outline of the whole tree, regions nested: `p(text)`, `R:type(title){ … }`, `ul[…]` (see helpers/model.ts). */
+const rootsWithRegions = (page: Page): Promise<string> => outline(page);
 const seamLabels = (page: Page) => page.evaluate(() => [...document.querySelectorAll('.nabu-region-label')].map((e) => e.textContent?.trim() ?? ''));
 
 /** Scroll the window (or `scroller`) programmatically so the block holding `needle` has its top at `topPx` (test set-up, not the behaviour under test). */
@@ -113,7 +103,7 @@ test.describe('DragHandle', () => {
       ['toggle header', '[data-block-type="toggle"]'],
       ['image', '[data-block-type="image"]'],
       ['divider', '[data-block-type="divider"]'],
-      ['region marker', '[data-block-type="region"]'],
+      ['region title', '[data-block-type="region"]'],
     ];
     const problems: string[] = [];
     for (const [name, sel] of cases) {
@@ -256,34 +246,28 @@ test.describe('DragHandle', () => {
     expect(await violations(page)).toEqual([]);
   });
 
-  test('3c · dragging a REGION SEAM moves the WHOLE region (marker + content + sub-regions) in one undo step; labels renumber', async ({ page }) => {
-    // DECIDED (P-81): a seam is the handle of its region. `Block#dragRange()` (RegionBlock: the blocks of the region) is what the
-    // handle moves; the drop rules are unchanged (a range cannot land inside itself).
+  test('3c · dragging a REGION (by its title handle) moves the WHOLE container (title + body + sub-regions) in one undo step; labels renumber', async ({ page }) => {
+    // A region is a container block (ADR 018): the handle of its title moves the block, i.e. its whole subtree (a tree move; no range to compute).
     await gotoEditor(page);
     await buildTree(page, [
       Pp('Pre'),
-      { type: 'region', props: { regionType: 'section-1', title: 'One' } },
-      Pp('a'),
-      { type: 'region', props: { regionType: 'section-2', title: 'Two' } },
-      Pp('b'),
-      { type: 'region', props: { regionType: 'section-1', title: 'Three' } },
-      Pp('c'),
+      { type: 'region', props: { regionType: 'section-1', title: 'One' }, children: [Pp('a'), { type: 'region', props: { regionType: 'section-2', title: 'Two' }, children: [Pp('b')] }] },
+      { type: 'region', props: { regionType: 'section-1', title: 'Three' }, children: [Pp('c')] },
       Pp('d'),
     ]);
     const original = await rootsWithRegions(page);
-    expect(original).toBe('p(Pre) ; R:section-1(One) ; p(a) ; R:section-2(Two) ; p(b) ; R:section-1(Three) ; p(c) ; p(d)');
+    expect(original).toBe('p(Pre) ; R:section-1(One){ p(a) ; R:section-2(Two){ p(b) } } ; R:section-1(Three){ p(c) } ; p(d)');
     const labelsBefore = await seamLabels(page);
+    expect(labelsBefore).toEqual(['1.', '1.1', '2.']);
     const textBefore = (await allText(page)).sort();
 
-    // region "One" (with its content "a" and its sub-region "Two" + "b") → below the last paragraph "d"
+    // region "One" (with its paragraph "a" and its sub-region "Two" + "b") → below the last paragraph "d"
     await focusAt(page, 'Pre', 1); // the caret is in the editor first, like a user who was typing: the handle never takes the focus
     const seam = await mustRect(page, '[data-block-type="region"]', 0);
     await dragWithHandle(page, hoverPoint(seam), dropPoint(await blockBox(page, 'paragraph', 'd'), 'after'));
-    await expect.poll(() => rootsWithRegions(page)).toBe('p(Pre) ; R:section-1(Three) ; p(c) ; p(d) ; R:section-1(One) ; p(a) ; R:section-2(Two) ; p(b)');
+    await expect.poll(() => rootsWithRegions(page)).toBe('p(Pre) ; R:section-1(Three){ p(c) } ; p(d) ; R:section-1(One){ p(a) ; R:section-2(Two){ p(b) } }');
     const labelsAfter = await seamLabels(page);
-    expect(labelsAfter.length).toBe(labelsBefore.length);
-    expect(labelsAfter.every((l) => l.length > 0), 'every seam keeps a non-empty label').toBe(true);
-    expect(labelsAfter, 'the seams are renumbered: Three is now the first section, One the second').not.toEqual(labelsBefore);
+    expect(labelsAfter, 'the seams are renumbered: Three is now the first section, One the second (and its sub-section 2.1)').toEqual(['1.', '2.', '2.1']);
     expect(await violations(page), 'tree + DOM invariants after moving a region').toEqual([]);
     expect((await allText(page)).sort()).toEqual(textBefore);
 
@@ -292,20 +276,21 @@ test.describe('DragHandle', () => {
     expect(await seamLabels(page)).toEqual(labelsBefore);
     expect(await violations(page)).toEqual([]);
 
-    // a SUB-region ("Two" + "b") dragged below "c" nests into "Three"; dropping a region onto a block of its own range does nothing
+    // a SUB-region ("Two" + "b") dragged below "c" nests into "Three" (the body of its drop target's parent)
     const two = await mustRect(page, '[data-block-type="region"]', 1);
     await dragWithHandle(page, hoverPoint(two), dropPoint(await blockBox(page, 'paragraph', 'c'), 'after'));
-    await expect.poll(() => rootsWithRegions(page)).toBe('p(Pre) ; R:section-1(One) ; p(a) ; R:section-1(Three) ; p(c) ; R:section-2(Two) ; p(b) ; p(d)');
+    await expect.poll(() => rootsWithRegions(page)).toBe('p(Pre) ; R:section-1(One){ p(a) } ; R:section-1(Three){ p(c) ; R:section-2(Two){ p(b) } } ; p(d)');
     expect(await violations(page)).toEqual([]);
+    // dropping a region onto a block of its own body does nothing (cycle guard)
     const afterSub = await rootsWithRegions(page);
     const one = await mustRect(page, '[data-block-type="region"]', 0);
     await dragWithHandle(page, hoverPoint(one), dropPoint(await blockBox(page, 'paragraph', 'a'), 'after'));
     await page.waitForTimeout(200);
-    expect(await rootsWithRegions(page), 'a region cannot be dropped inside its own range').toBe(afterSub);
+    expect(await rootsWithRegions(page), 'a region cannot be dropped inside its own body').toBe(afterSub);
     expect(await violations(page)).toEqual([]);
   });
 
-  test('3d · dropping a paragraph or a region marker ONTO a list item keeps the tree valid (no foreign block inside a list)', async ({ page }) => {
+  test('3d · dropping a paragraph or a region ONTO a list item keeps the tree valid (no foreign block inside a list)', async ({ page }) => {
     await gotoEditor(page);
     await buildTree(page, [
       Pp('Mov'),
@@ -319,12 +304,12 @@ test.describe('DragHandle', () => {
     await expect.poll(() => outline(page)).toMatch(/ul\[x\] ; p\(Mov\) ; ul\[y\]$/);
     expect(await violations(page), 'paragraph dropped inside a list').toEqual([]);
 
-    // region marker → lower half of "y"
+    // region → lower half of "y"
     const seam = await mustRect(page, '[data-block-type="region"]', 0);
     await dragWithHandle(page, hoverPoint(seam), dropPoint(await blockBox(page, 'list-item', 'y'), 'after'));
     await page.waitForTimeout(200);
-    expect(await violations(page), 'region marker dropped on a list item').toEqual([]);
-    expect(await page.evaluate(() => (window as any).nabu.tree.roots().some((r: any) => r.data.get('type') === 'region')), 'the marker survived at the root').toBe(true);
+    expect(await violations(page), 'region dropped on a list item').toEqual([]);
+    expect(await page.evaluate(() => (window as any).nabu.tree.roots().some((r: any) => r.data.get('type') === 'region')), 'the region survived at the root').toBe(true);
     expect((await allText(page)).sort()).toEqual(textBefore);
   });
 
@@ -791,15 +776,21 @@ test('15 · the documented --nb-* custom properties set on the host really resty
     '--nb-bg-surface-hover': 'rgb(70, 80, 90)', '--nb-accent': 'rgb(255, 0, 255)', '--nb-text-placeholder': 'rgb(255, 128, 0)',
     '--nb-command-bg': 'rgb(5, 6, 7)', '--nb-command-text': 'rgb(250, 250, 0)', '--nb-command-active': 'rgb(90, 91, 92)',
     '--nb-command-radius': '13px', '--nb-region-color': 'rgb(0, 128, 128)', '--nb-region-rule-color': 'rgb(128, 0, 128)', '--nb-region-label-size': '21px',
+    '--nb-region-title-color': 'rgb(200, 100, 0)', '--nb-region-gap': '17px', '--nb-region-margin': '33px 0 5px',
   };
   await gotoEditor(page, { seed: 'regions', commands: 'demo', options: { placeholders: { show: 'empty' } }, vars: Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(';') });
   const css = (sel: string, prop: string, value: string, opts: { pseudo?: string } = {}) =>
     expect.configure({ soft: true }).poll(() => page.evaluate(([s, p, ps]) => { const el = document.querySelector(s as string); return el ? getComputedStyle(el, (ps as string) || null).getPropertyValue(p as string).trim() : '<missing>'; }, [sel, prop, opts.pseudo ?? ''] as [string, string, string]),
       { message: `${sel} ${opts.pseudo ?? ''} ${prop}` }).toBe(value);
 
-  // region seam (+ placeholder on an empty block)
-  await css('.nabu-region', 'color', 'rgb(0, 128, 128)');
-  await css('.nabu-region', 'font-size', '21px');
+  // region seam = the header of the region container: label prefix, editable title, hairline (+ placeholder on an empty block)
+  await css('.nabu-region-seam', 'color', 'rgb(0, 128, 128)');
+  await css('.nabu-region-seam', 'font-size', '21px');
+  await css('.nabu-region-seam', 'column-gap', '17px');
+  await css('.nabu-region-seam', 'margin-top', '33px');
+  await css('.nabu-region-seam', 'margin-bottom', '5px');
+  await css('.nabu-region-label', 'color', 'rgb(0, 128, 128)'); // the prefix inherits the seam colour
+  await css('.nabu-region-title', 'color', 'rgb(200, 100, 0)');
   await css('.nabu-region-rule', 'border-top-color', 'rgb(128, 0, 128)');
   await page.evaluate(async () => { const n = (window as any).nabu; n.insert('paragraph', {}, null, n.children.length); await n.commit(); });
   await flushRender(page);
@@ -869,14 +860,18 @@ const LONG_TOKEN = 'X'.repeat(160);
 async function buildSeams(page: Page) {
   await buildTree(page, [
     Pp('Alpha beta gamma delta epsilon'),
-    { type: 'region', props: { regionType: 'section-1', title: LONG_WORDS } },
-    Pp('Between the seams'),
-    { type: 'region', props: { regionType: 'section-2', title: LONG_TOKEN } },
-    Pp('After the seams'),
+    { type: 'region', props: { regionType: 'section-1', title: LONG_WORDS }, children: [
+      Pp('Between the seams'),
+      { type: 'region', props: { regionType: 'section-2', title: LONG_TOKEN }, children: [Pp('After the seams')] },
+    ] },
   ] as TreeSpec[]);
 }
 
-/** Layout invariants of every seam; returns the violations. */
+/**
+ * Layout invariants of every seam (ADR 018 §3.6): the title is EDITABLE, so it WRAPS (never truncated with an ellipsis); the label
+ * prefix stays on one line; the hairline keeps a minimal width (2em); nothing overflows the editor horizontally or overlaps a block.
+ * Returns the violations.
+ */
 async function seamProblems(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const out: string[] = [];
@@ -884,22 +879,32 @@ async function seamProblems(page: Page): Promise<string[]> {
     if (document.documentElement.scrollWidth > vw) out.push(`page scrolls horizontally: scrollWidth ${document.documentElement.scrollWidth} > ${vw}`);
     const editor = document.querySelector('.nabu-editor')!.getBoundingClientRect();
     const blocks = [...document.querySelectorAll('.nabu-editor [data-block-id]')];
-    document.querySelectorAll('.nabu-region').forEach((seam, i) => {
+    document.querySelectorAll('.nabu-region-seam').forEach((seam, i) => {
       const s = seam.getBoundingClientRect();
       const label = seam.querySelector('.nabu-region-label') as HTMLElement;
+      const title = seam.querySelector('.nabu-region-title') as HTMLElement;
       const rule = seam.querySelector('.nabu-region-rule') as HTMLElement;
       const l = label.getBoundingClientRect();
+      const t = title.getBoundingClientRect();
       const r = rule.getBoundingClientRect();
-      const tag = `seam#${i} (${label.textContent!.trim().slice(0, 18)}…)`;
-      if (s.height > 24) out.push(`${tag}: wrapped / tall (h=${s.height.toFixed(1)})`);
+      const fs = parseFloat(getComputedStyle(seam).fontSize);
+      const tag = `seam#${i} (${label.textContent!.trim()} ${title.textContent!.trim().slice(0, 12)}…)`;
+      // nothing overflows the editor (or the seam) horizontally
       if (s.right > editor.right + 0.5 || s.left < editor.left - 0.5) out.push(`${tag}: overflows the editor horizontally [${s.left.toFixed(0)}..${s.right.toFixed(0)}] vs [${editor.left.toFixed(0)}..${editor.right.toFixed(0)}]`);
-      if (l.right > s.right + 0.5) out.push(`${tag}: label overflows the seam (label.right=${l.right.toFixed(1)} > ${s.right.toFixed(1)})`);
-      if (l.width > s.width * 0.7 + 1) out.push(`${tag}: label wider than 70% of the seam (${l.width.toFixed(0)} / ${s.width.toFixed(0)})`);
-      if (r.width < Math.min(40, s.width * 0.2)) out.push(`${tag}: the hairline collapsed to ${r.width.toFixed(0)}px`);
-      if (getComputedStyle(label).textOverflow !== 'ellipsis') out.push(`${tag}: label has no ellipsis`);
-      if (label.scrollWidth <= label.clientWidth) out.push(`${tag}: expected the very long label to be truncated`);
+      if (t.right > s.right + 0.5 || l.right > s.right + 0.5 || r.right > s.right + 0.5) out.push(`${tag}: label / title / hairline stick out of the seam (right edges ${l.right.toFixed(1)} / ${t.right.toFixed(1)} / ${r.right.toFixed(1)} > ${s.right.toFixed(1)})`);
+      if (title.scrollWidth > title.clientWidth + 1) out.push(`${tag}: the title overflows its own box (scrollWidth ${title.scrollWidth} > ${title.clientWidth})`);
+      // the label prefix stays on ONE line, whole
+      if (l.height > fs * 1.6) out.push(`${tag}: the label prefix wraps (h=${l.height.toFixed(1)}, font ${fs}px)`);
+      if (getComputedStyle(label).whiteSpace !== 'nowrap') out.push(`${tag}: label is not white-space: nowrap`);
+      if (label.scrollWidth > label.clientWidth + 1) out.push(`${tag}: the label prefix is clipped`);
+      // the title WRAPS: several lines, no ellipsis
+      if (t.height < fs * 1.6 * 1.5) out.push(`${tag}: the very long title did not wrap (h=${t.height.toFixed(1)}, font ${fs}px)`);
+      if (getComputedStyle(title).textOverflow === 'ellipsis') out.push(`${tag}: the title is truncated with an ellipsis`);
+      // the hairline stays visible with a minimal width (2em)
+      if (r.width < 2 * fs - 0.5) out.push(`${tag}: the hairline collapsed to ${r.width.toFixed(1)}px (< 2em = ${2 * fs}px)`);
+      if (getComputedStyle(rule).borderTopWidth !== '1px' || getComputedStyle(rule).display === 'none') out.push(`${tag}: the hairline is not drawn`);
       for (const b of blocks) {
-        if (b === seam || seam.contains(b) || b.contains(seam)) continue;
+        if (seam.contains(b) || b.contains(seam)) continue;
         const o = b.getBoundingClientRect();
         if (Math.min(s.right, o.right) - Math.max(s.left, o.left) > 0.5 && Math.min(s.bottom, o.bottom) - Math.max(s.top, o.top) > 0.5) out.push(`${tag}: overlaps block "${(b.textContent ?? '').slice(0, 20)}"`);
       }
@@ -909,15 +914,24 @@ async function seamProblems(page: Page): Promise<string[]> {
 }
 
 test.describe('Region seam', () => {
-  test('16a · very long region titles are truncated with an ellipsis: no overflow, no overlap, hairline kept', async ({ page }) => {
+  test('16a · very long region titles WRAP (an editable title is not truncated): no overflow, no overlap, label on one line, hairline kept', async ({ page }) => {
     await gotoEditor(page);
     await buildSeams(page);
     expect(await seamProblems(page)).toEqual([]);
-    // the full title stays available to assistive tech (it is the heading's text), even when truncated visually
-    const full = await page.locator('[data-block-type="region"]').nth(1).evaluate((el) => ({ text: el.textContent?.trim().length ?? 0, title: el.getAttribute('title') }));
-    note('CURRENT', `the seam label span carries the full title as a tooltip (title attribute on the heading itself = ${JSON.stringify(full.title)}); textContent length ${full.text}`);
-    expect(full.text).toBeGreaterThan(150);
+    // the whole title is the text of the heading (nothing is cut), and it stays editable
+    const info = await page.locator('.nabu-region-title').evaluateAll((els) => els.map((el) => [el.textContent, (el as HTMLElement).isContentEditable]));
+    expect(info).toEqual([[LONG_WORDS, true], [LONG_TOKEN, true]]);
+    note('CURRENT', 'a long title wraps over several lines in the seam (flex row: label | title | hairline of at least 2em); nothing is clipped, so no tooltip is needed');
     expect(await violations(page)).toEqual([]);
+  });
+
+  test('16a2 · a long title stays editable where it wraps: typing at its end extends it, the layout invariants hold', async ({ page }) => {
+    await gotoEditor(page);
+    await buildSeams(page);
+    await focusEnd(page, LONG_WORDS);
+    await page.keyboard.type(' and more');
+    await expect(page.locator('.nabu-region-title').first()).toHaveText(LONG_WORDS + ' and more');
+    expect(await seamProblems(page)).toEqual([]);
   });
 
   test.describe('narrow viewport (375px)', () => {

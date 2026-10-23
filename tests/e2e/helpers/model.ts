@@ -6,7 +6,12 @@
  * Outline notation (see `outline`):
  *   list      -> `ul[...]` | `ol[...]` | `todo[...]`   (items separated by ", ")
  *   list-item -> `text` | `text > ul[...]`              (todo items: `[ ] text` / `[x] text`; empty text: `∅`)
- *   other     -> `p(text)` / `heading(text)` ...
+ *   other     -> `p(text)` / `heading(text)` ...           (a container's children: `toggle(T){p(a) p(b)}`, space-separated)
+ *   region    -> `R:<regionType>(<title>)` + `{ <body> }` when it has children, the body blocks joined with " ; ".
+ *                A region is a container (ADR 018): its title is the header text, its body any blocks and sub-regions, so
+ *                regions nest readably:
+ *                  `R:section-1(The ferryman){ p(Opening) ; R:section-2(The bank){ p(Text of the bank.) } ; R:section-2(The water){ p(Text) } }`
+ *                An empty title is `∅` (`R:section-1(∅){ p(x) }`), like an empty text; an empty region has no braces.
  *   roots are joined with " ; "
  */
 
@@ -87,6 +92,10 @@ export async function outline(page: Page): Promise<string> {
         const sub = kids.length ? ' > ' + kids.map((k) => walk(k, node)).join(' ') : '';
         return `${mark}${text(node)}${sub}`;
       }
+      if (type === 'region') {
+        const body = kids.length ? `{ ${kids.map((k) => walk(k, node)).join(' ; ')} }` : '';
+        return `R:${node.data.get('regionType')}(${text(node)})${body}`;
+      }
       const short = type === 'paragraph' ? 'p' : type;
       return `${short}(${text(node)})${kids.length ? '{' + kids.map((k) => walk(k, node)).join(' ') + '}' : ''}`;
     };
@@ -95,7 +104,8 @@ export async function outline(page: Page): Promise<string> {
 }
 
 /**
- * Structural invariants of the model tree + render: region markers only at the root (and childless), list-items only under lists, lists only at root or under
+ * Structural invariants of the model tree + render: regions only at the root or directly in a region body (ADR 018), a declared
+ * sub-region strictly deeper than its region parent, list-items only under lists, lists only at root or under
  * a list-item, no empty list, every Loro node has a live Block instance whose `children` match the tree, and
  * the DOM holds exactly one `[data-block-id]` element per node. Returns the list of violations (empty = valid).
  */
@@ -119,9 +129,17 @@ export async function violations(page: Page): Promise<string[]> {
       // directly inside another list.
       if (type === 'list' && ptype === 'list') out.push(`list ${id} has parent ${ptype}`);
       if (type === 'list' && kids.length === 0) out.push(`empty list ${id}`);
-      // ADR 016: a region marker is a void block that lives at the ROOT only (the normalizer hoists it out of any container)
-      if (type === 'region' && parent) out.push(`region marker ${id} has parent ${ptype}`);
-      if (type === 'region' && kids.length) out.push(`region marker ${id} has children`);
+      // ADR 018 §3.1 / §3.2: a region is a container that lives at the root or directly in the body of another region (the
+      // normalizer hoists it out of any list / toggle…), and a declared sub-region is strictly deeper than its region parent.
+      if (type === 'region' && parent && ptype !== 'region') out.push(`region ${id} has parent ${ptype}`);
+      if (type === 'region' && parent && ptype === 'region') {
+        const types = n.regions?.config?.types;
+        const level = types?.get(node.data.get('regionType'))?.level;
+        const parentLevel = types?.get(parent.data.get('regionType'))?.level;
+        if (level !== undefined && parentLevel !== undefined && level <= parentLevel) {
+          out.push(`region ${id} (${node.data.get('regionType')}) is not deeper than its parent region (${parent.data.get('regionType')})`);
+        }
+      }
       if (type === 'list') for (const k of kids) if (k.data.get('type') !== 'list-item') out.push(`list ${id} has child ${k.data.get('type')}`);
       if (type === 'list-item') {
         const lists = kids.filter((k) => k.data.get('type') === 'list');

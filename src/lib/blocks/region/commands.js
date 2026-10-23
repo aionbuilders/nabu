@@ -1,20 +1,24 @@
 /**
- * The commands of the regions extension (ADR 016 §3.4, lot 2; ADR 017). Each is also an action of the bus:
+ * The commands of the regions extension (ADR 016 §3.4, ADR 018 §3.5 / §3.9; ADR 017). Each is also an action of the bus:
  * `nabu.exec('region:split')`. Default keys are few on purpose, the arrow-key chords being mostly taken by the OS / browser:
  *
- *  | id                      | default keys                | confirmation | what                                                    |
- *  |-------------------------|-----------------------------|--------------|---------------------------------------------------------|
- *  | `region:split`          | `Mod-Enter`                 | none         | cut here: a new region of the same type starts          |
- *  | `region:merge-previous` | `Backspace`, `Shift-Backspace` | hold      | at the start of a region: remove its marker             |
- *  | `region:merge-next`     | `Delete`                    | hold         | at the end of a region: remove the NEXT marker          |
- *  | `region:insert`         | -                           | -            | `{ type?, at?: 'after' \| 'before', title?, fields? }`   |
- *  | `region:move`           | -                           | -            | `{ direction: 'up' \| 'down' }`                          |
- *  | `region:move-up`/`move-down` | -                      | -            | the same, direction built in (what a `keymap` binds)    |
- *  | `region:promote`/`demote` | -                         | -            | the type of the level above / below                     |
- *  | `region:next`/`prev`/`parent` | -                     | -            | caret to the first text position of the target region   |
+ *  | id                      | default keys                   | confirmation | what                                                          |
+ *  |-------------------------|--------------------------------|--------------|---------------------------------------------------------------|
+ *  | `region:split`          | `Mod-Enter`                    | none         | cut here: a new region of the same type takes the rest        |
+ *  | `region:merge-previous` | `Backspace`, `Shift-Backspace` | hold         | at the start of a region: join the previous one / dissolve    |
+ *  | `region:merge-next`     | `Delete`                       | hold         | at the end of a region: the same for the NEXT region          |
+ *  | `region:exit`           | `Mod-Shift-Enter`              | none         | a paragraph right after the region, one level up              |
+ *  | `region:demote`         | `Tab` (in a title only)        | none         | becomes the last sub-region of the previous sibling           |
+ *  | `region:promote`        | `Shift-Tab` (in a title only)  | none         | leaves its parent; the following siblings follow it           |
+ *  | `region:unwrap`         | -                              | -            | the title becomes a paragraph, the body stays                 |
+ *  | `region:insert`         | -                              | -            | `{ type?, at?: 'after' \| 'before', title?, fields? }`         |
+ *  | `region:move`           | -                              | -            | `{ direction: 'up' \| 'down' }`                                |
+ *  | `region:move-up`/`move-down` | -                         | -            | the same, direction built in (what a `keymap` binds)          |
+ *  | `region:next`/`prev`/`parent` | -                        | -            | caret to the first text position of the target region's body  |
  *
  * `exec` runs a command directly (no confirmation: the hold is a KEYBOARD concern, ADR 017 §3.4a). `exec` data can carry
- * `{ region }` (a `Region`, its marker block or its marker id) to act on that region instead of the one holding the caret.
+ * `{ region }` (a `Region`, its block or its id) to act on that region instead of the one holding the caret. For
+ * `region:merge-next` it is the region that absorbs: its NEXT SIBLING region is merged (or dissolved) into it.
  * Integrators bind the keyless commands with the `keymap` option of the editor.
  *
  * @import { Nabu } from "../nabu.svelte.js";
@@ -24,10 +28,14 @@
 
 import { Regions } from "./regions.svelte.js";
 import { createMessages } from "./messages.js";
-import { canMergeIntoPrevious, goToRegion, insertNearRegion, moveRegion, removeMarker, retypeRegion, splitRegion, toRegion } from "./actions.js";
+import { mergePlan, neighbourOf } from "./facts.js";
+import { demoteRegion, exitRegion, goToRegion, insertNearRegion, mergeRegion, moveRegion, promoteRegion, splitRegion, toRegion, unwrapRegion } from "./actions.js";
 
 /** @param {Region | null | undefined} region @returns {string} the title, else the label, else the type: never empty */
 const nameOf = (region) => region?.title || region?.label || region?.type || '';
+
+/** Whether `data` names a region to act on. @param {any} data */
+const givesRegion = (data) => !!data && typeof data === 'object' && 'region' in data;
 
 /**
  * The region a command acts on: `data.region` when given, else the one holding the caret.
@@ -35,7 +43,22 @@ const nameOf = (region) => region?.title || region?.label || region?.type || '';
  * @returns {Region | null}
  */
 function targetRegion(ctx, data) {
-    return data && typeof data === 'object' && 'region' in data ? toRegion(ctx.nabu, data.region) : (ctx.region ?? null);
+    return givesRegion(data) ? toRegion(ctx.nabu, data.region) : (ctx.region ?? null);
+}
+
+/**
+ * The region `region:merge-next` merges: with `data.region` the next SIBLING region of that one; else the region whose title
+ * is right after the caret (the `nextBoundaryRegion` fact), else the next sibling region of the caret's region.
+ * @param {CommandContext & Record<string, any>} ctx @param {any} data
+ * @returns {Region | null}
+ */
+function nextMergeTarget(ctx, data) {
+    const base = givesRegion(data) ? toRegion(ctx.nabu, data.region) : null;
+    if (givesRegion(data) && !base) return null;
+    if (!base && ctx.nextBoundaryRegion) return ctx.nextBoundaryRegion;
+    const from = base ?? ctx.region;
+    const sibling = from ? neighbourOf(ctx.nabu, from.block, 1) : null;
+    return sibling?.type === 'region' ? Regions.get(ctx.nabu).of(sibling) : null;
 }
 
 /**
@@ -58,57 +81,95 @@ export function createRegionCommands(messages) {
     /** @param {Region | null | undefined} r */
     const params = (r) => ({ title: nameOf(r), label: r?.label ?? '', type: r?.type ?? '' });
 
-    /** @param {Region | null} previous */
-    const mergePreviousLabel = (previous) => (previous ? text('mergePrevious', params(previous)) : text('mergePreamble'));
-
-    /** Whether the plain Backspace at the start of this block is the region's business (a heading etc. converts to a paragraph first). @param {CommandContext & Record<string, any>} ctx */
-    const protectsStart = (ctx) => !!ctx.block && ctx.block.type === ctx.nabu.defaultBlockType && ctx.isCollapsed && ctx.atStartOfRegion && canMergeIntoPrevious(ctx.nabu, ctx.region);
+    /**
+     * The label of a protected merge of `region`: it names the region it joins, or the region that is dissolved.
+     * @param {Nabu} nabu @param {Region | null | undefined} region @param {'mergePrevious' | 'mergeNext'} joined
+     */
+    const mergeLabel = (nabu, region, joined) => {
+        const plan = region ? mergePlan(nabu, region) : null;
+        if (plan?.kind === 'merge') return joined === 'mergePrevious' ? text('mergePrevious', params(plan.into)) : text('mergeNext', params(region));
+        return text(region && plan ? 'dissolve' : joined, params(region));
+    };
 
     return {
         'region:split': {
             label: () => text('split'),
             keys: ['Mod-Enter'],
-            when: (/** @type {any} */ ctx) => ctx.isCollapsed && ctx.inRootTextBlock && ctx.block.splitsOnEnter !== false,
+            when: (/** @type {any} */ ctx) => ctx.isCollapsed && ctx.inBodyTextBlock && ctx.block.splitsOnEnter !== false,
             run: (nabu, ctx) => splitRegion(nabu, ctx),
         },
 
         'region:insert': {
             label: (/** @type {any} */ ctx) => text('insert', { type: ctx.region?.type ?? '' }),
-            run: (nabu, ctx, data) => insertNearRegion(nabu, targetRegion(/** @type {any} */ (ctx), data), data ?? {}),
+            run: (nabu, ctx, data) => insertNearRegion(nabu, targetRegion(/** @type {any} */ (ctx), data), data ?? {}, ctx.block),
         },
 
         'region:merge-previous': {
-            label: (/** @type {any} */ ctx) => mergePreviousLabel(ctx.previousRegion),
+            label: (/** @type {any} */ ctx) => mergeLabel(ctx.nabu, ctx.region, 'mergePrevious'),
             keys: ['Backspace', 'Shift-Backspace'],
-            when: (/** @type {any} */ ctx) => protectsStart(ctx),
+            when: (/** @type {any} */ ctx) => ctx.isCollapsed && ctx.atStartOfRegion && !!ctx.region && !!mergePlan(ctx.nabu, ctx.region),
             confirm: {
                 strategy: 'hold',
-                target: (/** @type {any} */ ctx) => ctx.region?.marker,
+                target: (/** @type {any} */ ctx) => ctx.region?.block,
                 messages: { hold: (/** @type {{ keys: string, label: string }} */ p) => text('hold', p) },
             },
             run: (nabu, ctx, data) => {
                 const region = targetRegion(/** @type {any} */ (ctx), data);
-                if (!region || !canMergeIntoPrevious(nabu, region)) return false;
-                return removeMarker(nabu, region, caretOf(ctx));
+                return region ? mergeRegion(nabu, region, caretOf(ctx)) : false;
             },
         },
 
         'region:merge-next': {
-            label: (/** @type {any} */ ctx) => text('mergeNext', params(ctx.nextRegion)),
+            label: (/** @type {any} */ ctx) => mergeLabel(ctx.nabu, ctx.nextBoundaryRegion, 'mergeNext'),
             keys: ['Delete'],
-            when: (/** @type {any} */ ctx) => ctx.isCollapsed && ctx.atEndOfRegion && !!ctx.nextRegion,
+            when: (/** @type {any} */ ctx) => ctx.isCollapsed && ctx.atEndOfRegion && !!ctx.nextBoundaryRegion && !!mergePlan(ctx.nabu, ctx.nextBoundaryRegion),
             confirm: {
                 strategy: 'hold',
-                target: (/** @type {any} */ ctx) => ctx.nextRegion?.marker,
+                target: (/** @type {any} */ ctx) => ctx.nextBoundaryRegion?.block,
                 messages: { hold: (/** @type {{ keys: string, label: string }} */ p) => text('hold', p) },
             },
             run: (nabu, ctx, data) => {
-                // With `data.region`: the region that absorbs ITS next region (the one after it disappears as a seam).
-                const given = data && typeof data === 'object' && 'region' in data;
-                const base = given ? toRegion(nabu, data.region) : null;
-                const next = given ? (base ? Regions.get(nabu).next(base) : null) : /** @type {any} */ (ctx).nextRegion;
-                if (!next) return false;
-                return removeMarker(nabu, next, caretOf(ctx));
+                const next = nextMergeTarget(/** @type {any} */ (ctx), data);
+                return next ? mergeRegion(nabu, next, caretOf(ctx)) : false;
+            },
+        },
+
+        'region:exit': {
+            label: () => text('exit'),
+            keys: ['Mod-Shift-Enter'],
+            when: (/** @type {any} */ ctx) => ctx.isCollapsed && !!ctx.region,
+            run: (nabu, ctx, data) => {
+                const region = targetRegion(/** @type {any} */ (ctx), data);
+                return region ? exitRegion(nabu, region, ctx.block) : false;
+            },
+        },
+
+        'region:demote': {
+            label: () => text('demote'),
+            keys: ['Tab'],
+            when: (/** @type {any} */ ctx) => ctx.inTitle,
+            run: (nabu, ctx, data) => {
+                const region = targetRegion(/** @type {any} */ (ctx), data);
+                return region ? demoteRegion(nabu, region, caretOf(ctx)) : false;
+            },
+        },
+
+        'region:promote': {
+            label: () => text('promote'),
+            keys: ['Shift-Tab'],
+            when: (/** @type {any} */ ctx) => ctx.inTitle,
+            run: (nabu, ctx, data) => {
+                const region = targetRegion(/** @type {any} */ (ctx), data);
+                return region ? promoteRegion(nabu, region, caretOf(ctx)) : false;
+            },
+        },
+
+        'region:unwrap': {
+            label: () => text('unwrap'),
+            when: (/** @type {any} */ ctx) => !!ctx.region,
+            run: (nabu, ctx, data) => {
+                const region = targetRegion(/** @type {any} */ (ctx), data);
+                return region ? unwrapRegion(nabu, region, caretOf(ctx)) : false;
             },
         },
 
@@ -142,30 +203,12 @@ export function createRegionCommands(messages) {
             },
         },
 
-        'region:promote': {
-            label: () => text('promote'),
-            when: (/** @type {any} */ ctx) => !!ctx.region,
-            run: (nabu, ctx, data) => {
-                const region = targetRegion(/** @type {any} */ (ctx), data);
-                return region ? retypeRegion(nabu, region, 'promote') : false;
-            },
-        },
-
-        'region:demote': {
-            label: () => text('demote'),
-            when: (/** @type {any} */ ctx) => !!ctx.region,
-            run: (nabu, ctx, data) => {
-                const region = targetRegion(/** @type {any} */ (ctx), data);
-                return region ? retypeRegion(nabu, region, 'demote') : false;
-            },
-        },
-
         'region:next': {
             label: () => text('next'),
             run: (nabu, ctx, data) => {
                 const regions = Regions.get(nabu);
-                const base = targetRegion(/** @type {any} */ (ctx), data);
-                const target = base ? regions.next(base) : (regions.list[0] ?? null);
+                const base = givesRegion(data) ? toRegion(nabu, data.region) : null;
+                const target = givesRegion(data) ? (base ? regions.next(base) : null) : /** @type {any} */ (ctx).nextRegion;
                 return target ? goToRegion(nabu, target) : false;
             },
         },

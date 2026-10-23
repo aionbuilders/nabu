@@ -375,8 +375,7 @@ export class Block {
     /**
      * The blocks that travel together when THIS block is dragged by its handle (P-81): this block and anything the drag must carry
      * with it, in document order, all in the same parent. The default is the block alone (a container carries its own children:
-     * they are its tree children). A block whose "extent" is not its subtree overrides it (a region marker carries the blocks of its
-     * region). The drop rules are the same for any range: it cannot land inside itself.
+     * they are its tree children). A block whose "extent" is not its subtree overrides it (an extension may widen the range). The drop rules are the same for any range: it cannot land inside itself.
      * @returns {Block[]}
      */
     dragRange() { return [this]; }

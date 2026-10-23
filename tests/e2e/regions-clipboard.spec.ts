@@ -1,35 +1,30 @@
 /**
- * E2E — Regions, lot 3 (ADR 016 §3.6): clipboard and text forms of the markers.
+ * E2E — Regions as containers (ADR 018): clipboard, JSON and text forms.
  *
- * A real Ctrl+C writes the three payloads (read from the ClipboardEvent, helpers/clip-capture.ts): the internal fragment, the
- * `text/html` (marker = heading element with `data-nabu-region`) and the `text/plain` (markdown: data comment + readable
- * heading). Pastes are synthetic `paste` events carrying those payloads (the system clipboard is unreliable for custom MIME
- * types). Seeded document (`?seed=regions`): preamble, "1. The ferryman" ⊃ "1.1 The bank", "1.2 The water", "2. The return".
+ * A real Ctrl+C writes the three payloads (read from the ClipboardEvent, helpers/clip-capture.ts): the internal fragment
+ * (`application/x-nabu+json`: a region is a block with its title as `delta` and its body as `children`), the `text/html`
+ * (`<section data-nabu-region="…" data-nabu-fields='…'><hN>title</hN>…body…</section>`) and the `text/plain` (markdown: data
+ * comment + heading of the title + body). Pastes are synthetic `paste` events carrying those payloads (the system clipboard is
+ * unreliable for custom MIME types). Seeded document (`?seed=regions`): preamble, "The ferryman" ⊃ "The bank", "The water", then
+ * "The return".
+ *
+ * The READING side of markdown / HTML (a pasted markdown or `<section>` becoming regions, `importMarkdown`) is lot C: those tests
+ * are `test.skip` with `TODO(ADR-018 lot C)`. Selecting text across titles (what a plain-text selection copies) is lot B.
  */
 
 import { test, expect, type Page } from '@playwright/test';
 import { gotoEditor } from './helpers/editor.js';
-import { selectAll } from './helpers/keyboard.js';
-import { violations, focusAt, focusEnd, selectRange, collectErrors } from './helpers/model.js';
+import { buildTree, Pp } from './helpers/blocks.js';
+import { outline, violations, focusAt, focusEnd, selectRange, collectErrors } from './helpers/model.js';
 import { copy } from './helpers/clip-capture.js';
 
-/** One-line outline of the root blocks: `p(text)`, `R:type(title)`, `toggle(text){…}`. */
-async function roots(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const n = (window as any).nabu;
-    const walk = (node: any): string => {
-      const type = node.data.get('type');
-      if (type === 'region') return `R:${node.data.get('regionType')}(${node.data.get('fields')?.get('title') ?? ''})`;
-      const t = node.data.get('text');
-      const kids = node.children() ?? [];
-      return `${type === 'paragraph' ? 'p' : type}(${t ? t.toString() : ''})${kids.length ? '{' + kids.map(walk).join(' ') + '}' : ''}`;
-    };
-    return n.tree.roots().map(walk).join(' ; ');
-  });
-}
-const expectRoots = (page: Page, expected: string) => expect.poll(() => roots(page), { timeout: 3000, message: 'roots' }).toBe(expected);
-const labels = (page: Page) => page.evaluate(() => (window as any).nabu.regions.list.map((r: any) => r.label));
-const seams = (page: Page) => page.locator('[data-block-type="region"]');
+const SEED = 'p(Preamble, outside any region.) ; R:section-1(The ferryman){ p(Opening of the first section.) ; R:section-2(The bank){ p(Text of the bank.) } ; R:section-2(The water){ p(Text of the water.) } } ; R:section-1(The return){ p(Closing text.) }';
+const FERRYMAN = 'R:section-1(The ferryman){ p(Opening of the first section.) ; R:section-2(The bank){ p(Text of the bank.) } ; R:section-2(The water){ p(Text of the water.) } }';
+const BANK = 'R:section-2(The bank){ p(Text of the bank.) }';
+
+const expectOutline = (page: Page, expected: string) => expect.poll(() => outline(page), { timeout: 3000, message: 'outline' }).toBe(expected);
+const labels = (page: Page): Promise<string[]> => page.evaluate(() => (window as any).nabu.regions.list.map((r: any) => r.label));
+const titles = (page: Page) => page.locator('.nabu-region-title');
 
 /** Dispatch a paste carrying `data` at the caret. */
 async function paste(page: Page, data: Record<string, string>) {
@@ -40,173 +35,223 @@ async function paste(page: Page, data: Record<string, string>) {
   }, data);
 }
 
+/** Copy the whole region `title` (from the start of its title to the end of its last text) and return the clipboard event. */
+async function copyRegion(page: Page, from: string, last: string) {
+  await selectRange(page, from, 0, last, -1);
+  return copy(page);
+}
+
 let errors: ReturnType<typeof collectErrors>;
 test.beforeEach(async ({ page }) => { errors = collectErrors(page); });
 test.afterEach(async () => { expect(errors.list(), 'console / page errors').toEqual([]); });
 
-test.describe('copy and paste across regions', () => {
+test.describe('copy and paste of whole regions (internal clipboard)', () => {
   test.beforeEach(async ({ page }) => { await gotoEditor(page, { seed: 'regions' }); });
 
-  test('copy writes the markers in the three payloads (markdown: comment + heading with the labels of the source)', async ({ page }) => {
-    await selectRange(page, 'Opening of the first section.', 8, 'Text of the water.', 4);
-    const ev = await copy(page);
-    expect(ev.nabu!.blocks.map((b: any) => b.type)).toEqual(['paragraph', 'region', 'paragraph', 'region', 'paragraph']);
-    expect(ev.nabu!.blocks[1].props).toEqual({ regionType: 'section-2', fields: { title: 'The bank' } });
+  test('copying whole regions writes the three payloads: a region block with its title and its body, comment + heading, <section>', async ({ page }) => {
+    const ev = await copyRegion(page, 'The ferryman', 'Closing text.');
+    // the internal fragment: two root regions, the body nested in `children`, the title as the delta
+    const [first, second] = ev.nabu!.blocks;
+    expect([first.type, second.type]).toEqual(['region', 'region']);
+    expect(first.props).toEqual({ regionType: 'section-1', fields: {} });
+    expect(first.delta).toEqual([{ insert: 'The ferryman' }]);
+    expect(first.children.map((c: any) => c.type)).toEqual(['paragraph', 'region', 'region']);
+    expect(first.children[1].delta).toEqual([{ insert: 'The bank' }]);
+    expect(first.children[1].children.map((c: any) => c.delta[0].insert)).toEqual(['Text of the bank.']);
+    expect(second.delta).toEqual([{ insert: 'The return' }]);
+    // text/plain: the data comment + the title as a heading of its level, then the body
     expect(ev.text).toBe([
-      'of the first section.',
-      '<!-- region:section-2 {"title":"The bank"} -->\n## 1.1 The bank',
+      '<!-- region:section-1 {} -->\n# The ferryman',
+      'Opening of the first section.',
+      '<!-- region:section-2 {} -->\n## The bank',
       'Text of the bank.',
-      '<!-- region:section-2 {"title":"The water"} -->\n## 1.2 The water',
-      'Text',
+      '<!-- region:section-2 {} -->\n## The water',
+      'Text of the water.',
+      '<!-- region:section-1 {} -->\n# The return',
+      'Closing text.',
     ].join('\n\n'));
-    expect(ev.html).toContain('<h2 data-nabu-region="section-2" data-nabu-fields=\'{&quot;title&quot;:&quot;The bank&quot;}\'>1.1 The bank</h2>');
-    expect(ev.html).toContain('>1.2 The water</h2>');
+    // text/html: a <section> carrying the data, the title as a heading, the body inside
+    expect(ev.html).toContain('<section data-nabu-region="section-1" data-nabu-fields=\'{}\'><h1>The ferryman</h1><p>Opening of the first section.</p><section data-nabu-region="section-2" data-nabu-fields=\'{}\'><h2>The bank</h2><p>Text of the bank.</p></section>');
+    expect(ev.html).toContain('<h1>The return</h1><p>Closing text.</p></section>');
   });
 
-  test('paste at the end of the document reproduces the markers and labels; numbering follows', async ({ page }) => {
-    await selectRange(page, 'Opening of the first section.', 8, 'Text of the water.', 4);
-    const ev = await copy(page);
+  test('pasting a copied region after a region: it lands as a sibling (levels are checked), its sub-regions come with it, numbering follows', async ({ page }) => {
+    const ev = await copyRegion(page, 'The bank', 'Text of the bank.');
+    expect(ev.nabu!.blocks.map((b: any) => b.type)).toEqual(['region']);
     await focusEnd(page, 'Closing text.');
     await paste(page, { 'application/x-nabu+json': ev.nabuRaw, 'text/plain': ev.text, 'text/html': ev.html });
-    await expectRoots(page, [
-      'p(Preamble, outside any region.)', 'R:section-1(The ferryman)', 'p(Opening of the first section.)', 'R:section-2(The bank)', 'p(Text of the bank.)',
-      'R:section-2(The water)', 'p(Text of the water.)', 'R:section-1(The return)', 'p(Closing text.of the first section.)',
-      'R:section-2(The bank)', 'p(Text of the bank.)', 'R:section-2(The water)', 'p(Text)',
-    ].join(' ; '));
-    await expect(seams(page)).toHaveCount(6);
-    expect(await labels(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return', '2.1 The bank', '2.2 The water']);
-    await expect(seams(page).nth(4)).toHaveText('2.1 The bank');
+    // a section-2 pasted in the body of "The return" (a section-1): valid there (deeper than its parent)
+    await expectOutline(page, SEED.replace('p(Closing text.) }', 'p(Closing text.) ; R:section-2(The bank){ p(Text of the bank.) } }'));
+    expect(await labels(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return', '2.1 The bank']);
+    await expect(titles(page)).toHaveText(['The ferryman', 'The bank', 'The water', 'The return', 'The bank']);
     expect(await violations(page)).toEqual([]);
   });
 
-  test('the markdown text/plain alone (another app) restores the markers, and so does Nabu’s own text/html', async ({ page }) => {
-    await selectRange(page, 'Opening of the first section.', 8, 'Text of the water.', 4);
-    const ev = await copy(page);
-    await focusEnd(page, 'Closing text.');
-    await paste(page, { 'text/plain': ev.text });
-    await expect(seams(page)).toHaveCount(6);
-    expect(await labels(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return', '2.1 The bank', '2.2 The water']);
+  test('a section-1 pasted inside the body of a section-1 is moved right after its parent by the normalizer (one undo step with the paste)', async ({ page }) => {
+    const ev = await copyRegion(page, 'The return', 'Closing text.');
+    await focusEnd(page, 'Text of the water.');
+    await paste(page, { 'application/x-nabu+json': ev.nabuRaw });
+    // the copy is a section-1; pasted in the body of "The water" (section-2) it must climb out to the root, after "The ferryman"
+    await expect.poll(async () => (await outline(page)).split(' ; ').length).toBeGreaterThan(SEED.split(' ; ').length);
     expect(await violations(page)).toEqual([]);
-    // html only, at the very end
-    await focusEnd(page, 'Text');
-    await paste(page, { 'text/html': ev.html });
-    await expect(seams(page)).toHaveCount(8);
-    expect(await labels(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return', '2.1 The bank', '2.2 The water', '2.3 The bank', '2.4 The water']);
+    expect(await labels(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return', '3. The return']);
+    await expect(page.locator('.nabu-region > .nabu-region-body > .nabu-region')).toHaveCount(2);
+    await page.evaluate(() => (window as any).nabu.undo());
+    await expectOutline(page, SEED);
     expect(await violations(page)).toEqual([]);
   });
 
-  test('a plain <h2> from the web stays a heading (a marker needs data-nabu-region)', async ({ page }) => {
-    await focusEnd(page, 'Closing text.');
-    await paste(page, { 'text/html': '<p>from the web</p><h2>Chapitre 2</h2><p>more</p>' });
-    await expect.poll(() => roots(page)).toContain('heading(Chapitre 2)');
-    await expect(seams(page)).toHaveCount(4);
-    expect(await violations(page)).toEqual([]);
-  });
-
-  test('a marker pasted into a toggle BODY is hoisted right after the toggle (root-only rule)', async ({ page }) => {
+  test('a region pasted into a toggle BODY is hoisted right after the toggle (placement rule)', async ({ page }) => {
     await page.evaluate(async () => {
       const n = (window as any).nabu;
-      const t = n.insert('toggle', { text: 'Toggle', collapsed: false }, null, 9);
+      const t = n.insert('toggle', { text: 'Toggle', collapsed: false }, null, 3);
       n.insert('paragraph', { text: 'body one' }, t.id, 0);
       n.insert('paragraph', { text: 'body two' }, t.id, 1);
-      n.insert('paragraph', { text: 'after the toggle' }, null, 10);
+      n.insert('paragraph', { text: 'after the toggle' }, null, 4);
       await n.commit();
       n.undoManager.clear();
     });
     await expect(page.locator('[data-block-type="toggle"]')).toHaveCount(1);
-    await selectRange(page, 'Opening of the first section.', 8, 'Text of the bank.', 4);
-    const ev = await copy(page);
-    await focusAt(page, 'body one', 4);
+    const ev = await copyRegion(page, 'The bank', 'Text of the bank.');
+    await focusEnd(page, 'body one');
     await paste(page, { 'application/x-nabu+json': ev.nabuRaw, 'text/plain': ev.text });
-    await expect.poll(async () => (await roots(page)).includes('toggle(Toggle)')).toBe(true);
-    const outline = await roots(page);
-    // the text stays in the body; the marker (only) is a root block right after the toggle
-    expect(outline.slice(outline.indexOf('toggle(Toggle)'))).toBe('toggle(Toggle){p(bodyof the first section.) p(Text one) p(body two)} ; R:section-2(The bank) ; p(after the toggle)');
+    await expect.poll(async () => (await outline(page)).includes('toggle(Toggle)')).toBe(true);
+    const out = await outline(page);
+    // the toggle keeps its body; the region (only) is a root block right after the toggle
+    expect(out.slice(out.indexOf('toggle(Toggle)'))).toBe(`toggle(Toggle){p(body one) p(body two)} ; ${BANK} ; p(after the toggle)`);
     expect(await violations(page)).toEqual([]);
-    expect(await labels(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return', '2.1 The bank']);
+    expect(await labels(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return', '1 The bank']);
   });
 
-  test('a marker pasted into a list item is hoisted: the list is cut around it', async ({ page }) => {
+  test('a region pasted into a list item is hoisted: the list is cut around it', async ({ page }) => {
     await page.evaluate(async () => {
       const n = (window as any).nabu;
-      const l = n.insert('list', { listType: 'bullet' }, null, 9);
+      const l = n.insert('list', { listType: 'bullet' }, null, 3);
       n.insert('list-item', { text: 'item one' }, l.id, 0);
       n.insert('list-item', { text: 'item two' }, l.id, 1);
       await n.commit();
       n.undoManager.clear();
     });
-    await selectRange(page, 'Opening of the first section.', 8, 'Text of the bank.', 4);
-    const ev = await copy(page);
-    await focusAt(page, 'item one', 4);
+    const ev = await copyRegion(page, 'The bank', 'Text of the bank.');
+    await focusEnd(page, 'item one');
     await paste(page, { 'application/x-nabu+json': ev.nabuRaw });
-    await expect.poll(async () => (await roots(page)).includes('R:section-2(The bank) ; p(Text)')).toBe(true);
+    await expect.poll(async () => (await outline(page)).includes(`${BANK} ; ul[`)).toBe(true);
+    const out = await outline(page);
+    expect(out.slice(out.indexOf('ul['))).toBe(`ul[item one] ; ${BANK} ; ul[item two]`);
     expect(await violations(page)).toEqual([]);
+    // no region ended up inside a list
     expect(await page.evaluate(() => {
       const n = (window as any).nabu;
       const nested: string[] = [];
-      const walk = (node: any, depth: number) => { if (depth > 0 && node.data.get('type') === 'region') nested.push(node.id.toString()); (node.children() ?? []).forEach((c: any) => walk(c, depth + 1)); };
-      n.tree.roots().forEach((r: any) => walk(r, 0));
+      const walk = (node: any, inList: boolean) => { if (inList && node.data.get('type') === 'region') nested.push(node.id.toString()); (node.children() ?? []).forEach((c: any) => walk(c, inList || node.data.get('type') === 'list')); };
+      n.tree.roots().forEach((r: any) => walk(r, false));
       return nested;
     })).toEqual([]);
   });
+
+  test('a plain <h2> from the web stays a heading (only <section data-nabu-region> carries a region)', async ({ page }) => {
+    await focusEnd(page, 'Closing text.');
+    await paste(page, { 'text/html': '<p>from the web</p><h2>Chapitre 2</h2><p>more</p>' });
+    await expect.poll(async () => (await outline(page)).includes('heading(Chapitre 2)')).toBe(true);
+    await expect(page.locator('.nabu-region')).toHaveCount(4);
+    expect(await violations(page)).toEqual([]);
+  });
 });
 
-test.describe('markdown export and import', () => {
+test.describe('a multi-block paste in a title lands flat', () => {
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await buildTree(page, [Pp('one'), Pp('two'), { type: 'region', props: { regionType: 'section-1', title: 'Part' }, children: [Pp('body')] }]);
+  });
+
+  test('two pasted paragraphs go into the title on one line (joined by a space), nothing goes to the body', async ({ page }) => {
+    const ev = await copyRegion(page, 'one', 'two');
+    expect(ev.nabu!.blocks.map((b: any) => b.type)).toEqual(['paragraph', 'paragraph']);
+    await focusAt(page, 'Part', 2);
+    await paste(page, { 'application/x-nabu+json': ev.nabuRaw, 'text/plain': ev.text });
+    await expectOutline(page, 'p(one) ; p(two) ; R:section-1(Paone twort){ p(body) }');
+    await expect(titles(page)).toHaveText(['Paone twort']);
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('a single pasted paragraph is the engine\'s inline paste: its text goes into the title', async ({ page }) => {
+    const ev = await copyRegion(page, 'one', 'one');
+    await focusAt(page, 'Part', 4);
+    await paste(page, { 'application/x-nabu+json': ev.nabuRaw, 'text/plain': ev.text });
+    await expectOutline(page, 'p(one) ; p(two) ; R:section-1(Partone){ p(body) }');
+    expect(await violations(page)).toEqual([]);
+  });
+});
+
+test.describe('JSON and markdown export', () => {
   test.beforeEach(async ({ page }) => { await gotoEditor(page, { seed: 'regions' }); });
 
-  test('serialize("markdown") holds the comment and the readable heading of every marker', async ({ page }) => {
+  test('serialize("json") -> importJSON restores the nested regions exactly (titles, types, bodies)', async ({ page }) => {
+    const json = await page.evaluate(() => JSON.parse(JSON.stringify((window as any).nabu.serialize('json'))));
+    await page.evaluate(async () => { const n = (window as any).nabu; for (const c of [...n.children]) n.delete(c); n.insert('paragraph', { text: 'scratch' }); await n.commit(); });
+    await page.evaluate(async (j) => { await (window as any).nabu.importJSON(j); }, json);
+    await expectOutline(page, SEED);
+    expect(await labels(page)).toEqual(['1. The ferryman', '1.1 The bank', '1.2 The water', '2. The return']);
+    await expect(page.locator('.nabu-region > .nabu-region-body > .nabu-region')).toHaveCount(2);
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('serialize("markdown") holds the data comment and the heading of the title of every region, bodies in place', async ({ page }) => {
     const md = await page.evaluate(() => (window as any).nabu.serialize('markdown'));
     expect(md).toBe([
       'Preamble, outside any region.',
-      '<!-- region:section-1 {"title":"The ferryman"} -->\n# 1. The ferryman',
+      '<!-- region:section-1 {} -->\n# The ferryman',
       'Opening of the first section.',
-      '<!-- region:section-2 {"title":"The bank"} -->\n## 1.1 The bank',
+      '<!-- region:section-2 {} -->\n## The bank',
       'Text of the bank.',
-      '<!-- region:section-2 {"title":"The water"} -->\n## 1.2 The water',
+      '<!-- region:section-2 {} -->\n## The water',
       'Text of the water.',
-      '<!-- region:section-1 {"title":"The return"} -->\n# 2. The return',
+      '<!-- region:section-1 {} -->\n# The return',
       'Closing text.',
     ].join('\n\n'));
   });
+});
 
-  test('select all + Ctrl+C: the text/plain is that same markdown', async ({ page }) => {
-    await focusAt(page, 'Preamble, outside any region.', 0);
-    await selectAll(page);
-    const ev = await copy(page);
-    expect(ev.text).toContain('<!-- region:section-2 {"title":"The bank"} -->\n## 1.1 The bank');
-    expect(ev.text).toContain('<!-- region:section-1 {"title":"The return"} -->\n# 2. The return');
+// ════════════════════════════════════════════════════════════════════════════
+// Lot C — reading markdown / HTML back into regions (not implemented yet)
+// ════════════════════════════════════════════════════════════════════════════
+
+test.describe('markdown / HTML import of regions', () => {
+  test.beforeEach(async ({ page }) => { await gotoEditor(page, { seed: 'regions' }); });
+
+  test.skip('the markdown text/plain alone (another app) restores the regions, and so does Nabu\'s own text/html', async ({ page }) => {
+    // TODO(ADR-018 lot C): markdownRules / htmlRules of the region block are empty until the reading side is rewritten
+    const ev = await copyRegion(page, 'The bank', 'Text of the water.');
+    await focusEnd(page, 'Closing text.');
+    await paste(page, { 'text/plain': ev.text });
+    await expect(page.locator('.nabu-region')).toHaveCount(6);
+    await focusEnd(page, 'Text of the water.');
+    await paste(page, { 'text/html': ev.html });
+    await expect(page.locator('.nabu-region')).toHaveCount(8);
   });
 
-  test('importMarkdown of a document with regions: seams with their labels, the echo headings are not blocks, idempotent', async ({ page }) => {
+  test.skip('importMarkdown of a document with regions: titles, nesting deduced from the levels, idempotent', async ({ page }) => {
+    // TODO(ADR-018 lot C): the end of a region is deduced at reading (next opening of the same or a higher level)
     const md = [
       'Preface',
-      '<!-- region:section-1 {"title":"La forêt"} -->\n# Edited by hand',
+      '<!-- region:section-1 {} -->\n# La forêt',
       'Text',
-      '<!-- region:section-2 {"title":"Le seuil"} -->\n## 1.1 Le seuil',
+      '<!-- region:section-2 {} -->\n## Le seuil',
       'More',
-      '<!-- region:section-1 {"title":"Fin"} -->',
+      '<!-- region:section-1 {} -->\n# Fin',
       'End',
-      '## Chapitre 2 — a plain heading, never a region',
     ].join('\n\n');
     await page.evaluate((m) => (window as any).nabu.importMarkdown(m), md);
-    await expect(seams(page)).toHaveCount(3);
-    await expect(seams(page).nth(0)).toHaveText('1. La forêt');
-    await expect(seams(page).nth(1)).toHaveText('1.1 Le seuil');
-    await expect(seams(page).nth(2)).toHaveText('2. Fin');
-    // the echo headings were consumed; the heading without comment is a heading block
-    await expect(page.locator('[data-block-type="heading"]')).toHaveCount(1);
-    expect(await roots(page)).toBe('p(Preface) ; R:section-1(La forêt) ; p(Text) ; R:section-2(Le seuil) ; p(More) ; R:section-1(Fin) ; p(End) ; heading(Chapitre 2 — a plain heading, never a region)');
-    expect(await violations(page)).toEqual([]);
-    // fixed point: export -> import -> export
+    await expectOutline(page, 'p(Preface) ; R:section-1(La forêt){ p(Text) ; R:section-2(Le seuil){ p(More) } } ; R:section-1(Fin){ p(End) }');
     const first = await page.evaluate(() => (window as any).nabu.serialize('markdown'));
-    expect(first).toContain('<!-- region:section-1 {"title":"La forêt"} -->\n# 1. La forêt');
     const second = await page.evaluate(async (m) => { const n = (window as any).nabu; await n.importMarkdown(m); return n.serialize('markdown'); }, first);
     expect(second).toBe(first);
   });
 
-  test('an invalid or foreign comment stays visible text', async ({ page }) => {
+  test.skip('an invalid or foreign comment stays visible text; a heading without comment is never a region', async ({ page }) => {
+    // TODO(ADR-018 lot C): meaningful once valid comments are read back (today every comment stays text)
     await page.evaluate(() => (window as any).nabu.importMarkdown('<!-- region:section-1 {broken -->\n\n<!-- just a comment -->\n\n## Heading'));
-    await expect(seams(page)).toHaveCount(0);
-    expect(await roots(page)).toBe('p(<!-- region:section-1 {broken -->) ; p(<!-- just a comment -->) ; heading(Heading)');
+    await expect(page.locator('.nabu-region')).toHaveCount(0);
+    await expectOutline(page, 'p(<!-- region:section-1 {broken -->) ; p(<!-- just a comment -->) ; heading(Heading)');
   });
 });

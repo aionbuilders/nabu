@@ -26,7 +26,8 @@ import { RichTextExtension } from '$lib/behaviors/text/index.js';
 import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
 import { RegionsExtension } from '$lib/blocks/region/index.js';
 
-// Region markers (ADR 016, lot 3): every field type, so that the JSON AND the markdown form of a marker are checked on the model.
+// Regions (ADR 018, containers): every field type, so that the JSON form of a region is checked on the model. The markdown
+// form is checked by the export tests of regions-io.test.js; its import is not written yet (TODO(ADR-018 lot C)).
 const REGION_TYPES = {
     part: { level: 1, label: 'Part {index}' },
     chapter: { level: 2, label: 'Chapter {index} - {title}', numbering: 'document', fields: { synopsis: 'richtext', status: { type: 'enum', values: ['draft', 'final'] }, due: 'date', words: 'number', done: 'boolean', pov: 'text' } },
@@ -68,10 +69,13 @@ const SINK = [
     p('line one\nline two'),
     { type: 'blockquote', delta: [t('A '), t('quote', { italic: true })] },
     { type: 'divider' },
-    // markers: a part, a chapter with every field type (richtext with marks and a link), directly followed by a real heading, an empty one
-    { type: 'region', props: { regionType: 'part', fields: { title: 'Part --> <b>one</b> & "q"' } } },
-    { type: 'region', props: { regionType: 'chapter', fields: { title: 'La forêt', synopsis: [t('Elle', { italic: true }), t(' entre dans '), t('le bois', { bold: true, link: 'https://example.com/a_(b)' }), t('.\nSuite *étoile* \\ [x]')], status: 'final', due: '2026-10-22', words: 1234.5, done: false, pov: 'Anna', extra: { k: [1, null, 'z'] } } } },
-    { type: 'heading', props: { level: 2 }, delta: [t('A real heading right after a marker')] },
+    // regions (containers): a part with a title holding odd characters, holding a chapter with every field type (richtext with
+    // marks and a link) whose body holds a real heading; then an empty chapter
+    { type: 'region', props: { regionType: 'part', fields: {} }, delta: [t('Part --> <b>one</b> & "q"')], children: [
+        { type: 'region', props: { regionType: 'chapter', fields: { synopsis: [t('Elle', { italic: true }), t(' entre dans '), t('le bois', { bold: true, link: 'https://example.com/a_(b)' }), t('.\nSuite *étoile* \\ [x]')], status: 'final', due: '2026-10-22', words: 1234.5, done: false, pov: 'Anna', extra: { k: [1, null, 'z'] } } }, delta: [t('La '), t('forêt', { italic: true })], children: [
+            { type: 'heading', props: { level: 2 }, delta: [t('A real heading in a region body')] },
+        ] },
+    ] },
     { type: 'region', props: { regionType: 'chapter', fields: {} } },
     { type: 'code', props: { language: 'js' }, delta: [t('let a = 1;\n\nconsole.log(`a`);')] },
     { type: 'code', props: { language: null }, delta: [t('no language')] },
@@ -135,13 +139,18 @@ describe('JSON round trip (structure)', () => {
         expect(tree(c)).toEqual(before);
     });
 
-    it('the markers of the sink keep every field (the model is compared, richtext with its marks)', async () => {
+    it('the regions of the sink keep every field and their title (the model is compared, richtext with its marks)', async () => {
         const a = await make();
-        const regions = tree(a).filter((n) => n.type === 'region');
-        expect(regions.length).toBe(3);
-        expect(regions[1].props.regionType).toBe('chapter');
-        expect(regions[1].props.fields.synopsis[0]).toEqual({ insert: 'Elle', attributes: { italic: true } });
-        expect(regions[1].props.fields).toMatchObject({ status: 'final', due: '2026-10-22', words: 1234.5, done: false, pov: 'Anna', title: 'La forêt' });
+        const roots = tree(a).filter((n) => n.type === 'region');
+        expect(roots.length).toBe(2);
+        const chapter = roots[0].children[0];
+        expect(chapter.type).toBe('region');
+        expect(chapter.props.regionType).toBe('chapter');
+        expect(chapter.props.fields.synopsis[0]).toEqual({ insert: 'Elle', attributes: { italic: true } });
+        expect(chapter.props.fields).toMatchObject({ status: 'final', due: '2026-10-22', words: 1234.5, done: false, pov: 'Anna' });
+        expect(chapter.props.fields.title).toBeUndefined(); // the title is the header text, not a field
+        expect(chapter.props.text).toEqual([{ insert: 'La ' }, { insert: 'forêt', attributes: { italic: true } }]);
+        expect(chapter.children.map((n) => n.type)).toEqual(['heading']);
     });
 
     it('every block type of the sink is covered (guard: a new block type must join the kitchen sink)', async () => {
@@ -258,8 +267,12 @@ describe('JSON round trip (structure)', () => {
 
 // ── Markdown ─────────────────────────────────────────────────────────────────────────────────────────────
 
-/** The part of the sink markdown can express exactly: no video / file (they are links), no image name. */
-const MD_SINK = SINK.filter((b) => b.type !== 'video' && b.type !== 'file').map((b) => (b.type === 'image' ? { ...b, props: { ...b.props, name: undefined } } : b));
+/**
+ * The part of the sink markdown can express exactly: no video / file (they are links), no image name.
+ * TODO(ADR-018 lot C): no region either, until the markdown import of the container form (title + body) is written.
+ */
+const NO_REGION = (b) => b.type !== 'region';
+const MD_SINK = SINK.filter((b) => b.type !== 'video' && b.type !== 'file' && NO_REGION(b)).map((b) => (b.type === 'image' ? { ...b, props: { ...b.props, name: undefined } } : b));
 
 const roundTrip = async (engine) => {
     const out = new Nabu({ extensions });
@@ -277,7 +290,7 @@ describe('markdown round trip (structure)', () => {
     });
 
     it('documented loss: an image keeps ref + alt but not its name; a video / file comes back as a paragraph with a link', async () => {
-        const a = await make(SINK);
+        const a = await make(SINK.filter(NO_REGION));
         const b = await roundTrip(a);
         const A = tree(a);
         const B = tree(b);

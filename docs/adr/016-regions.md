@@ -1,6 +1,6 @@
 # ADR 016 — Regions : structurer un texte continu par des repères
 
-**Statut** : accepté (2026-10-22, validé par le propriétaire)
+**Statut** : accepté (2026-10-22, validé par le propriétaire) — **modèle de données remplacé par l'ADR 018** (2026-10-23 : les régions sont des conteneurs dans Loro, les coutures sont l'interface). Types, champs, numérotation, registre, commandes et protection restent valables.
 **Remplace** : le bloc Zone (retiré de Nabu le 2026-10-22, conteneur imbriqué)
 **Liés** : `docs/design/variables.md` (à refondre sur Regions), canvas d'exploration « Zones — exploration » (planches 5–7 : Nabu seul), ADR 014 (historique), feuille de route de l'audit 2026-10
 

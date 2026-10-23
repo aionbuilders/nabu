@@ -4,7 +4,7 @@ import RegionComponent from "./Region.svelte";
 import { Regions } from "./regions.svelte.js";
 import { normalizeRegions } from "./normalize.js";
 import { createRegionCommands } from "./commands.js";
-import { mergeCrossesMarker, regionFacts } from "./facts.js";
+import { mergeCrossesRegion, regionFacts } from "./facts.js";
 import { resolveConfig } from "./types.js";
 
 /**
@@ -14,12 +14,13 @@ import { resolveConfig } from "./types.js";
  */
 
 /**
- * Regions extension factory (ADR 016): structure a continuous text with MARKERS. Installs the `region` marker block, the
- * root-only normalizer, and the reactive registry (`nabu.regions`, also `Regions.get(nabu)`).
+ * Regions extension factory (ADR 016, data model of ADR 018): structure a text in divisions. Installs the `region` container
+ * block (its header is its title, its body is its children), the placement / nesting normalizer, and the reactive registry
+ * (`nabu.regions`, also `Regions.get(nabu)`).
  *
  * It also declares the region commands (`region:split` on Mod-Enter, the protected merges on Backspace / Delete, and the keyless
  * `region:insert` / `move` / `promote` / `demote` / `next` / `prev` / `parent`: see commands.js) and vetoes any silent text merge
- * through a marker (`onBeforeMerge`).
+ * into, out of or across a title (`onBeforeMerge`).
  *
  * @param {{ types?: Record<string, RegionTypeInit>, messages?: RegionMessages }} [options]
  *   `types`: the region types of the integrator (see `types.js`: `level`, `label`, `numbering`, `fields`). Without it,
@@ -39,7 +40,7 @@ import { resolveConfig } from "./types.js";
 export function RegionsExtension(options = {}) {
     const config = resolveConfig(options);
     // The configuration is carried by the block class (as the dash of the dialogue extension).
-    const BlockClass = class extends RegionBlock { static config = config; };
+    const BlockClass = class extends RegionBlock { static config = config; static messages = options.messages; };
     return extension("region", {
         // @ts-ignore — static-side variance on create() (same pattern as Divider/Image)
         block: BlockClass,
@@ -56,13 +57,14 @@ export function RegionsExtension(options = {}) {
                     Object.defineProperty(nabu, 'regions', { get: () => Regions.get(nabu), configurable: true, enumerable: false });
                 }
             },
-            // Runs before doc.commit(): a marker that ended up in a container is brought back to the root, in the same
-            // transaction (same undo step) as the operation that displaced it. See normalize.js.
+            // Runs before doc.commit(): a region that ended up in a list / toggle is brought back next to it, and a region too
+            // shallow for its parent is moved out, in the same transaction (same undo step) as the operation that displaced it.
+            // See normalize.js.
             onBeforeTransaction: normalizeRegions,
-            // Backspace / Delete never merge text through a marker, whoever asks (ADR 016 §6.1: structure is protected;
-            // the merge is the hold of `region:merge-previous` / `region:merge-next`, or a selection that spans the marker).
+            // Backspace / Delete never merge text into a title, out of it, or across a seam, whoever asks (ADR 016 §6.1,
+            // ADR 018 §3.9: structure is protected; the merge is the hold of `region:merge-previous` / `region:merge-next`).
             /** @param {Nabu} nabu @param {import("../block.svelte.js").Block} survivor @param {import("../block.svelte.js").Block} victim */
-            onBeforeMerge: (nabu, survivor, victim) => (mergeCrossesMarker(nabu, survivor, victim) ? nabu.BREAK : undefined),
+            onBeforeMerge: (nabu, survivor, victim) => (mergeCrossesRegion(nabu, survivor, victim) ? nabu.BREAK : undefined),
         },
     });
 }

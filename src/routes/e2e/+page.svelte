@@ -75,25 +75,31 @@
       };
     }
 
-    // Test / playground only: `?seed=regions` seeds a small document with region markers (ADR 016): a preamble, two
-    // top-level sections and two sub-sections. In-memory editors only. (Markers can also be added by hand:
-    // `nabu.insert('region', { regionType: 'section-1', title: 'X' }, null, index)`.)
+    // Test / playground only: `?seed=regions` seeds a small NESTED document with regions (ADR 018: a region is a container, its
+    // header is its title, its body its children): a preamble paragraph, then two top-level sections; the first holds a
+    // paragraph and two sub-sections. In-memory editors only. (Regions can also be added by hand:
+    // `nabu.insert('region', { regionType: 'section-1', title: 'X' }, parentId, index)`, `parentId` = null for the root.)
     const seed = page.url.searchParams.get('seed');
     /** @param {import('$lib/blocks/nabu.svelte.js').Nabu} eng */
     const seedRegions = async (eng) => {
+      /** @typedef {[string, Record<string, any>, any[]?]} Spec */
+      /** @type {Spec[]} */
       const doc = [
         ['paragraph', { text: 'Preamble, outside any region.' }],
-        ['region', { regionType: 'section-1', title: 'The ferryman' }],
-        ['paragraph', { text: 'Opening of the first section.' }],
-        ['region', { regionType: 'section-2', title: 'The bank' }],
-        ['paragraph', { text: 'Text of the bank.' }],
-        ['region', { regionType: 'section-2', title: 'The water' }],
-        ['paragraph', { text: 'Text of the water.' }],
-        ['region', { regionType: 'section-1', title: 'The return' }],
-        ['paragraph', { text: 'Closing text.' }],
+        ['region', { regionType: 'section-1', title: 'The ferryman' }, [
+          ['paragraph', { text: 'Opening of the first section.' }],
+          ['region', { regionType: 'section-2', title: 'The bank' }, [['paragraph', { text: 'Text of the bank.' }]]],
+          ['region', { regionType: 'section-2', title: 'The water' }, [['paragraph', { text: 'Text of the water.' }]]],
+        ]],
+        ['region', { regionType: 'section-1', title: 'The return' }, [['paragraph', { text: 'Closing text.' }]]],
       ];
       for (const child of [...eng.children]) eng.delete(child);
-      doc.forEach(([type, props], i) => eng.insert(/** @type {string} */ (type), /** @type {any} */ (props), null, i));
+      /** @param {Spec[]} specs @param {string | null} parentId */
+      const build = (specs, parentId) => specs.forEach(([type, props, children], i) => {
+        const block = eng.insert(type, props, parentId, i);
+        if (children) build(children, block.id);
+      });
+      build(doc, null);
       await eng.commit();
       eng.undoManager.clear();
     };
