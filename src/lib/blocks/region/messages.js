@@ -12,6 +12,12 @@
  */
 
 /**
+ * @typedef {Object} RegionTypeParams
+ * @property {string} name  the readable name of the type (its `name`, else its id)
+ * @property {string} type  its type id
+ */
+
+/**
  * @typedef {Object} RegionMessages
  * @property {string | (() => string)} [split]  label of `region:split`
  * @property {string | ((p: { type: string }) => string)} [insert]  label of `region:insert`
@@ -29,6 +35,11 @@
  * @property {string | (() => string)} [next]
  * @property {string | (() => string)} [prev]
  * @property {string | (() => string)} [parent]
+ * @property {string | (() => string)} [create]  label of `region:create`
+ * @property {string | ((p: { count: number }) => string)} [chooser]  prompt of the `:::` chooser (announced to screen readers; `count` entries)
+ * @property {string | ((p: RegionTypeParams) => string)} [createOption]  entry of the chooser for a type that fits here ("Section")
+ * @property {string | ((p: RegionTypeParams) => string)} [createNext]  entry for a type created as a SIBLING after the current region ("Next section")
+ * @property {string | ((p: RegionTypeParams) => string)} [slash]  title of the slash-menu entry of a type ("Section")
  * @property {string | (() => string)} [untitled]  placeholder of an empty title (ADR 018)
  * @property {string | ((p: { keys: string, label: string }) => string)} [hold]  the prompt of a protected merge ("Hold ⌫ to merge with “…”"):
  *   shown above the seam and announced to screen readers
@@ -51,6 +62,11 @@ export const DEFAULT_REGION_MESSAGES = {
     next: 'Go to the next region',
     prev: 'Go to the previous region',
     parent: 'Go to the parent region',
+    create: 'Create a region',
+    chooser: ({ count }) => `Create a region: ${count} types. Arrow keys and Enter, or a number, to choose. Escape cancels.`,
+    createOption: ({ name }) => name,
+    createNext: ({ name }) => `Next ${name.charAt(0).toLowerCase()}${name.slice(1)}`,
+    slash: ({ name }) => name,
     untitled: 'Untitled',
     hold: ({ keys, label }) => `Hold ${keys} to ${label.charAt(0).toLowerCase()}${label.slice(1)}`,
 };

@@ -7,6 +7,7 @@
  *     { chapter: { level: 2, label: 'Chapter {index}', numbering: 'document', fields: { pov: 'text' } } }
  *
  * - `level`      depth of the division (1 = the highest). The extent of a region is deduced from the levels.
+ * - `name`       readable name of the type ("Chapter"), shown by the region chooser and the slash menu; defaults to the type id.
  * - `label`      display template: `{index}`, `{path}` ("2.3"), `{title}`, `{type}`, `{level}`.
  * - `numbering`  `'parent'` (restarts at 1 in each parent region; the default), `'document'` (continues
  *                over the whole document, for that type) or `'none'` (no index).
@@ -24,6 +25,7 @@
  *
  * @typedef {Object} RegionTypeInit
  * @property {number} level
+ * @property {string} [name]
  * @property {string} [label]
  * @property {Numbering} [numbering]
  * @property {Record<string, FieldKind | { type: FieldKind, values?: string[] }>} [fields]
@@ -31,6 +33,7 @@
  * @typedef {Object} RegionTypeDef
  * @property {string} id
  * @property {number} level
+ * @property {string} name  readable name; the id when none is declared
  * @property {string} label
  * @property {Numbering} numbering
  * @property {Map<string, FieldSpec>} fields  the DECLARED fields (the base `title` is not in it)
@@ -53,9 +56,9 @@ export const TITLE_SPEC = /** @type {FieldSpec} */ ({ name: 'title', kind: 'text
  * @type {Record<string, RegionTypeInit>}
  */
 export const DEFAULT_TYPES = {
-    'section-1': { level: 1, label: '{path}. {title}' },
-    'section-2': { level: 2, label: '{path} {title}' },
-    'section-3': { level: 3, label: '{path} {title}' },
+    'section-1': { level: 1, name: 'Section', label: '{path}. {title}' },
+    'section-2': { level: 2, name: 'Subsection', label: '{path} {title}' },
+    'section-3': { level: 3, name: 'Sub-subsection', label: '{path} {title}' },
 };
 
 /**
@@ -106,6 +109,7 @@ export function resolveConfig(options = {}) {
         types.set(id, {
             id,
             level: init.level,
+            name: typeof init.name === 'string' && init.name.trim() ? init.name.trim() : id,
             label: typeof init.label === 'string' ? init.label : (numbering === 'none' ? '{title}' : '{path} {title}'),
             numbering,
             fields,

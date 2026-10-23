@@ -565,6 +565,8 @@ test.describe('Markdown shortcuts & slash menu', () => {
     const ALL_TITLES = [
       'Text', 'Heading 1', 'Heading 2', 'Heading 3', 'Bulleted list', 'Numbered list', 'To-do list',
       'Code', 'Callout', 'Quote', 'Toggle', 'Divider', 'Image', 'Video', 'File',
+      // contributed by the Regions extension (the default types), offered at the root
+      'Section', 'Subsection', 'Sub-subsection',
     ];
 
     /** Types "/" + query one char at a time so the menu is live while filtering. */
@@ -667,7 +669,7 @@ test.describe('Markdown shortcuts & slash menu', () => {
 
       // wrap: up from the first -> last
       await press(page, 'ArrowUp');
-      expect(await activeTitle(page)).toBe('File');
+      expect(await activeTitle(page)).toBe('Sub-subsection');
       // wrap: down from the last -> first
       await press(page, 'ArrowDown');
       expect(await activeTitle(page)).toBe('Text');

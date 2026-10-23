@@ -96,6 +96,9 @@
  * @property {InputRule[]} [inputRules]
  *   Declarative text-replacement rules applied while typing (e.g. markdown
  *   shortcuts, smart typography). Tested against the text before the cursor.
+ * @property {import('../ui/slash-menu.svelte.js').SlashCommand[]} [slashCommands]
+ *   Entries this extension adds to the slash menu, after the menu's own list (`nabu.slashCommands`). A `when(engine, block)`
+ *   limits an entry to the places where it applies (the block holding the caret); without it the entry is always offered.
  * @property {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>} [loroTextStyles]
  *   Loro text style configuration required by this extension.
  *   Passed to `LoroDoc.configTextStyle()` during Nabu initialization so that
@@ -125,6 +128,8 @@ export class Extension {
         this.pasteFileHandlers = init.pasteFileHandlers || [];
         /** @type {InputRule[]} */
         this.inputRules = init.inputRules || [];
+        /** @type {import('../ui/slash-menu.svelte.js').SlashCommand[]} */
+        this.slashCommands = init.slashCommands || [];
         /** @type {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>} */
         this.loroTextStyles = init.loroTextStyles || {};
     }

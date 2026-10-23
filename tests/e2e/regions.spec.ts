@@ -15,7 +15,7 @@
  */
 
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import { gotoEditor, clearAndReset, press, flushRender } from './helpers/editor.js';
+import { gotoEditor, clearAndReset, press, flushRender, focusEditor } from './helpers/editor.js';
 import { undo, bold } from './helpers/keyboard.js';
 import { cut, copy } from './helpers/clip-capture.js';
 import { buildTree, Pp, type TreeSpec } from './helpers/blocks.js';
@@ -1218,5 +1218,156 @@ test.describe('extending a selection across a title (Shift+arrows, Shift+click, 
     expect(inTitle).toContain('⟦');
     expect(inTitle).not.toContain('->');
     expect(inTitle!.replace(/[⟦⟧]/g, '')).toBe('Two');
+  });
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// Creating a region: `:::` + Space (chooser, ADR 017 `choose`) and the slash menu (ADR 018 §3.5)
+// ════════════════════════════════════════════════════════════════════════════
+
+test.describe('creating a region (":::" + Space, slash menu)', () => {
+  const chooser = (page: Page) => page.getByRole('listbox');
+  const entries = (page: Page) => chooser(page).locator('.nabu-command-option-label');
+  const slashTitles = (page: Page) => page.locator('.nabu-slash .nabu-slash-item .nabu-slash-title').allTextContents();
+  const regionTitles = (page: Page) => slashTitles(page).then((all) => all.filter((t) => /section/i.test(t)));
+
+  /** The caret is collapsed at the start of a region title (the block holding it is a region). */
+  const inTitle = (page: Page) => page.evaluate(() => {
+    const n = (window as any).nabu;
+    const block = n.selection.anchorBlock;
+    return block?.type === 'region' && block.selection?.from === 0 && block.selection?.to === 0;
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+    await focusEditor(page);
+  });
+
+  test('":::" + Space in an empty paragraph at the root opens the chooser with every type, in order; the text is "::: "', async ({ page }) => {
+    await page.keyboard.type(':::');
+    await expect(chooser(page)).toHaveCount(0); // not before the Space
+    await page.keyboard.type(' ');
+    await expect(chooser(page)).toBeVisible();
+    await expect.poll(() => entries(page).allTextContents()).toEqual(['Section', 'Subsection', 'Sub-subsection']);
+    await expect(chooser(page).getByRole('option').first()).toHaveAttribute('aria-selected', 'true');
+    await expectOutline(page, 'p(::: )');
+  });
+
+  test('ArrowDown + Enter picks: the paragraph is replaced by the region, the caret is in its (empty) title', async ({ page }) => {
+    await page.keyboard.type('::: ');
+    await expect(chooser(page)).toBeVisible();
+    await press(page, 'ArrowDown');
+    await press(page, 'Enter');
+    await expect(chooser(page)).toHaveCount(0);
+    await expectOutline(page, 'R:section-2(∅){ p(∅) }');
+    await expect.poll(() => inTitle(page)).toBe(true);
+    await page.keyboard.type('Hello');
+    await expectOutline(page, 'R:section-2(Hello){ p(∅) }');
+    await expectValid(page);
+  });
+
+  test('a digit picks too, and a click on an entry', async ({ page }) => {
+    await page.keyboard.type('::: ');
+    await press(page, '3');
+    await expectOutline(page, 'R:section-3(∅){ p(∅) }');
+    await undo(page);
+    await undo(page);
+    await expectOutline(page, 'p(∅)');
+    await page.keyboard.type('::: ');
+    await chooser(page).getByRole('option').nth(0).click();
+    await expectOutline(page, 'R:section-1(∅){ p(∅) }');
+  });
+
+  test('Escape cancels: the paragraph keeps "::: " as text and the chooser is gone', async ({ page }) => {
+    await page.keyboard.type('::: ');
+    await expect(chooser(page)).toBeVisible();
+    await press(page, 'Escape');
+    await expect(chooser(page)).toHaveCount(0);
+    await expectOutline(page, 'p(::: )');
+    await page.keyboard.type('x');
+    await expectOutline(page, 'p(::: x)');
+  });
+
+  test('in a region body: the deeper types first, then "Next" siblings; picking a deeper one nests', async ({ page }) => {
+    await build(page, [S1('One', Pp(''), Pp('after'))]);
+    await focusEmpty(page);
+    await page.keyboard.type('::: ');
+    await expect.poll(() => entries(page).allTextContents()).toEqual(['Subsection', 'Sub-subsection', 'Next section']);
+    await press(page, 'Enter');
+    await expectOutline(page, 'R:section-1(One){ R:section-2(∅){ p(∅) } ; p(after) }');
+    await expect.poll(() => inTitle(page)).toBe(true);
+    await expectValid(page);
+  });
+
+  test('a "Next" entry creates a sibling after the region and takes what follows the caret', async ({ page }) => {
+    await build(page, [S1('One', Pp('a'), Pp(''), Pp('b')), Pp('tail')]);
+    await focusEmpty(page);
+    await page.keyboard.type('::: ');
+    await expect.poll(() => entries(page).allTextContents()).toEqual(['Subsection', 'Sub-subsection', 'Next section']);
+    await press(page, '3');
+    await expectOutline(page, 'R:section-1(One){ p(a) } ; R:section-1(∅){ p(b) } ; p(tail)');
+    await expect.poll(() => inTitle(page)).toBe(true);
+    await expectValid(page);
+  });
+
+  test('one undo step gives back "::: " with the caret after it; a second removes the typing', async ({ page }) => {
+    await page.keyboard.type('::: ');
+    await press(page, 'Enter');
+    await expectOutline(page, 'R:section-1(∅){ p(∅) }');
+    await undo(page);
+    await expectOutline(page, 'p(::: )');
+    await expectCaret(page, '::: |');
+    await undo(page);
+    await expectOutline(page, 'p(∅)');
+    await expectValid(page);
+  });
+
+  test('no chooser in a list item, after other text or in a non-empty paragraph', async ({ page }) => {
+    await page.keyboard.type('x::: ');
+    await flushRender(page);
+    await expect(chooser(page)).toHaveCount(0);
+    await expectOutline(page, 'p(x::: )');
+    await build(page, [UL('')]);
+    await focusEmpty(page);
+    await page.keyboard.type('::: ');
+    await flushRender(page);
+    await expect(chooser(page)).toHaveCount(0);
+  });
+
+  test('"# " stays a plain heading', async ({ page }) => {
+    await page.keyboard.type('# Title');
+    await expectOutline(page, 'heading(Title)');
+    expect(await page.evaluate(() => (window as any).nabu.regions.count)).toBe(0);
+  });
+
+  test('slash menu: one entry per type, only the types valid at the caret\'s place', async ({ page }) => {
+    await page.keyboard.type('/');
+    await expect(page.locator('.nabu-slash')).toBeVisible();
+    expect(await regionTitles(page)).toEqual(['Section', 'Subsection', 'Sub-subsection']);
+    await press(page, 'Backspace');
+
+    await build(page, [S1('One', Pp('')), S1('Two', S2('Sub', Pp('')))]);
+    await focusEmpty(page, 0);
+    await page.keyboard.type('/');
+    await expect.poll(() => regionTitles(page)).toEqual(['Subsection', 'Sub-subsection']);
+    await press(page, 'Backspace');
+    await focusEmpty(page, 1);
+    await page.keyboard.type('/');
+    await expect.poll(() => regionTitles(page)).toEqual(['Sub-subsection']);
+  });
+
+  test('slash menu: picking an entry creates the region, caret in the title; one undo step', async ({ page }) => {
+    await build(page, [S1('One', Pp(''))]);
+    await focusEmpty(page);
+    await page.keyboard.type('/Subsection');
+    await expect.poll(() => regionTitles(page)).toEqual(['Subsection', 'Sub-subsection']);
+    await press(page, 'Enter');
+    await expectOutline(page, 'R:section-1(One){ R:section-2(∅){ p(∅) } }');
+    await expect.poll(() => inTitle(page)).toBe(true);
+    await undo(page);
+    await expectOutline(page, 'R:section-1(One){ p(∅) }');
+    await expectValid(page);
   });
 });

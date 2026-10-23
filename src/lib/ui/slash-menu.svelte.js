@@ -4,6 +4,9 @@
  * @property {string} [subtitle]
  * @property {string} [icon]
  * @property {string[]} [aliases]
+ * @property {(engine: import('../blocks/nabu.svelte.js').Nabu, block: any) => boolean} [when]
+ *   Extension entries only (`Extension#slashCommands`): where the entry applies; `block` is the block holding the caret. Without it
+ *   the entry is always offered.
  * @property {(engine: import('../blocks/nabu.svelte.js').Nabu) => void} run
  */
 
@@ -65,9 +68,19 @@ export class SlashMenuController {
 
     query = $derived(this.match?.query ?? '');
 
+    /** The menu's own list, then the entries contributed by extensions that apply at the caret (`when`). */
+    available = $derived.by(() => {
+        const block = this.match?.block;
+        const contributed = (this.#engine.slashCommands ?? []).filter((c) => {
+            if (typeof c.when !== 'function') return true;
+            try { return !!block && !!c.when(this.#engine, block); } catch { return false; }
+        });
+        return contributed.length ? [...this.commands, ...contributed] : this.commands;
+    });
+
     filteredItems = $derived.by(() => {
         if (!this.match) return [];
-        return filterSlashCommands(this.commands, this.query);
+        return filterSlashCommands(this.available, this.query);
     });
 
     /** @type {number | null} slashStart of a dismissed (Escape) trigger */

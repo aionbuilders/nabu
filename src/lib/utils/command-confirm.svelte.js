@@ -277,14 +277,38 @@ export class CommandConfirmation {
         return this.#openChooser(`choose:${chord}`, choices, ctx, event, info, chord, display, undefined, undefined);
     }
 
-    /** `confirm: { strategy: 'choose', options(ctx) }`: the command offers variants; `run(nabu, ctx, option)` receives the chosen one. */
-    #beginVariants(/** @type {CommandEntry} */ entry, /** @type {CommandContext} */ ctx, /** @type {KeyboardEvent} */ event, /** @type {any} */ info, /** @type {string} */ chord) {
+    /**
+     * Open the `choose` strategy of a command WITHOUT a key press (a typed trigger, a menu, an input rule): the same chooser a
+     * key would open (`nabu.pendingCommand`, the `CommandChooser` component, the keyboard handling, the cancellations), whose
+     * options come from `confirm.options(ctx)` and whose choice runs `run(nabu, ctx, option)`. The command's `when` is checked.
+     * Returns false (nothing opens) when the command does not exist, has no `choose` confirmation, does not apply, or offers
+     * no option.
+     * @param {string} id  command id
+     * @param {CommandContext} [context]  default: the current context
+     * @returns {boolean}
+     */
+    offer(id, context) {
+        const entry = this.#nabu.commands.entries.get(id);
+        if (!entry || /** @type {any} */ (entry.def.confirm)?.strategy !== 'choose') return false;
+        const ctx = context ?? this.#nabu.commands.context(null);
+        if (typeof entry.def.when === 'function') {
+            let ok = false;
+            try { ok = !!entry.def.when(ctx); } catch (error) { this.#nabu.warn(`commands: when() of "${id}" failed: ${error}`); }
+            if (!ok) return false;
+        }
+        this.#spent = null;
+        this.cancel('restart');
+        return this.#beginVariants(entry, ctx, null, null, '');
+    }
+
+    /** `confirm: { strategy: 'choose', options(ctx) }`: the command offers variants; `run(nabu, ctx, option)` receives the chosen one. `event` / `info` are null when {@link CommandConfirmation#offer} opens it. */
+    #beginVariants(/** @type {CommandEntry} */ entry, /** @type {CommandContext} */ ctx, /** @type {KeyboardEvent | null} */ event, /** @type {any} */ info, /** @type {string} */ chord) {
         const confirm = /** @type {any} */ (entry.def.confirm);
         let list;
         try { list = typeof confirm.options === 'function' ? confirm.options(ctx) : confirm.options; }
         catch (error) { this.#nabu.warn(`commands: confirm.options of "${entry.id}" failed: ${error}`); return false; }
         if (!Array.isArray(list) || !list.length) return false;
-        const display = formatChord(info, { platform: this.#nabu.commands.platform });
+        const display = info ? formatChord(info, { platform: this.#nabu.commands.platform }) : '';
         const choices = list.map((option, i) => ({
             id: String(option?.id ?? i),
             label: String(option?.label ?? option?.id ?? i),
@@ -294,7 +318,7 @@ export class CommandConfirmation {
         return this.#openChooser(entry.id, choices, ctx, event, info, chord, display, entry, this.#labelOf(entry, ctx));
     }
 
-    #openChooser(/** @type {string} */ id, /** @type {Session['choices']} */ choices, /** @type {CommandContext} */ ctx, /** @type {KeyboardEvent} */ event, /** @type {any} */ info, /** @type {string} */ chord, /** @type {string} */ display, /** @type {CommandEntry | undefined} */ entry, /** @type {string | undefined} */ label) {
+    #openChooser(/** @type {string} */ id, /** @type {Session['choices']} */ choices, /** @type {CommandContext} */ ctx, /** @type {KeyboardEvent | null} */ event, /** @type {any} */ info, /** @type {string} */ chord, /** @type {string} */ display, /** @type {CommandEntry | undefined} */ entry, /** @type {string | undefined} */ label) {
         const options = /** @type {NonNullable<Session['choices']>} */ (choices).map(({ id, label, display }) => ({ id, label, display }));
         const local = /** @type {any} */ (entry?.def.confirm)?.messages;
         const message = this.#text('choose', { keys: display, label: label ?? '', options }, local);
@@ -304,15 +328,15 @@ export class CommandConfirmation {
         session.ms = this.#inviteMs;
         session.stopTimer = null; // a chooser has no timeout: it is a safety net the user is looking at
         this.#announce(`${message} ${this.#text('option', { option: options[0], index: 0, count: options.length }, local)}`);
-        event.preventDefault();
+        event?.preventDefault();
         return true;
     }
 
     /** @returns {Session} */
-    #open(/** @type {PendingCommand} */ pending, /** @type {CommandEntry | null} */ entry, /** @type {CommandContext} */ ctx, /** @type {string} */ chord, /** @type {any} */ info, /** @type {KeyboardEvent} */ event) {
+    #open(/** @type {PendingCommand} */ pending, /** @type {CommandEntry | null} */ entry, /** @type {CommandContext} */ ctx, /** @type {string} */ chord, /** @type {any} */ info, /** @type {KeyboardEvent | null} */ event) {
         /** @type {Session} */
         const session = {
-            pending, strategy: pending.strategy, entry, ctx, chord, chordInfo: info, code: event.code ?? '',
+            pending, strategy: pending.strategy, entry, ctx, chord, chordInfo: info, code: event?.code ?? '',
             startedAt: this.#clock.now(), ms: 0, stopTimer: null, dom: this.#domSelection(),
         };
         this.#session = session;

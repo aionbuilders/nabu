@@ -21,10 +21,10 @@ import { hasText, isBodyTextBlock, mergePlan, neighbourOf, siblingsOf } from "./
 /** @typedef {{ block: Block, offset: number }} Caret */
 
 /** The children nodes of a node (a snapshot, in order). @param {NabuNode} node @returns {NabuNode[]} */
-const kids = (node) => /** @type {NabuNode[]} */ (node.children() ?? []);
+export const kids = (node) => /** @type {NabuNode[]} */ (node.children() ?? []);
 
 /** The id of a node's parent, `null` at the root. @param {NabuNode} node @returns {string | null} */
-const parentIdOf = (node) => node.parent()?.id.toString() ?? null;
+export const parentIdOf = (node) => node.parent()?.id.toString() ?? null;
 
 /** The region of a `Region`, of a region block, or of the id of a region block. @param {Nabu} nabu @param {unknown} target @returns {Region | null} */
 export function toRegion(nabu, target) {
@@ -36,19 +36,19 @@ export function toRegion(nabu, target) {
 }
 
 /** The type of the blocks the editor creates by default (a paragraph). @param {Nabu} nabu @returns {string} */
-const defaultType = (nabu) => (nabu.defaultBlockType && nabu.registry.has(nabu.defaultBlockType) ? nabu.defaultBlockType : 'paragraph');
+export const defaultType = (nabu) => (nabu.defaultBlockType && nabu.registry.has(nabu.defaultBlockType) ? nabu.defaultBlockType : 'paragraph');
 
 /**
  * Creates a block of the default text type WITHOUT committing (the caller owns the transaction).
  * @param {Nabu} nabu @param {Record<string, any>} props @param {string | null} parentId @param {number} index @returns {Block}
  */
-function createDefaultBlock(nabu, props, parentId, index) {
+export function createDefaultBlock(nabu, props, parentId, index) {
     const type = defaultType(nabu);
     return /** @type {any} */ (nabu.registry.get(type)).create(nabu, type, props, parentId, index);
 }
 
 /** Puts the caret back after a commit (the DOM is re-rendered by then). @param {Nabu} nabu @param {Block | null | undefined} block @param {number} offset */
-async function restoreCaret(nabu, block, offset) {
+export async function restoreCaret(nabu, block, offset) {
     if (!block) return;
     await tick();
     const fresh = nabu.blocks.get(block.id);

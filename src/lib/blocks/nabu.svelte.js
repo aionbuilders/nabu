@@ -237,6 +237,8 @@ export class Nabu {
                     }
                 }
 
+                if (ext.slashCommands?.length) this.slashCommands.push(...ext.slashCommands);
+
                 if (ext.loroTextStyles && Object.keys(ext.loroTextStyles).length) {
                     this.doc.configTextStyle(ext.loroTextStyles);
                 }
@@ -356,6 +358,13 @@ export class Nabu {
      * @type {import('../utils/extensions.js').InputRule[]}
      */
     inputRules = [];
+
+    /**
+     * Slash-menu entries contributed by extensions (`Extension#slashCommands`); the slash menu appends them to its own list,
+     * keeping those whose `when(engine, block)` holds at the caret.
+     * @type {import('../ui/slash-menu.svelte.js').SlashCommand[]}
+     */
+    slashCommands = [];
 
     /** @type {import('../files/files.svelte.js').FilesConfig} */
     fileConfig = {};

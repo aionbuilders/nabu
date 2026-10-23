@@ -978,7 +978,7 @@ describe('registration', () => {
     const engine = await makeEditor(BOOK, { messages: { split: 'Couper ici', dissolve: ({ title }) => `dissoudre « ${title} »`, hold: ({ keys, label }) => `Maintenez ${keys} : ${label}` } });
     const list = Object.fromEntries(engine.commands.list().filter((c) => c.id.startsWith('region:')).map((c) => [c.id, c]));
     expect(Object.keys(list).sort()).toEqual([
-      'region:demote', 'region:exit', 'region:insert', 'region:merge-next', 'region:merge-previous', 'region:move', 'region:move-down', 'region:move-up', 'region:next', 'region:parent', 'region:prev', 'region:promote', 'region:split', 'region:unwrap',
+      'region:create', 'region:demote', 'region:exit', 'region:insert', 'region:merge-next', 'region:merge-previous', 'region:move', 'region:move-down', 'region:move-up', 'region:next', 'region:parent', 'region:prev', 'region:promote', 'region:split', 'region:unwrap',
     ]);
     expect(list['region:split'].keys).toEqual(['Mod-Enter']);
     expect(list['region:split'].label).toBe('Couper ici');
@@ -987,7 +987,7 @@ describe('registration', () => {
     expect(list['region:exit'].keys).toEqual(['Mod-Shift-Enter']);
     expect(list['region:demote'].keys).toEqual(['Tab']);
     expect(list['region:promote'].keys).toEqual(['Shift-Tab']);
-    for (const id of ['region:insert', 'region:unwrap', 'region:move', 'region:move-up', 'region:move-down', 'region:next', 'region:prev', 'region:parent']) expect(list[id].keys).toEqual([]);
+    for (const id of ['region:create', 'region:insert', 'region:unwrap', 'region:move', 'region:move-up', 'region:move-down', 'region:next', 'region:prev', 'region:parent']) expect(list[id].keys).toEqual([]);
     await build(engine, [P('pre'), R('part', 'P', [P('x')])]);
     setCaret(engine, at(engine, 'x'), 0);
     press(engine, 'Backspace');
