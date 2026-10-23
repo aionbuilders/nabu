@@ -56,6 +56,13 @@ export class NabuSelection extends SvelteSelection {
                     // before this one acts on it.
                     this.normalize();
                     this.#arrowStart = null;
+                    this.#shiftAnchor = null;
+                    if (e.shiftKey && !e.altKey && ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
+                        // The anchor of a selection being extended: a browser that cannot extend onto a non-editable
+                        // sibling (a block's label…) may drop it; `normalize()` puts it back.
+                        const live = window.getSelection();
+                        if (live?.anchorNode) this.#shiftAnchor = { node: live.anchorNode, offset: live.anchorOffset };
+                    }
                     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                         this.#pendingDirection = 'forward';
                         const live = window.getSelection();
@@ -83,7 +90,7 @@ export class NabuSelection extends SvelteSelection {
                     this.#arrowStart = null;
                     if (start && start.key === e.key) this.#openTrailingIfStuck(start);
                 };
-                const onMousedown = () => { this.nabu.storedMarks = null; this.#pendingDirection = null; this.nabu.sealUndoEnd?.(); };
+                const onMousedown = () => { this.nabu.storedMarks = null; this.#pendingDirection = null; this.#shiftAnchor = null; this.nabu.sealUndoEnd?.(); };
                 // Fires after every selection move, the user's and the editor's: the freshest "selection before the next change".
                 const onSelectionChange = () => this.nabu.captureUndoSelection?.();
                 document.addEventListener('selectionchange', onSelectionChange);
@@ -107,6 +114,7 @@ export class NabuSelection extends SvelteSelection {
                     this.normalize();
                     // The pending arrow direction only describes the move that just produced this selection.
                     this.#pendingDirection = null;
+                    this.#shiftAnchor = null;
                 });
             });
         });
@@ -167,12 +175,31 @@ export class NabuSelection extends SvelteSelection {
         const anchorInvalid = this.#isDead(anchor);
         const focusInvalid = !!focus && this.#isDead(focus);
 
-        if (!anchorInvalid && !focusInvalid) return false;
+        if (!anchorInvalid && !focusInvalid) return this.#confine(live, anchor, anchorOffset, focus, focusOffset);
 
         /** @type {NodeFilter} */
         const filter = { acceptNode: (node) => this.#isValidTextNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT };
         const explicit = this.#pendingDirection;
         this.#pendingDirection = null;
+        const shiftAnchor = this.#shiftAnchor;
+        this.#shiftAnchor = null;
+
+        // Shift+arrow that the browser answered by moving the ANCHOR onto a dead position (it re-expresses a text position as an
+        // element position, or loses it next to a non-editable sibling): the selection is still being extended from where it
+        // started, up to the focus (corrected to the nearest valid text in the direction of travel when it is dead too).
+        if (anchorInvalid && explicit && focus && shiftAnchor?.node.isConnected && !this.#isDead(shiftAnchor.node)) {
+            /** @type {{ node: Node, offset: number } | null} */
+            let end = { node: focus, offset: focusOffset };
+            if (focusInvalid) {
+                const target = findNearestTextNode(focus, focusOffset, explicit, filter);
+                const block = target && this.#blockOf(target);
+                end = block ? /** @type {any} */ (block).getDOMPoint?.(explicit === 'forward' ? 0 : (block.behaviors?.get('text')?.text.length ?? 0)) ?? null : null;
+            }
+            if (end) {
+                this.setBaseAndExtent(shiftAnchor.node, shiftAnchor.offset, end.node, end.offset);
+                return true;
+            }
+        }
 
         if (anchorInvalid) {
             const dir = explicit ?? offsetHeuristic(anchor, anchorOffset);
@@ -195,6 +222,94 @@ export class NabuSelection extends SvelteSelection {
             return true;
         }
         return false;
+    }
+
+    /** The block whose element holds `node` (null outside any block). @param {Node | null} node @returns {Block | null} */
+    #blockOf(node) {
+        const el = /** @type {Element | null} */ (node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement));
+        const id = el?.closest('[data-block-id]')?.getAttribute('data-block-id');
+        return (id && this.nabu.blocks.get(id)) || null;
+    }
+
+    /**
+     * The rules of ISOLATED text fields (`Block#isolatesSelection`, ADR 018 §3.9) on a live, non-collapsed selection whose ends
+     * are in two different blocks:
+     *  - the ANCHOR is in an isolated block: the selection stays BOUNDED to it, the focus is brought back to the end of that
+     *    block (the focus is after the anchor) or to its start (before);
+     *  - the FOCUS is in an isolated block and the anchor is outside: the focus is moved PAST it, in the direction of travel,
+     *    onto the nearest text of a block that is not isolated (nothing there: the selection is given up, collapsed on its anchor).
+     * Idempotent. Returns whether the selection was moved.
+     * @param {Selection} live @param {Node} anchor @param {number} anchorOffset @param {Node | null} focus @param {number} focusOffset
+     * @returns {boolean}
+     */
+    #confine(live, anchor, anchorOffset, focus, focusOffset) {
+        if (!focus || live.isCollapsed) return false;
+        const anchorBlock = this.#blockOf(anchor);
+        const focusBlock = this.#blockOf(focus);
+        if (!anchorBlock || !focusBlock || anchorBlock === focusBlock) return false;
+        if (!anchorBlock.isolatesSelection && !focusBlock.isolatesSelection) return false;
+
+        // Direction of travel: is the focus after the anchor?
+        const probe = document.createRange();
+        probe.setStart(anchor, anchorOffset);
+        probe.collapse(true);
+        let forward;
+        try { forward = probe.comparePoint(focus, focusOffset) > 0; } catch { return false; }
+
+        /** @param {Block} block @param {boolean} end @returns {{ node: Node, offset: number } | null} */
+        const edgeOf = (block, end) => {
+            const text = block.behaviors?.get('text');
+            return /** @type {any} */ (block).getDOMPoint?.(end ? (text?.text.length ?? 0) : 0) ?? null;
+        };
+
+        if (anchorBlock.isolatesSelection) {
+            const edge = edgeOf(anchorBlock, forward);
+            if (!edge) return false;
+            this.setBaseAndExtent(anchor, anchorOffset, edge.node, edge.offset);
+            return true;
+        }
+
+        // The focus is in an isolated block: the nearest text outside any isolated block, past it.
+        /** @type {NodeFilter} */
+        const filter = { acceptNode: (node) => this.#isValidTextNode(node) && !this.#blockOf(node)?.isolatesSelection ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT };
+        // @ts-ignore — TreeWalker filter shape is correct, TS typedef is overly strict
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, filter);
+        const host = focusBlock.element ?? focus;
+        walker.currentNode = forward ? getLastDescendant(host) : host;
+        const target = forward ? walker.nextNode() : walker.previousNode();
+        const targetBlock = target && this.#blockOf(target);
+        const point = targetBlock && edgeOf(targetBlock, !forward);
+        if (!point) this.setBaseAndExtent(anchor, anchorOffset, anchor, anchorOffset);
+        else this.setBaseAndExtent(anchor, anchorOffset, point.node, point.offset);
+        return true;
+    }
+
+    /**
+     * Selects exactly the text of `block` (Select All inside an isolated field).
+     * @param {Block} block
+     * @returns {boolean} False when the block has no DOM point to select
+     */
+    selectBlockText(block) {
+        const text = block.behaviors?.get('text');
+        const from = /** @type {any} */ (block).getDOMPoint?.(0);
+        const to = /** @type {any} */ (block).getDOMPoint?.(text?.text.length ?? 0);
+        if (!from || !to) return false;
+        this.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+        return true;
+    }
+
+    /**
+     * Selects the text of the document between two blocks (first block start -> last block end).
+     * @param {Block} first @param {Block} last
+     * @returns {boolean}
+     */
+    selectBetween(first, last) {
+        const lastText = last.behaviors?.get('text');
+        const from = /** @type {any} */ (first).getDOMPoint?.(0);
+        const to = /** @type {any} */ (last).getDOMPoint?.(lastText?.text.length ?? 0);
+        if (!from || !to) return false;
+        this.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+        return true;
     }
 
     /**
@@ -247,6 +362,9 @@ export class NabuSelection extends SvelteSelection {
 
     /** @type {'forward' | 'backward' | null} */
     #pendingDirection = null;
+
+    /** The anchor a Shift+arrow started from (see the keydown listener). @type {{ node: Node, offset: number } | null} */
+    #shiftAnchor = null;
 
     /**
      * Caret at the keydown of an unmodified ArrowRight / ArrowDown, to tell at keyup whether the key moved it.
@@ -323,9 +441,23 @@ export class NabuSelection extends SvelteSelection {
 
     /** @type {Set<Block>} */
     previous = new Set();
-    blocks = $derived(new Set(getNodesBetween(this.nabu.tree, this.startBlock?.node.id.toString() || "", this.endBlock?.node.id.toString() || "").map(node => {
-        return this.nabu.blocks.get(node.id.toString());
-    }).filter(b => !!b)));
+    /**
+     * The blocks the selection covers (flagged `selected`: highlighted, marked, …). A selection that does not lie entirely in
+     * one block leaves out the blocks that isolate their text (`Block#isolatesSelection`): a title is not part of a range.
+     * @type {Set<Block>}
+     */
+    blocks = $derived.by(() => {
+        const range = this.startBlock !== this.endBlock;
+        return new Set(/** @type {Block[]} */ (getNodesBetween(this.nabu.tree, this.startBlock?.node.id.toString() || "", this.endBlock?.node.id.toString() || "").map(node => {
+            return this.nabu.blocks.get(node.id.toString());
+        }).filter(b => !!b && !(range && b.isolatesSelection))));
+    });
+
+    /**
+     * True while the selection is a non-collapsed range across several blocks. The editor mirrors it as `data-nabu-range` on its
+     * root, which the stylesheet uses to not highlight isolated blocks (the model leaves them out of the range, see `blocks`).
+     */
+    isRange = $derived(!this.isCollapsed && !!this.startBlock && !!this.endBlock && this.startBlock !== this.endBlock);
     
 }
 

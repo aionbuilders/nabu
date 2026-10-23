@@ -103,10 +103,15 @@ export class MegaBlock extends Block {
      *     boundary and the child holding the end boundary (inclusive) are kept, each one recursively clipped.
      * A pure container (no text) simply has no own-text part. Nothing here depends on a concrete block type.
      *
-     * @param {{ startBlock?: Block|null, startFrom?: number, endBlock?: Block|null, endTo?: number|null }} [ctx]
-     * @returns {import('../utils/extensions.js').PasteBlock | null}
+     * With `textOnly` (the context of a TEXT selection: copy, cut, drag), a block that ISOLATES its text (`isolatesSelection`) is
+     * transparent to a selection that is not entirely inside it: its own text is not copied and its container is not created, its
+     * selected children are returned directly (an ARRAY, to be spliced in the list of its siblings). Without it (the structure of
+     * a whole block), the container is serialized as it is.
+     *
+     * @param {{ startBlock?: Block|null, startFrom?: number, endBlock?: Block|null, endTo?: number|null, textOnly?: boolean }} [ctx]
+     * @returns {import('../utils/extensions.js').PasteBlock | import('../utils/extensions.js').PasteBlock[] | null}
      */
-    serializeForClipboard({ startBlock = null, startFrom = 0, endBlock = null, endTo = null } = {}) {
+    serializeForClipboard({ startBlock = null, startFrom = 0, endBlock = null, endTo = null, textOnly = false } = {}) {
         const tb = this.behaviors?.get('text');
         const imStart = startBlock === this;
         const imEnd   = endBlock   === this;
@@ -117,7 +122,8 @@ export class MegaBlock extends Block {
         const startChild = startBlock && !imStart ? childOfThis(startBlock) : null;
         const endChild   = endBlock   && !imEnd   ? childOfThis(endBlock)   : null;
 
-        const textIncluded     = !!tb && !startChild;
+        const isolated         = textOnly && this.isolatesSelection && !(imStart && imEnd);
+        const textIncluded     = !!tb && !startChild && !isolated;
         const childrenIncluded = !imEnd && !!this.children?.length;
         if (!textIncluded && imEnd) return null;
 
@@ -135,6 +141,7 @@ export class MegaBlock extends Block {
         }
 
         // ── Children inside the selection ──
+        /** @type {any[]} */
         let kids = [];
         let firstIndex = 0;
         if (childrenIncluded) {
@@ -147,21 +154,23 @@ export class MegaBlock extends Block {
             kids = relevant.map((child, i) => {
                 const cs = i === 0     && startChild ? startBlock : null;
                 const ce = i === lastI && endChild   ? endBlock   : null;
-                if (typeof child.serializeForClipboard === 'function') {
-                    return child.serializeForClipboard({ startBlock: cs, startFrom: cs ? startFrom : 0, endBlock: ce, endTo: ce ? endTo : null });
+                const mb = /** @type {any} */ (child);
+                if (typeof mb.serializeForClipboard === 'function') {
+                    return mb.serializeForClipboard({ startBlock: cs, startFrom: cs ? startFrom : 0, endBlock: ce, endTo: ce ? endTo : null, textOnly });
                 }
                 return child.serialize('application/x-nabu+json', {
                     from:    cs ? startFrom : 0,
                     to:      ce ? endTo     : null,
                     partial: cs && ce ? 'both' : cs ? 'start' : ce ? 'end' : false,
                 });
-            }).filter(Boolean);
+            }).flat().filter(Boolean);
         }
 
         if (result) {
             if (kids.length) result.children = kids;
             return result;
         }
+        if (isolated) return /** @type {import('../utils/extensions.js').PasteBlock[]} */ (kids);
         return kids.length ? { type: this.type, props: this.clipboardPropsFrom(firstIndex), children: kids } : null;
     }
 }

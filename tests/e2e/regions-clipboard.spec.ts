@@ -9,7 +9,9 @@
  * "The return".
  *
  * The READING side of markdown / HTML (a pasted markdown or `<section>` becoming regions, `importMarkdown`) is lot C: those tests
- * are `test.skip` with `TODO(ADR-018 lot C)`. Selecting text across titles (what a plain-text selection copies) is lot B.
+ * are `test.skip` with `TODO(ADR-018 lot C)`. A TEXT selection across titles copies the text blocks only (ADR 018 §3.9): the
+ * structure of whole regions travels by a structure gesture (seam, future block selection), which the tests below stand in for
+ * with `regionClip` (the payloads of the whole regions, built from the model).
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -35,10 +37,36 @@ async function paste(page: Page, data: Record<string, string>) {
   }, data);
 }
 
-/** Copy the whole region `title` (from the start of its title to the end of its last text) and return the clipboard event. */
+/** Copy a TEXT selection from the start of `from` to the end of `last` (real Ctrl+C) and return the clipboard event. */
 async function copyRegion(page: Page, from: string, last: string) {
   await selectRange(page, from, 0, last, -1);
   return copy(page);
+}
+
+/**
+ * The clipboard payloads of WHOLE regions (title + body), by title: what a structure gesture will copy (a text selection copies
+ * text only). Built from the model with the same serializers as a copy: internal fragment, markdown, HTML.
+ */
+async function regionClip(page: Page, ...titles: string[]) {
+  return page.evaluate((wanted) => {
+    const n = (window as any).nabu;
+    const blocks = wanted.map((title) => {
+      const region = [...n.blocks.values()].find((b: any) => b.type === 'region' && b.title === title);
+      if (!region) throw new Error(`no region titled "${title}"`);
+      return region.serializeForClipboard();
+    });
+    const plain = (pb: any) => (pb.delta ?? []).map((op: any) => op.insert).join('');
+    const md = (pb: any, ctx: any = {}): string => {
+      const Class = n.registry.get(pb.type);
+      return Class?.toMarkdown ? Class.toMarkdown(pb, { ...ctx, recurse: (c: any, o: any) => md(c, o), recurseAll: (cs: any[]) => cs.map((c) => md(c)) }) : plain(pb);
+    };
+    const html = (pb: any): string => {
+      const Class = n.registry.get(pb.type);
+      return Class?.toHtml ? Class.toHtml(pb, { recurse: html }) : `<p>${plain(pb)}</p>`;
+    };
+    const raw = JSON.stringify({ version: 1, blocks });
+    return { type: 'copy', defaultPrevented: true, nabuRaw: raw, nabu: JSON.parse(raw), text: blocks.map((b: any) => md(b)).join('\n\n'), html: blocks.map(html).join('\n') };
+  }, titles);
 }
 
 let errors: ReturnType<typeof collectErrors>;
@@ -49,7 +77,7 @@ test.describe('copy and paste of whole regions (internal clipboard)', () => {
   test.beforeEach(async ({ page }) => { await gotoEditor(page, { seed: 'regions' }); });
 
   test('copying whole regions writes the three payloads: a region block with its title and its body, comment + heading, <section>', async ({ page }) => {
-    const ev = await copyRegion(page, 'The ferryman', 'Closing text.');
+    const ev = await regionClip(page, 'The ferryman', 'The return');
     // the internal fragment: two root regions, the body nested in `children`, the title as the delta
     const [first, second] = ev.nabu!.blocks;
     expect([first.type, second.type]).toEqual(['region', 'region']);
@@ -75,8 +103,17 @@ test.describe('copy and paste of whole regions (internal clipboard)', () => {
     expect(ev.html).toContain('<h1>The return</h1><p>Closing text.</p></section>');
   });
 
+  test('a real Ctrl+C on a text selection across regions copies the TEXT blocks only: no region, no title (ADR 018 §3.9)', async ({ page }) => {
+    const ev = await copyRegion(page, 'Preamble, outside any region.', 'Closing text.');
+    expect(ev.nabu!.blocks.map((b: any) => b.type)).toEqual(['paragraph', 'paragraph', 'paragraph', 'paragraph', 'paragraph']);
+    expect(ev.text).toBe(['Preamble, outside any region.', 'Opening of the first section.', 'Text of the bank.', 'Text of the water.', 'Closing text.'].join('\n\n'));
+    expect(ev.html).not.toContain('data-nabu-region');
+    for (const title of ['The ferryman', 'The bank', 'The water', 'The return']) expect(ev.nabuRaw).not.toContain(title);
+    await expectOutline(page, SEED); // a copy changes nothing
+  });
+
   test('pasting a copied region after a region: it lands as a sibling (levels are checked), its sub-regions come with it, numbering follows', async ({ page }) => {
-    const ev = await copyRegion(page, 'The bank', 'Text of the bank.');
+    const ev = await regionClip(page, 'The bank');
     expect(ev.nabu!.blocks.map((b: any) => b.type)).toEqual(['region']);
     await focusEnd(page, 'Closing text.');
     await paste(page, { 'application/x-nabu+json': ev.nabuRaw, 'text/plain': ev.text, 'text/html': ev.html });
@@ -88,7 +125,7 @@ test.describe('copy and paste of whole regions (internal clipboard)', () => {
   });
 
   test('a section-1 pasted inside the body of a section-1 is moved right after its parent by the normalizer (one undo step with the paste)', async ({ page }) => {
-    const ev = await copyRegion(page, 'The return', 'Closing text.');
+    const ev = await regionClip(page, 'The return');
     await focusEnd(page, 'Text of the water.');
     await paste(page, { 'application/x-nabu+json': ev.nabuRaw });
     // the copy is a section-1; pasted in the body of "The water" (section-2) it must climb out to the root, after "The ferryman"
@@ -112,7 +149,7 @@ test.describe('copy and paste of whole regions (internal clipboard)', () => {
       n.undoManager.clear();
     });
     await expect(page.locator('[data-block-type="toggle"]')).toHaveCount(1);
-    const ev = await copyRegion(page, 'The bank', 'Text of the bank.');
+    const ev = await regionClip(page, 'The bank');
     await focusEnd(page, 'body one');
     await paste(page, { 'application/x-nabu+json': ev.nabuRaw, 'text/plain': ev.text });
     await expect.poll(async () => (await outline(page)).includes('toggle(Toggle)')).toBe(true);
@@ -132,7 +169,7 @@ test.describe('copy and paste of whole regions (internal clipboard)', () => {
       await n.commit();
       n.undoManager.clear();
     });
-    const ev = await copyRegion(page, 'The bank', 'Text of the bank.');
+    const ev = await regionClip(page, 'The bank');
     await focusEnd(page, 'item one');
     await paste(page, { 'application/x-nabu+json': ev.nabuRaw });
     await expect.poll(async () => (await outline(page)).includes(`${BANK} ; ul[`)).toBe(true);
@@ -221,7 +258,7 @@ test.describe('markdown / HTML import of regions', () => {
 
   test.skip('the markdown text/plain alone (another app) restores the regions, and so does Nabu\'s own text/html', async ({ page }) => {
     // TODO(ADR-018 lot C): markdownRules / htmlRules of the region block are empty until the reading side is rewritten
-    const ev = await copyRegion(page, 'The bank', 'Text of the water.');
+    const ev = await regionClip(page, 'The bank', 'The water');
     await focusEnd(page, 'Closing text.');
     await paste(page, { 'text/plain': ev.text });
     await expect(page.locator('.nabu-region')).toHaveCount(6);

@@ -8,6 +8,24 @@ import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { resolvePlaceholderText } from "../utils/placeholders.js";
 
 
+/**
+ * The first descendant of `block`, depth first in document order, that satisfies `predicate` (the block itself is not
+ * tested). Does not enter a block that hides its children. Each node is visited once.
+ * @param {Block} block @param {(block: Block) => boolean} predicate @returns {Block | null}
+ */
+function findInDescendants(block, predicate) {
+    // @ts-ignore
+    const children = block.children;
+    if (!children?.length || block.hidesChildren) return null;
+    for (const child of children) {
+        if (predicate(child)) return child;
+        const found = findInDescendants(child, predicate);
+        if (found) return found;
+    }
+    return null;
+}
+
+
 export class Block {
     /** @param {Nabu} nabu @param {NabuNode} node */
     constructor(nabu, node) {
@@ -74,6 +92,20 @@ export class Block {
      * @type {boolean}
      */
     get hidesChildren() { return false; }
+    /**
+     * When true, the text of this block is an ISOLATED FIELD (like a form input embedded in the document): a text selection
+     * that does not lie entirely inside this block never touches its text. For such a selection (the engine's rules, see
+     * `container.utils.js`, `selection.svelte.js`):
+     *  - range deletion, typing over it, cut and the marks skip the text of this block, and delete neither this block nor its
+     *    container; the clipboard gets the TEXT blocks only (the block's own text and its container are not copied);
+     *  - two text blocks on either side of an isolated block, or in different "isolation owners" (the nearest ancestor that
+     *    isolates), never merge, so a deletion across them clears both sides without joining them;
+     *  - the block is not highlighted (`data-nabu-isolated` + the root's `data-nabu-range`), and a selection end that would
+     *    land in it is moved past it, in the direction of travel; a selection that STARTS in it stays bounded to it;
+     *  - the caret enters it at its start going down / right, at its end going up / left; Select All inside it selects its text.
+     * @type {boolean}
+     */
+    isolatesSelection = false;
     /** When true, pasting inside this block inserts the clipboard's text/plain verbatim (replacing the selection), skipping every paste interpreter: no blocks created, no markdown/HTML interpretation. @type {boolean} */
     pastesAsPlainText = false;
 
@@ -135,20 +167,20 @@ export class Block {
     /** @type {HTMLElement | null} */
     element = $state(null);
 
-    /** @param {(block: Block) => boolean} predicate @returns {Block | null} */
+    /**
+     * The next block in document order (own descendants first, then the following siblings with their descendants, then
+     * those of each ancestor) that satisfies `predicate`, or null. A block that hides its children is not entered.
+     * LINEAR: every block is visited at most once (the following siblings are only DESCENDED into, never searched
+     * "forward" again, which would revisit everything after them).
+     * @param {(block: Block) => boolean} predicate @returns {Block | null}
+     */
     findForward(predicate) {
-        // 1. Chercher dans les enfants (descendre)
-        // @ts-ignore
-        if (this.children?.length && !this.hidesChildren) {
-            // @ts-ignore
-            for (const child of this.children) {
-                if (predicate(child)) return child;
-                const found = child.findForward(predicate);
-                if (found) return found;
-            }
-        }
+        // 1. Descendre dans nos propres enfants
+        const inside = findInDescendants(this, predicate);
+        if (inside) return inside;
 
-        // 2. Chercher dans les frères suivants et remonter
+        // 2. Frères suivants (eux et leurs descendants), puis remonter d'un niveau
+        /** @type {Block | null} */
         let current = this;
         while (current) {
             const parent = current.parent || current.nabu;
@@ -157,7 +189,7 @@ export class Block {
                 for (let j = i + 1; j < parent.children.length; j++) {
                     const sibling = parent.children[j];
                     if (predicate(sibling)) return sibling;
-                    const found = sibling.findForward(predicate);
+                    const found = findInDescendants(sibling, predicate);
                     if (found) return found;
                 }
             }

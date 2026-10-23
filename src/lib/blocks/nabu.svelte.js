@@ -3,7 +3,7 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { Block } from './block.svelte.js';
 import { MegaBlock } from './megablock.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
-import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, deleteRange, selectionRange, findDirectChildOf, findLCA } from './container.utils.js';
+import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, deleteRange, selectionRange, findDirectChildOf, findLCA, textBlocksInOrder } from './container.utils.js';
 import { jsonToPasteBlocks, degradeUnknownBlocks, CLIPBOARD_FORMAT_VERSION, JSON_FORMAT_VERSION, isSupportedJsonVersion } from '../utils/extensions.js';
 import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
 import { tick } from 'svelte';
@@ -1078,8 +1078,71 @@ export class Nabu {
         // Commands first (ADR 017): undo / redo and every declared shortcut. What no command handles falls through to the
         // legacy `onKeyDown` hooks and the block's own keydown, then to the native behavior.
         if (this.commands.handleKeydown(e)) return;
+        if (this.#selectAll(e) || this.#landOnIsolated(e)) return;
 
         this.dispatchEventToSelection('keydown', e, 'onKeyDown');
+    }
+
+    /**
+     * Ctrl / Cmd + A when the document holds ISOLATED text fields (`Block#isolatesSelection`, e.g. region titles). Inside one it
+     * selects exactly that field's text (like an input); elsewhere it selects the text of the document from the first to the last
+     * block that is not isolated (the isolated fields are left out of the selection, as of any range). A document without
+     * isolated block keeps the browser's own Select All.
+     * @param {KeyboardEvent} e
+     * @returns {boolean} Whether the key was handled
+     */
+    #selectAll(e) {
+        if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || typeof e.key !== 'string' || e.key.toLowerCase() !== 'a') return false;
+        if (e.isComposing || this.#composing) return false;
+        const sel = this.selection;
+        const inside = sel.anchorBlock;
+        if (inside?.isolatesSelection && sel.focusBlock === inside) {
+            e.preventDefault();
+            sel.selectBlockText(inside);
+            return true;
+        }
+        const texts = textBlocksInOrder(this, { visible: true });
+        if (!texts.some((b) => b.isolatesSelection)) return false;
+        e.preventDefault();
+        const plain = texts.filter((b) => !b.isolatesSelection && b.element);
+        const first = plain[0];
+        const last = plain.at(-1);
+        if (first && last) sel.selectBetween(first, last);
+        return true;
+    }
+
+    /**
+     * Arrow keys at the edge of an ISOLATED text field (`Block#isolatesSelection`): a field is entered at its START going down /
+     * right and at its END going up / left, whatever the column the caret had, and ArrowDown / ArrowRight at the end of a field
+     * goes to the start of the next text. Only a collapsed caret at the very end (down / right) or start (up / left) of its
+     * block is concerned; anywhere else the browser moves the caret as usual.
+     * @param {KeyboardEvent} e
+     * @returns {boolean} Whether the key was handled
+     */
+    #landOnIsolated(e) {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.isComposing || this.#composing) return false;
+        const down = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+        if (!down && e.key !== 'ArrowUp' && e.key !== 'ArrowLeft') return false;
+        const sel = this.selection;
+        const block = sel.anchorBlock;
+        const text = block?.behaviors?.get('text');
+        const caret = block?.selection;
+        if (!block || !text || !sel.isCollapsed || !caret || caret.from !== caret.to) return false;
+        const hasText = (/** @type {Block} */ b) => !!b.behaviors?.has('text');
+        if (down) {
+            if (caret.to !== text.text.length) return false;
+            const next = block.findForward(hasText);
+            if (!next || !(next.isolatesSelection || block.isolatesSelection)) return false;
+            e.preventDefault();
+            sel.setCursor(next, 0);
+        } else {
+            if (caret.from !== 0) return false;
+            const previous = block.findBackward(hasText);
+            if (!previous?.isolatesSelection) return false;
+            e.preventDefault();
+            sel.setCursor(previous, previous.behaviors.get('text').text.length);
+        }
+        return true;
     }
     
     /** @param {InputEvent} e */
@@ -1156,6 +1219,7 @@ export class Nabu {
                     startFrom:  isFirst ? startFrom  : 0,
                     endBlock:   isLast  ? endBlock   : null,
                     endTo:      isLast  ? endTo      : null,
+                    textOnly:   true, // a text selection: isolated fields (region titles) and their containers are not copied
                 });
             }
 
@@ -1165,7 +1229,7 @@ export class Nabu {
                 to:      isLast  ? endTo     : null,
                 partial: isFirst && isLast ? 'both' : isFirst ? 'start' : isLast ? 'end' : false,
             });
-        }).filter(Boolean);
+        }).flat().filter(Boolean); // an isolating container returns its selected children directly (an array)
 
         if (!pasteBlocks.length) return false;
 

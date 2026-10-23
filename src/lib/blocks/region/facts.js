@@ -56,36 +56,6 @@ export function neighbourOf(nabu, block, step = -1) {
     return siblings[siblings.indexOf(block) + step] ?? null;
 }
 
-/**
- * The first block after `block` in document order (its own body included) that satisfies `predicate`: the answer of
- * `block.findForward(predicate)`, in LINEAR time. `Block#findForward` revisits the following siblings recursively, which is
- * exponential in the number of blocks that follow when nothing matches (a document without any region after the caret: 40
- * paragraphs hang the page on every Backspace), and these facts are computed at each key press that has a command bound to it.
- * @param {Nabu} nabu @param {Block} block @param {(b: Block) => boolean} predicate @returns {Block | null}
- */
-export function findAfter(nabu, block, predicate) {
-    /** @param {Block[]} blocks @returns {Block | null} */
-    const scan = (blocks) => {
-        for (const b of blocks) {
-            if (predicate(b)) return b;
-            const kids = /** @type {any} */ (b).children;
-            if (kids?.length && !/** @type {any} */ (b).hidesChildren) {
-                const found = scan(kids);
-                if (found) return found;
-            }
-        }
-        return null;
-    };
-    const own = /** @type {any} */ (block).children;
-    /** @type {Block | null} */
-    let found = own?.length && !/** @type {any} */ (block).hidesChildren ? scan(own) : null;
-    for (let current = /** @type {Block | null} */ (block); !found && current; current = /** @type {Block | null} */ (current.parent)) {
-        const siblings = siblingsOf(nabu, current);
-        found = scan(siblings.slice(siblings.indexOf(current) + 1));
-    }
-    return found;
-}
-
 /** Whether `ancestor` is `block` or one of its ancestors. @param {Block} ancestor @param {Block} block */
 function holds(ancestor, block) {
     /** @type {Block | null} */
@@ -141,7 +111,7 @@ export function regionFacts(nabu, ctx) {
     const region = regions.at(block);
     facts.region = region;
     facts.previousRegion = region ? regions.prev(region) : null;
-    const ahead = findAfter(nabu, block, (b) => b.type === 'region');
+    const ahead = block.findForward((b) => b.type === 'region');
     facts.nextRegion = ahead ? regions.of(ahead) : null;
     facts.inTitle = block.type === 'region';
     facts.inBodyTextBlock = isBodyTextBlock(block);
@@ -156,7 +126,7 @@ export function regionFacts(nabu, ctx) {
         facts.atStartOfRegion = facts.inTitle || block.findBackward(hasText) === region.block;
     }
     if (sel.from === length) {
-        const partner = findAfter(nabu, block, hasText);
+        const partner = block.findForward(hasText);
         const boundary = partner?.type === 'region' ? regions.of(partner) : null;
         const before = boundary && neighbourOf(nabu, boundary.block, -1);
         if (boundary && before && holds(before, block)) {

@@ -35,6 +35,7 @@
     data-enable-grammarly={engine.spellcheck ? undefined : 'false'}
     translate="no"
     data-nabu-root="true"
+    data-nabu-range={engine.selection?.isRange ? '' : undefined}
     onbeforeinput={(e) => engine.handleBeforeinput(e)}
     onkeydown={(e) => engine.handleKeydown(e)}
     onmousedown={(e) => engine.handleMousedown(e)}
@@ -93,6 +94,15 @@
     }
     @media (prefers-reduced-motion: no-preference) {
         .nabu-editor :global([data-command-target]) { transition: outline-color 0.1s; }
+    }
+
+    /* A selection across several blocks leaves out the blocks that isolate their text (a region title, ADR 018 §3.9): the model
+       does not touch them, and they are not drawn as selected. Only the highlight changes (the DOM of the block stays as it is,
+       so a drag in progress is not disturbed). */
+    .nabu-editor[data-nabu-range] :global([data-nabu-isolated]::selection),
+    .nabu-editor[data-nabu-range] :global([data-nabu-isolated] *::selection) {
+        background: transparent;
+        color: inherit;
     }
 
     /* Placeholders — blocks expose data-placeholder when it must be shown

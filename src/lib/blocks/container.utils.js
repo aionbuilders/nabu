@@ -150,8 +150,8 @@ function rehomeAfter(nabu, anchor, blocks) {
 }
 
 /**
- * THE one implementation of "delete the selected range across blocks" (cut, Backspace / Delete, typing over a
- * selection, paste over a selection). Mutates the Loro tree and texts, never commits.
+ * The deletion of a range whose text positions are all plain (no isolated block inside: see {@link deleteRange}).
+ * Mutates the Loro tree and texts, never commits.
  *
  * Model: document order is pre-order, a block's own text coming before its children. The range runs from
  * (`startBlock`, `startOffset`) to (`endBlock`, `endOffset`):
@@ -174,7 +174,7 @@ function rehomeAfter(nabu, anchor, blocks) {
  * @param {DeletionRange} range
  * @returns {{ block: Block, offset: number } | null} the junction (where the caret belongs), or null if the range is unusable
  */
-export function deleteRange(nabu, range) {
+function deleteRangeRaw(nabu, range) {
     const { startBlock: start, startOffset, endBlock: end, endOffset } = range;
     const startText = textOf(start);
     const endText = textOf(end);
@@ -280,6 +280,112 @@ export function deleteRange(nabu, range) {
     }
 
     return { block: start, offset: startOffset };
+}
+
+// ── Isolated text fields (`Block#isolatesSelection`) ─────────────────────────
+
+/** Whether `block` holds text. @param {Block} block */
+const hasTextBehavior = (block) => !!block.behaviors?.has('text');
+
+/**
+ * The text blocks of the document in document order (a block's own text before its children). With `visible`, the children of
+ * a block that hides them are skipped (they are not rendered: no caret, no DOM point).
+ * @param {Nabu} nabu
+ * @param {{ visible?: boolean }} [options]
+ * @returns {Block[]}
+ */
+export function textBlocksInOrder(nabu, { visible = false } = {}) {
+    /** @type {Block[]} */
+    const out = [];
+    /** @param {Block[]} blocks */
+    const walk = (blocks) => {
+        for (const block of blocks) {
+            if (hasTextBehavior(block)) out.push(block);
+            const kids = kidsOf(block);
+            if (kids.length && !(visible && block.hidesChildren)) walk(kids);
+        }
+    };
+    walk(/** @type {Block[]} */ (nabu.children));
+    return out;
+}
+
+/**
+ * The ISOLATION OWNER of a block: its nearest ancestor that isolates its text (`Block#isolatesSelection`), or null. Two text
+ * blocks with different owners (the body of a chapter and the body of a scene inside it) never merge by a range deletion.
+ * @param {Block} block
+ * @returns {Block | null}
+ */
+export function isolationOwnerOf(block) {
+    for (let cur = block.parent ?? null; cur; cur = cur.parent ?? null) if (cur.isolatesSelection) return cur;
+    return null;
+}
+
+/**
+ * Splits a range into the RUNS that a deletion may act on (ADR 018 §3.9): maximal sequences of consecutive text blocks, in
+ * document order, that do not contain an isolated block and share one isolation owner. The text of an isolated block is
+ * outside every run (a range starting or ending in it starts after it / ends before it), and a run boundary is never merged
+ * across. A document without isolated blocks gives a single run, the range itself.
+ * @param {Nabu} nabu
+ * @param {DeletionRange} range
+ * @returns {DeletionRange[] | null} the runs in document order (possibly empty), or null when the range cannot be placed in the document
+ */
+export function isolatedRuns(nabu, range) {
+    const { startBlock, endBlock } = range;
+    const order = textBlocksInOrder(nabu);
+    const first = order.indexOf(startBlock);
+    const last = order.indexOf(endBlock);
+    if (first < 0 || last < first) return null;
+
+    /** @type {Block[][]} */
+    const groups = [];
+    /** @type {Block[] | null} */
+    let current = null;
+    let owner = /** @type {Block | null} */ (null);
+    for (const block of order.slice(first, last + 1)) {
+        if (block.isolatesSelection) { current = null; continue; }
+        const blockOwner = isolationOwnerOf(block);
+        if (!current || blockOwner !== owner) { current = []; owner = blockOwner; groups.push(current); }
+        current.push(block);
+    }
+    return groups.map((blocks) => {
+        const head = /** @type {Block} */ (blocks[0]);
+        const tail = /** @type {Block} */ (blocks.at(-1));
+        return {
+            startBlock: head,
+            startOffset: head === startBlock ? range.startOffset : 0,
+            endBlock: tail,
+            endOffset: tail === endBlock ? range.endOffset : (textOf(tail)?.container.length ?? 0),
+        };
+    });
+}
+
+/**
+ * THE one implementation of "delete the selected range across blocks" (cut, Backspace / Delete, typing over a
+ * selection, paste over a selection, move by drag). Mutates the Loro tree and texts, never commits.
+ *
+ * A range that crosses ISOLATED text (`Block#isolatesSelection`, e.g. the title of a region) acts on its {@link isolatedRuns}
+ * only: the text of an isolated block is never touched, an isolated block and its container are never deleted, and the runs
+ * are never merged with one another (each one is deleted like a range of its own, the LAST run first so that the earlier
+ * ones are not disturbed). What is left is the first block of every run, emptied: that is where a caret still has a home.
+ * Without isolated block in the range it is exactly {@link deleteRangeRaw}.
+ *
+ * @param {Nabu} nabu
+ * @param {DeletionRange} range
+ * @returns {{ block: Block, offset: number } | null} the junction (where the caret belongs: the start of the first run), or null if the range is unusable or holds no deletable text
+ */
+export function deleteRange(nabu, range) {
+    if (range.startBlock === range.endBlock) return deleteRangeRaw(nabu, range);
+    const runs = isolatedRuns(nabu, range);
+    if (!runs) return deleteRangeRaw(nabu, range);
+    if (runs.length === 1 && runs[0].startBlock === range.startBlock && runs[0].endBlock === range.endBlock) return deleteRangeRaw(nabu, range);
+    if (!runs.length) return null;
+    for (let i = runs.length - 1; i >= 0; i--) {
+        const run = /** @type {DeletionRange} */ (runs[i]);
+        const empty = run.startBlock === run.endBlock && run.endOffset <= run.startOffset;
+        if (!empty) deleteRangeRaw(nabu, run);
+    }
+    const head = /** @type {DeletionRange} */ (runs[0]);
+    return { block: head.startBlock, offset: head.startOffset };
 }
 
 /**

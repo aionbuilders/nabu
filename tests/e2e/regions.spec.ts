@@ -10,15 +10,16 @@
  *   Mod-Shift-Enter     region:exit            a paragraph right after the region, one level up (repeat to climb)
  *   Tab / Shift-Tab     region:demote/promote  ONLY in a title
  * Outline notation of the helpers (tests/e2e/helpers/model.ts): `R:section-1(The ferryman){ p(...) ; R:section-2(The bank){ p(...) } }`.
- * Out of scope here (lot B, `test.fixme` below): arrow keys crossing a title, selections spanning titles, Ctrl+A.
+ * The title as an isolated field of the caret and selection model (ADR 018 §3.9): the last two describes.
  * Clipboard paths: regions-clipboard.spec.ts. Drag of a seam / long titles: ui-components.spec.ts (3c, 16).
  */
 
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { gotoEditor, clearAndReset, press, flushRender } from './helpers/editor.js';
-import { undo } from './helpers/keyboard.js';
+import { undo, bold } from './helpers/keyboard.js';
+import { cut, copy } from './helpers/clip-capture.js';
 import { buildTree, Pp, type TreeSpec } from './helpers/blocks.js';
-import { outline, caret, violations, focusAt, focusEnd, focusEmpty, collectErrors } from './helpers/model.js';
+import { outline, caret, violations, focusAt, focusEnd, focusEmpty, selectRange, collectErrors } from './helpers/model.js';
 
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -912,10 +913,12 @@ test.describe('long documents', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// The title in the caret model (ADR 018 §3.9). Horizontal arrows already cross it; the rest is lot B (test.fixme)
+// The title in the caret model (ADR 018 §3.9): a field the caret steps through
 // ════════════════════════════════════════════════════════════════════════════
 
-test.describe('the title as a field of the caret and selection model', () => {
+const root = (page: Page) => page.locator('[data-nabu-root]');
+
+test.describe('the title as a field of the caret model', () => {
   test.beforeEach(async ({ page }) => {
     await gotoEditor(page);
     await clearAndReset(page);
@@ -945,33 +948,275 @@ test.describe('the title as a field of the caret and selection model', () => {
     await press(page, 'ArrowRight');
     await page.keyboard.type('X');
     await expectOutline(page, 'p(above) ; R:section-1(XPart){ p(below) }');
-    await expectValid(page);
   });
 
   test('ArrowDown at the end of the block above lands at the START of the title (ADR 018 §3.9)', async ({ page }) => {
-    test.fixme(true, 'TODO(ADR-018 lot B): ArrowDown into a title keeps the native column and lands at the END of the title (Part|), not at its start');
     await focusEnd(page, 'above');
     await press(page, 'ArrowDown');
     await expectCaret(page, '|Part');
   });
 
+  test('ArrowUp at the start of the first body block lands at the END of the title; ArrowDown at the end of the title goes to the start of the body', async ({ page }) => {
+    await focusAt(page, 'below', 0);
+    await press(page, 'ArrowUp');
+    await expectCaret(page, 'Part|');
+    await press(page, 'ArrowDown');
+    await expectCaret(page, '|below');
+    await expectOutline(page, 'p(above) ; R:section-1(Part){ p(below) }');
+  });
+
+  test('a title right after another title (empty region, then a sub-region) is also entered at its start / left at its end', async ({ page }) => {
+    await build(page, [S1('One'), S1('Two', Pp('body'))]);
+    await focusEnd(page, 'One');
+    await press(page, 'ArrowDown');
+    await expectCaret(page, '|Two');
+    await press(page, 'ArrowUp');
+    await expectCaret(page, 'One|');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Selections and the title (ADR 018 §3.9): the title is excluded from a range, bounded when the range starts in it
+// ════════════════════════════════════════════════════════════════════════════
+
+/** What the browser and the model say about the selection: the text, the model range flag, the root attribute, the `selected` blocks. */
+const selectionState = (page: Page) => page.evaluate(() => {
+  const n = (window as any).nabu;
+  return {
+    text: window.getSelection()?.toString() ?? '',
+    isRange: !!n.selection.isRange,
+    rootFlag: document.querySelector('[data-nabu-root]')!.hasAttribute('data-nabu-range'),
+    selectedTitles: [...n.blocks.values()].filter((b: any) => b.type === 'region' && b.selected).map((b: any) => b.title),
+    selectedBodies: [...n.blocks.values()].filter((b: any) => b.type === 'paragraph' && b.selected).map((b: any) => b.text),
+  };
+});
+/** The inline marks of every text in the document, by text. */
+const marksOf = (page: Page) => page.evaluate(() => {
+  const n = (window as any).nabu;
+  const out: Record<string, string[]> = {};
+  for (const b of n.blocks.values()) {
+    const tb = b.behaviors?.get('text');
+    if (!tb || !tb.text) continue;
+    out[tb.text] = tb.container.toDelta().flatMap((op: any) => Object.keys(op.attributes ?? {}));
+  }
+  return out;
+});
+/** Select from `a`@`ao` to `b`@`bo` (blocks by text). */
+const sel = (page: Page, a: string, ao: number, b: string, bo: number) => selectRange(page, a, ao, b, bo);
+
+test.describe('selections and the title', () => {
+  const TWO = () => [S1('One', Pp('aaXX')), S1('Two', Pp('YYbb'))];
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+    await build(page, TWO());
+  });
+
+  test('the titles carry data-nabu-isolated; the root carries data-nabu-range only while a selection spans several blocks', async ({ page }) => {
+    await expect(page.locator('[data-nabu-isolated]')).toHaveCount(2);
+    await expect(page.locator('.nabu-region-title[data-nabu-isolated]')).toHaveCount(2);
+    await focusAt(page, 'aaXX', 1);
+    await expect(root(page)).not.toHaveAttribute('data-nabu-range', '');
+    await sel(page, 'aaXX', 1, 'aaXX', 3);
+    await expect(root(page)).not.toHaveAttribute('data-nabu-range', '');
+    await sel(page, 'aaXX', 2, 'YYbb', 2);
+    await expect(root(page)).toHaveAttribute('data-nabu-range', '');
+    await focusAt(page, 'aaXX', 1);
+    await expect(root(page)).not.toHaveAttribute('data-nabu-range', '');
+  });
+
   test('a selection spanning two regions deletes the text on both sides but never merges them (titles intact)', async ({ page }) => {
-    test.fixme(true, 'TODO(ADR-018 lot B): selections spanning titles do not exclude the titles yet (today the second region is deleted and its text merged into the first)');
-    await build(page, [S1('One', Pp('aaXX')), S1('Two', Pp('YYbb'))]);
-    await page.evaluate(async () => {
-      const n = (window as any).nabu;
-      const [a, b] = ['aaXX', 'YYbb'].map((t) => [...n.blocks.values()].find((x: any) => x.behaviors?.get('text')?.text === t));
-      await n.focus({ from: { block: a, offset: 2 }, to: { block: b, offset: 2 } });
-    });
+    await sel(page, 'aaXX', 2, 'YYbb', 2);
     await press(page, 'Backspace');
+    await expectOutline(page, 'R:section-1(One){ p(aa) } ; R:section-1(Two){ p(bb) }');
+    await expectCaret(page, 'aa|');
+    await expectValid(page);
+  });
+
+  test('...and it is ONE undo step that gives everything back', async ({ page }) => {
+    await sel(page, 'aaXX', 2, 'YYbb', 2);
+    await press(page, 'Delete');
+    await expectOutline(page, 'R:section-1(One){ p(aa) } ; R:section-1(Two){ p(bb) }');
+    await undo(page);
+    await expectOutline(page, 'R:section-1(One){ p(aaXX) } ; R:section-1(Two){ p(YYbb) }');
+    expect(await canUndo(page)).toBe(false);
+  });
+
+  test('typing over a selection spanning two regions replaces the text at the start of the range; titles and regions untouched', async ({ page }) => {
+    await sel(page, 'aaXX', 2, 'YYbb', 2);
+    await page.keyboard.type('Z');
+    await expectOutline(page, 'R:section-1(One){ p(aaZ) } ; R:section-1(Two){ p(bb) }');
+    await expectCaret(page, 'aaZ|');
+  });
+
+  test('Enter over a selection spanning two regions deletes the text on both sides and splits at the junction; no region is merged', async ({ page }) => {
+    await sel(page, 'aaXX', 2, 'YYbb', 2);
+    await press(page, 'Enter');
+    await expectOutline(page, 'R:section-1(One){ p(aa) ; p(∅) } ; R:section-1(Two){ p(bb) }');
+    await expectValid(page);
+  });
+
+  test('a selection ending INSIDE a title (programmatic) leaves that title alone', async ({ page }) => {
+    await sel(page, 'aaXX', 2, 'Two', 2);
+    await press(page, 'Backspace');
+    await expectOutline(page, 'R:section-1(One){ p(aa) } ; R:section-1(Two){ p(YYbb) }');
+  });
+
+  test('bold over a selection spanning two regions marks the body texts, never the titles', async ({ page }) => {
+    await sel(page, 'aaXX', 1, 'YYbb', 3);
+    await bold(page);
+    await expect.poll(() => marksOf(page)).toEqual({ One: [], aaXX: ['bold'], Two: [], YYbb: ['bold'] });
+    // the selection is intact (same characters), and a second Ctrl+B takes the bold off
+    await bold(page);
+    await expect.poll(() => marksOf(page)).toEqual({ One: [], aaXX: [], Two: [], YYbb: [] });
+  });
+
+  test('the model range leaves the titles out: they are not "selected" while the range spans the regions', async ({ page }) => {
+    await sel(page, 'aaXX', 2, 'YYbb', 2);
+    await expect.poll(() => selectionState(page)).toMatchObject({ isRange: true, rootFlag: true, selectedTitles: [], selectedBodies: ['aaXX', 'YYbb'] });
+    // entirely inside a title: that title is selected as usual
+    await sel(page, 'One', 1, 'One', 3);
+    await expect.poll(() => selectionState(page)).toMatchObject({ isRange: false, rootFlag: false, selectedTitles: ['One'] });
+  });
+
+  test('Ctrl+C across two regions copies the text only; Ctrl+X cuts the same text and keeps both regions', async ({ page }) => {
+    await sel(page, 'aaXX', 2, 'YYbb', 2);
+    const ev = await copy(page);
+    expect(ev.text).toBe('XX\n\nYY');
+    expect(ev.nabu!.blocks.map((b: any) => b.type)).toEqual(['paragraph', 'paragraph']);
+    await expectOutline(page, 'R:section-1(One){ p(aaXX) } ; R:section-1(Two){ p(YYbb) }');
+    const cutEvent = await cut(page);
+    expect(cutEvent.text).toBe('XX\n\nYY');
     await expectOutline(page, 'R:section-1(One){ p(aa) } ; R:section-1(Two){ p(bb) }');
   });
 
   test('Ctrl+A in a title selects the title only', async ({ page }) => {
-    test.fixme(true, 'TODO(ADR-018 lot B): Ctrl+A in a title selects the whole document today (Ctrl+A then Backspace empties it)');
-    await focusAt(page, 'Part', 2);
+    await focusAt(page, 'One', 2);
     await press(page, `${MOD}+a`);
+    await expectCaret(page, '⟦One⟧');
     await press(page, 'Backspace');
-    await expectOutline(page, 'p(above) ; R:section-1(∅){ p(below) }');
+    await expectOutline(page, 'R:section-1(∅){ p(aaXX) } ; R:section-1(Two){ p(YYbb) }');
+  });
+
+  test('Ctrl+A elsewhere selects the text of the document without the titles; Backspace then keeps the skeleton (regions and titles), undo restores', async ({ page }) => {
+    await build(page, [Pp('above'), S1('Part', Pp('below'), S2('Sub', Pp('x'), Pp('y'))), S1('End', Pp('z'))]);
+    const before = await outline(page);
+    await focusAt(page, 'below', 2);
+    await press(page, `${MOD}+a`);
+    await expectCaret(page, 'above@0 -> z@1');
+    await expect.poll(() => selectionState(page)).toMatchObject({ rootFlag: true, selectedTitles: [] });
+    await press(page, 'Backspace');
+    await expectOutline(page, 'p(∅) ; R:section-1(Part){ p(∅) ; R:section-2(Sub){ p(∅) } } ; R:section-1(End){ p(∅) }');
+    await expectValid(page);
+    expect(await page.evaluate(() => (window as any).nabu.regions.list.map((r: any) => r.title))).toEqual(['Part', 'Sub', 'End']);
+    await undo(page);
+    await expectOutline(page, before);
+    expect(await canUndo(page)).toBe(false);
+  });
+
+  test('Ctrl+A in a document that starts with a title selects from the first body text (the title is not the anchor)', async ({ page }) => {
+    await focusAt(page, 'aaXX', 1);
+    await press(page, `${MOD}+a`);
+    await expectCaret(page, 'aaXX@0 -> YYbb@4');
+  });
+});
+
+test.describe('extending a selection across a title (Shift+arrows, Shift+click, drag)', () => {
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+    await build(page, [S1('One', Pp('aaa')), S1('Two', Pp('bbb')), Pp('tail')]);
+  });
+
+  test('Shift+ArrowDown from the end of a body skips the next title: the focus lands at the start of the next body text', async ({ page }) => {
+    await focusEnd(page, 'aaa');
+    await press(page, 'Shift+ArrowDown');
+    await expectCaret(page, 'aaa@3 -> bbb@0');
+    await expect.poll(() => selectionState(page)).toMatchObject({ rootFlag: true, selectedTitles: [] });
+    await press(page, 'Backspace');
+    await expectOutline(page, 'R:section-1(One){ p(aaa) } ; R:section-1(Two){ p(bbb) } ; p(tail)');
+  });
+
+  test('Shift+ArrowRight at the end of a body skips the next title the same way', async ({ page }) => {
+    await focusEnd(page, 'aaa');
+    await press(page, 'Shift+ArrowRight');
+    await expectCaret(page, 'aaa@3 -> bbb@0');
+  });
+
+  test('Shift+ArrowUp / Shift+ArrowLeft from the start of a body skip the title above: the focus lands at the end of the previous text', async ({ page }) => {
+    await focusAt(page, 'bbb', 0);
+    await press(page, 'Shift+ArrowUp');
+    await expectCaret(page, 'bbb@0 -> aaa@3');
+    await focusAt(page, 'bbb', 0);
+    await press(page, 'Shift+ArrowLeft');
+    await expectCaret(page, 'bbb@0 -> aaa@3');
+  });
+
+  test('a selection that starts in a title stays BOUNDED to it: Shift+ArrowRight at the end of the title does not leave it', async ({ page }) => {
+    await focusAt(page, 'One', 3);
+    await press(page, 'Shift+ArrowRight');
+    await expectCaret(page, 'One|');
+    await focusAt(page, 'One', 1);
+    for (let i = 0; i < 6; i++) await press(page, 'Shift+ArrowRight');
+    await expectCaret(page, 'O⟦ne⟧');
+    await expectOutline(page, 'R:section-1(One){ p(aaa) } ; R:section-1(Two){ p(bbb) } ; p(tail)');
+  });
+
+  test('...Shift+ArrowDown from a title goes to the end of the title; Shift+ArrowUp to its start', async ({ page }) => {
+    await focusAt(page, 'Two', 1);
+    await press(page, 'Shift+ArrowDown');
+    await expectCaret(page, 'T⟦wo⟧');
+    await focusAt(page, 'Two', 1);
+    await press(page, 'Shift+ArrowUp');
+    await expectCaret(page, '⟦T⟧wo');
+  });
+
+  test('Shift+click in a title, from a body above, extends the selection past it (the title is not part of the range)', async ({ page }) => {
+    await focusAt(page, 'aaa', 1);
+    await page.locator('.nabu-region-title', { hasText: 'Two' }).click({ modifiers: ['Shift'] });
+    await expectCaret(page, 'aaa@1 -> bbb@0');
+    await expect.poll(() => selectionState(page)).toMatchObject({ rootFlag: true, selectedTitles: [] });
+  });
+
+  test('dragging from a body across a title selects the text around it: the range leaves the title out and the root flags it', async ({ page }) => {
+    const from = (await page.locator('[data-block-type="paragraph"]', { hasText: 'aaa' }).boundingBox())!;
+    const to = (await page.locator('[data-block-type="paragraph"]', { hasText: 'bbb' }).boundingBox())!;
+    const title = (await page.locator('.nabu-region-title', { hasText: 'Two' }).boundingBox())!;
+    await page.mouse.move(from.x + 2, from.y + from.height / 2);
+    await page.mouse.down();
+    // through the title, ending on the second body
+    await page.mouse.move(title.x + 4, title.y + title.height / 2, { steps: 6 });
+    await page.mouse.move(to.x + 12, to.y + to.height / 2, { steps: 6 });
+    await expect(root(page)).toHaveAttribute('data-nabu-range', '');
+    await page.mouse.up();
+    await expect.poll(() => caret(page)).toMatch(/^aaa@\d -> bbb@\d$/);
+    await expect.poll(() => selectionState(page)).toMatchObject({ rootFlag: true, selectedTitles: [] });
+    await press(page, 'Backspace');
+    // whatever the exact characters under the pointer: the text around the title is shortened, the skeleton is intact
+    await expect.poll(() => outline(page)).toMatch(/^R:section-1\(One\)\{ p\((a{1,3}|∅)\) \} ; R:section-1\(Two\)\{ p\((b{1,3}|∅)\) \} ; p\(tail\)$/);
+    expect(await outline(page)).not.toBe('R:section-1(One){ p(aaa) } ; R:section-1(Two){ p(bbb) } ; p(tail)');
+    await expectValid(page);
+  });
+
+  test('dragging from a body and releasing ON a title moves the end past it; dragging from a title and out stays in the title', async ({ page }) => {
+    const from = (await page.locator('[data-block-type="paragraph"]', { hasText: 'aaa' }).boundingBox())!;
+    const title = (await page.locator('.nabu-region-title', { hasText: 'Two' }).boundingBox())!;
+    await page.mouse.move(from.x + 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(title.x + 6, title.y + title.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => caret(page)).toBe('aaa@0 -> bbb@0');
+    // the other way: anchored in the title, dragged down into the body below (the caret leaves the previous range first: a press
+    // inside a selection would start dragging the selected text)
+    await focusAt(page, 'tail', 0);
+    const body = (await page.locator('[data-block-type="paragraph"]', { hasText: 'bbb' }).boundingBox())!;
+    await page.mouse.move(title.x + 2, title.y + title.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(body.x + 20, body.y + body.height / 2, { steps: 8 });
+    await page.mouse.up();
+    const inTitle = await caret(page);
+    expect(inTitle).toContain('⟦');
+    expect(inTitle).not.toContain('->');
+    expect(inTitle!.replace(/[⟦⟧]/g, '')).toBe('Two');
   });
 });

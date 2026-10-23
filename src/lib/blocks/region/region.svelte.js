@@ -117,6 +117,9 @@ export class RegionBlock extends MegaBlock {
     // ── Capability flags ────────────────────────────────────────────────────
     // No `# ` & co in a title (like the toggle header); marks stay allowed.
     transformsEnabled = false;
+    // The title is an isolated field (ADR 018 §3.9): a selection that is not entirely in it never touches its text (core rule,
+    // see `Block#isolatesSelection`); the caret enters it at its start going down / right.
+    isolatesSelection = true;
 
     /** @type {RegionsConfig} */
     get config() { return /** @type {typeof RegionBlock} */ (this.constructor).config; }
@@ -364,6 +367,10 @@ export class RegionBlock extends MegaBlock {
      */
     beforeinput(event) {
         const sel = this.behavior.selection;
+
+        // The selection lies in the BODY (across several of its blocks, the title is outside the range): the container handles it.
+        const live = this.nabu.selection;
+        if (!sel && live?.anchorBlock && live.anchorBlock !== this && live.focusBlock && live.focusBlock !== this) return super.beforeinput(event);
 
         // Enter: never splits the title; the caret goes to the body (the selection, if any, is left alone).
         if (event.inputType === 'insertParagraph') {

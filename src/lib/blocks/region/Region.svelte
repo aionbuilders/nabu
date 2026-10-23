@@ -60,6 +60,7 @@
             class:empty={!block.text}
             data-block-id={block.id}
             data-block-type="region"
+            data-nabu-isolated
             data-placeholder={block.placeholder}
         ><RichText delta={block.delta} /></div>
         <span class="nabu-region-rule" data-nabu-ui contenteditable="false" aria-hidden="true">

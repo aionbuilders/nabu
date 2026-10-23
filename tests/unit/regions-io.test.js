@@ -359,12 +359,66 @@ const SOURCE = () => [
   p('tail'),
 ];
 
-describe('clipboard: a selection spanning regions', () => {
-  it('the internal fragment carries each region as a container: props (richtext as delta, no title), title delta, children', async () => {
+/**
+ * The clipboard of a WHOLE region, structure included (what a structure gesture — seam, future block selection — will copy):
+ * `serializeForClipboard()` without a text selection, and the text forms the engine writes for such a fragment.
+ */
+function wholeRegion(engine, index) {
+  const pb = engine.children[index].serializeForClipboard();
+  const md = (b, ctx = {}) => {
+    const Class = engine.registry.get(b.type);
+    return Class?.toMarkdown ? Class.toMarkdown(b, { ...ctx, recurse: (c, o) => md(c, o), recurseAll: (cs) => cs.map((c) => md(c)) }) : (b.delta ?? []).map((op) => op.insert).join('');
+  };
+  const html = (b) => {
+    const Class = engine.registry.get(b.type);
+    return Class?.toHtml ? Class.toHtml(b, { recurse: html }) : `<p>${(b.delta ?? []).map((op) => op.insert).join('')}</p>`;
+  };
+  const data = { 'application/x-nabu+json': JSON.stringify({ version: 1, blocks: [pb] }), 'text/plain': md(pb), 'text/html': html(pb) };
+  return { pb, data, text: data['text/plain'], html: data['text/html'] };
+}
+
+describe('clipboard: a text selection spanning regions copies the TEXT only (ADR 018 §3.9)', () => {
+  it('the internal fragment holds the text blocks only: no region container, no title', async () => {
     const engine = await load(await makeEditor(), SOURCE());
     const { fragment } = copy(engine, 'intro', 2, 'tail', 2);
-    expect(fragment.blocks.map((b) => b.type)).toEqual(['paragraph', 'region', 'paragraph']);
-    const part = fragment.blocks[1];
+    expect(fragment.blocks.map((b) => b.type)).toEqual(['paragraph', 'paragraph', 'paragraph', 'paragraph', 'paragraph']);
+    expect(fragment.blocks.map((b) => b.delta.map((op) => op.insert).join(''))).toEqual(['tro', 'one', 'two', 'three', 'ta']);
+    expect(fragment.blocks.map((b) => b.partial)).toEqual(['start', false, false, false, 'end']);
+    expect(JSON.stringify(fragment)).not.toContain('forêt');
+  });
+
+  it('text/plain and text/html carry the text, without the region markers', async () => {
+    const engine = await load(await makeEditor(), SOURCE());
+    const { text, html } = copy(engine, 'intro', 2, 'tail', 2);
+    expect(text).toBe('tro\n\none\n\ntwo\n\nthree\n\nta');
+    expect(html).not.toContain('data-nabu-region');
+    expect(html).not.toContain('<section');
+  });
+
+  it('a selection inside ONE region body is the text blocks too (the container is not created)', async () => {
+    const engine = await load(await makeEditor(), [R('part', { title: 'I' }, [p('alpha'), p('beta'), p('gamma')])]);
+    const { fragment, text } = copy(engine, 'alpha', 1, 'gamma', 2);
+    expect(fragment.blocks.map((b) => b.type)).toEqual(['paragraph', 'paragraph', 'paragraph']);
+    expect(text).toBe('lpha\n\nbeta\n\nga');
+  });
+
+  it('a selection ending in a title leaves the title out (nothing of it is copied)', async () => {
+    const engine = await load(await makeEditor(), [p('intro'), R('part', { title: 'Title' }, [p('one')])]);
+    const { fragment } = copy(engine, 'intro', 2, 'Title', 3);
+    expect(fragment.blocks.map((b) => b.delta.map((op) => op.insert).join(''))).toEqual(['tro']);
+  });
+
+  it('a selection entirely INSIDE a title copies that title text', async () => {
+    const engine = await load(await makeEditor(), [R('part', { title: 'Title' }, [p('one')])]);
+    const { text } = copy(engine, 'Title', 1, 'Title', 4);
+    expect(text).toBe('itl');
+  });
+});
+
+describe('clipboard: a whole region (structure) round trip', () => {
+  it('the internal fragment carries each region as a container: props (richtext as delta, no title), title delta, children', async () => {
+    const engine = await load(await makeEditor(), SOURCE());
+    const { pb: part } = wholeRegion(engine, 1);
     expect(part).toMatchObject({ type: 'region', props: { regionType: 'part', fields: {} }, delta: [{ insert: 'I' }] });
     expect(part.children.map((b) => b.type)).toEqual(['paragraph', 'region', 'region']);
     expect(part.children[1]).toMatchObject({
@@ -378,22 +432,20 @@ describe('clipboard: a selection spanning regions', () => {
 
   it('text/plain (several blocks) is the markdown form: comment + title heading + body', async () => {
     const engine = await load(await makeEditor(), SOURCE());
-    const { text } = copy(engine, 'intro', 2, 'tail', 2);
+    const { text } = wholeRegion(engine, 1);
     expect(text).toBe([
-      'tro',
       '<!-- region:part {} -->\n# I',
       'one',
       '<!-- region:chapter {"done":true,"due":"2026-01-02","status":"draft","synopsis":"un **résumé**","words":7} -->\n## La forêt',
       'two',
       '<!-- region:chapter {} -->\n## Le lac',
       'three',
-      'ta',
     ].join('\n\n'));
   });
 
   it('text/html: <section> elements nested like the regions', async () => {
     const engine = await load(await makeEditor(), SOURCE());
-    const { html } = copy(engine, 'intro', 2, 'tail', 2);
+    const { html } = wholeRegion(engine, 1);
     expect(html).toContain('<section data-nabu-region="part" data-nabu-fields=\'{}\'><h1>I</h1><p>one</p><section data-nabu-region="chapter"');
     expect(html).toContain('<h2>Le lac</h2><p>three</p></section></section>');
     expect(html.match(/data-nabu-region/g)).toHaveLength(3);
@@ -401,10 +453,10 @@ describe('clipboard: a selection spanning regions', () => {
 
   it('pasting it at the END of the document reproduces the regions with every field and their body', async () => {
     const engine = await load(await makeEditor(), SOURCE());
-    const { data } = copy(engine, 'intro', 2, 'tail', 2);
+    const { data } = wholeRegion(engine, 1);
     await pasteAt(engine, data, 'tail', 4);
     const source = 'p(intro) ; R:part(I){p(one) R:chapter(La forêt){p(two)} R:chapter(Le lac){p(three)}} ; p(tail';
-    expect(outline(engine)).toBe(`${source}tro) ; R:part(I){p(one) R:chapter(La forêt){p(two)} R:chapter(Le lac){p(three)}} ; p(ta)`);
+    expect(outline(engine)).toBe(`${source}) ; R:part(I){p(one) R:chapter(La forêt){p(two)} R:chapter(Le lac){p(three)}}`);
     const [first, second] = engine.regions.tree;
     expect(first.children.map((r) => r.exportFields ?? r.block.exportFields)).toEqual(second.children.map((r) => r.block.exportFields));
     expect(engine.regions.list.map((r) => r.label)).toEqual(['Part 1', 'Chapitre 1 — La forêt', 'Chapitre 2 — Le lac', 'Part 2', 'Chapitre 3 — La forêt', 'Chapitre 4 — Le lac']);
@@ -412,10 +464,10 @@ describe('clipboard: a selection spanning regions', () => {
 
   it('into ANOTHER editor with the same types, then one that declares other types (the type is kept, the registry treats it as an unnumbered leaf)', async () => {
     const engine = await load(await makeEditor(), SOURCE());
-    const { data } = copy(engine, 'intro', 2, 'tail', 2);
+    const { data } = wholeRegion(engine, 1);
     const other = await load(await makeEditor(), [p('target')]);
     await pasteAt(other, data, 'target', 6);
-    expect(outline(other)).toBe('p(targettro) ; R:part(I){p(one) R:chapter(La forêt){p(two)} R:chapter(Le lac){p(three)}} ; p(ta)');
+    expect(outline(other)).toBe('p(target) ; R:part(I){p(one) R:chapter(La forêt){p(two)} R:chapter(Le lac){p(three)}}');
     expect(other.regions.list.map((r) => r.label)).toEqual(['Part 1', 'Chapitre 1 — La forêt', 'Chapitre 2 — Le lac']);
     const poor = await load(await makeEditor({ section: { level: 1 } }), [p('target')]);
     await pasteAt(poor, data, 'target', 6);
