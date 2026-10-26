@@ -56,7 +56,7 @@ export async function restoreCaret(nabu, block, offset) {
 }
 
 /** The first block holding text, in document order, among `blocks` and their descendants (a sub-region's title counts). @param {Block[]} blocks @returns {Block | null} */
-function firstTextBlock(blocks) {
+export function firstTextBlock(blocks) {
     for (const block of blocks) {
         if (hasText(block)) return block;
         const found = firstTextBlock(/** @type {any} */ (block).children ?? []);

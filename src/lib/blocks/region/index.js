@@ -11,3 +11,4 @@ export { regionFacts } from './facts.js';
 export { splitRegion, insertNearRegion, mergeRegion, unwrapRegion, exitRegion, moveRegion, demoteRegion, promoteRegion, goToRegion } from './actions.js';
 export { createOptions, previewPrefix } from './create.js';
 export { needsEndMarker, endMarkerText } from './end-marker.js';
+export { closeChain, closeOptions, closeRegionAt } from './close.js';

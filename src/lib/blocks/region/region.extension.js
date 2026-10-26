@@ -9,6 +9,7 @@ import { mergeCrossesRegion, regionFacts } from "./facts.js";
 import { resolveConfig } from "./types.js";
 import { createMessages } from "./messages.js";
 import { placeOf, regionChoices } from "./create.js";
+import { closeOnEnter } from "./close.js";
 
 /**
  * @import { Nabu } from "../nabu.svelte.js";
@@ -95,7 +96,12 @@ export function RegionsExtension(options = {}) {
             // `:::` + Space in an empty default paragraph (at the root or in a region body) asks which region to create: the
             // space is typed as usual (so Escape leaves `::: ` as text), then the `choose` confirmation of `region:create`
             // opens at the caret. See create.js.
-            onBeforeInput: openCreateChooser,
+            // `:::` + Enter in a paragraph of a region body closes a region (close.js); the Enter is not applied.
+            /** @param {Nabu} nabu @param {InputEvent} event @param {import("../block.svelte.js").Block} block */
+            onBeforeInput: (nabu, event, block) => {
+                const closed = closeOnEnter(nabu, event, block);
+                return closed === nabu.BREAK ? closed : openCreateChooser(nabu, event, block);
+            },
             // Runs before doc.commit(): a region that ended up in a list / toggle is brought back next to it, and a region too
             // shallow for its parent is moved out, in the same transaction (same undo step) as the operation that displaced it.
             // See normalize.js.

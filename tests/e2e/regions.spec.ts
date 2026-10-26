@@ -1645,3 +1645,151 @@ test.describe('margin rail of the caret\'s region (board 9, option C)', () => {
     expect(await pseudo(r, 'left')).toBe('-10px');
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// Closing a region: `:::` + Enter (ADR 018 §3.5, lot E)
+// ════════════════════════════════════════════════════════════════════════════
+
+test.describe('closing a region (":::" + Enter)', () => {
+  const chooser = (page: Page) => page.getByRole('listbox');
+  const labelsOf = (page: Page) => chooser(page).locator('.nabu-command-option-label').allTextContents();
+  const detailsOf = (page: Page) => chooser(page).locator('.nabu-command-option').evaluateAll((els) => els.map((o) => o.querySelector('.nabu-command-option-detail')?.textContent ?? ''));
+  const markers = (page: Page) => page.locator('[data-region-end]');
+
+  /** A section with a subsection, the empty paragraph in the middle of the subsection. */
+  const NESTED = () => [S1('One', Pp('a'), S2('Sub', Pp('x'), Pp(''), Pp('y')), Pp('z'))];
+
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+    await focusEditor(page);
+  });
+
+  test('one region around the caret: closed at once, no chooser; what followed comes out after it and holds the caret', async ({ page }) => {
+    await build(page, [S1('One', Pp('a'), Pp(''), Pp('b')), Pp('tail')]);
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await expect(chooser(page)).toHaveCount(0);
+    await expectOutline(page, 'R:section-1(One){ p(a) } ; p(b) ; p(tail)');
+    await expectCaret(page, '|b');
+    await page.keyboard.type('Z');
+    await expectOutline(page, 'R:section-1(One){ p(a) } ; p(Zb) ; p(tail)');
+    await expectValid(page);
+  });
+
+  test('two regions or more: the chooser lists them innermost first, the Enter is not applied', async ({ page }) => {
+    await build(page, NESTED());
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    const before = await outline(page);
+    await press(page, 'Enter');
+    await expect(chooser(page)).toBeVisible();
+    expect(await labelsOf(page)).toEqual(['Close Subsection 1.1 — Sub', 'Close Section 1. — One']);
+    expect(await detailsOf(page)).toEqual(['1.1', '1.']);
+    await expect(chooser(page).getByRole('option').first()).toHaveAttribute('aria-selected', 'true');
+    await expect(chooser(page).locator('.nabu-command-footer')).toHaveText('↑↓ choose · ↵ close · Esc cancel');
+    expect(await outline(page)).toBe(before); // no new paragraph: the Enter was taken
+    expect(before).toContain('p(:::)');
+  });
+
+  test('Enter picks the highlighted (innermost) region; ArrowDown + Enter and a digit pick the outer one', async ({ page }) => {
+    await build(page, NESTED());
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await press(page, 'Enter');
+    await expect(chooser(page)).toHaveCount(0);
+    await expectOutline(page, 'R:section-1(One){ p(a) ; R:section-2(Sub){ p(x) } ; p(y) ; p(z) }');
+    await expectCaret(page, '|y');
+
+    await build(page, NESTED());
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await press(page, 'ArrowDown');
+    await press(page, 'Enter');
+    await expectOutline(page, 'R:section-1(One){ p(a) ; R:section-2(Sub){ p(x) } } ; p(y) ; p(z)');
+    await expectCaret(page, '|y');
+
+    await build(page, NESTED());
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await press(page, '2');
+    await expectOutline(page, 'R:section-1(One){ p(a) ; R:section-2(Sub){ p(x) } } ; p(y) ; p(z)');
+    await expectValid(page);
+  });
+
+  test('Escape cancels: the paragraph keeps ":::", nothing moved, and the Enter can be pressed again', async ({ page }) => {
+    await build(page, NESTED());
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await expect(chooser(page)).toBeVisible();
+    await press(page, 'Escape');
+    await expect(chooser(page)).toHaveCount(0);
+    await expectOutline(page, 'R:section-1(One){ p(a) ; R:section-2(Sub){ p(x) ; p(:::) ; p(y) } ; p(z) }');
+    await expectCaret(page, ':::|');
+    await press(page, 'Enter');
+    await expect(chooser(page)).toBeVisible();
+    await press(page, 'Escape');
+    await page.keyboard.type('x');
+    await expectOutline(page, 'R:section-1(One){ p(a) ; R:section-2(Sub){ p(x) ; p(:::x) ; p(y) } ; p(z) }');
+  });
+
+  test('nothing follows: a fresh empty paragraph comes after the region and gets the caret', async ({ page }) => {
+    await build(page, [S1('One', Pp('a'), Pp('')), Pp('tail')]);
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await expectOutline(page, 'R:section-1(One){ p(a) } ; p(∅) ; p(tail)');
+    await page.keyboard.type('new');
+    await expectOutline(page, 'R:section-1(One){ p(a) } ; p(new) ; p(tail)');
+  });
+
+  test('at the end of a region it gives what Mod-Shift-Enter gives', async ({ page }) => {
+    await build(page, [S1('One', Pp('a'), Pp('')), Pp('tail')]);
+    await focusEmpty(page);
+    await press(page, `${MOD}+Shift+Enter`);
+    const exited = await outline(page);
+    await build(page, [S1('One', Pp('a'), Pp('')), Pp('tail')]);
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await expectOutline(page, exited);
+  });
+
+  test('the end marker appears where text now follows the region', async ({ page }) => {
+    await build(page, [S1('One', Pp('a'), Pp(''), Pp('b'))]);
+    await expect(markers(page)).toHaveCount(0);
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await expectOutline(page, 'R:section-1(One){ p(a) } ; p(b)');
+    await expect(markers(page)).toHaveCount(1);
+    await expect(markers(page)).toHaveAttribute('aria-label', 'End of 1. · outside regions');
+  });
+
+  test('one Ctrl+Z gives back ":::" with the caret after it and the structure', async ({ page }) => {
+    await build(page, NESTED());
+    await focusEmpty(page);
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await press(page, 'ArrowDown');
+    await press(page, 'Enter');
+    await expectOutline(page, 'R:section-1(One){ p(a) ; R:section-2(Sub){ p(x) } } ; p(y) ; p(z)');
+    await undo(page);
+    await expectOutline(page, 'R:section-1(One){ p(a) ; R:section-2(Sub){ p(x) ; p(:::) ; p(y) } ; p(z) }');
+    await expectCaret(page, ':::|');
+    await expectValid(page);
+  });
+
+  test('outside any region, ":::" + Enter is an ordinary Enter', async ({ page }) => {
+    await page.keyboard.type(':::');
+    await press(page, 'Enter');
+    await flushRender(page);
+    await expect(chooser(page)).toHaveCount(0);
+    await expectOutline(page, 'p(:::) ; p(∅)');
+  });
+});

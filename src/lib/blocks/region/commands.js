@@ -13,6 +13,7 @@
  *  | `region:unwrap`         | -                              | -            | the title becomes a paragraph, the body stays                 |
  *  | `region:insert`         | -                              | -            | `{ type?, at?: 'after' \| 'before', title?, fields? }`         |
  *  | `region:create`         | - (`:::` + Space)              | choose       | `{ type? }`: a region where the caret is (see create.js)      |
+ *  | `region:close`          | - (`:::` + Enter)              | choose       | `{ region? }`: end the region here (see close.js)             |
  *  | `region:move`           | -                              | -            | `{ direction: 'up' \| 'down' }`                                |
  *  | `region:move-up`/`move-down` | -                         | -            | the same, direction built in (what a `keymap` binds)          |
  *  | `region:next`/`prev`/`parent` | -                        | -            | caret to the first text position of the target region's body  |
@@ -31,6 +32,7 @@ import { Regions } from "./regions.svelte.js";
 import { createMessages } from "./messages.js";
 import { mergePlan, neighbourOf } from "./facts.js";
 import { createOptions, createRegionHere, placeOf } from "./create.js";
+import { closeChain, closeOptions, closeRegionAt } from "./close.js";
 import { demoteRegion, exitRegion, goToRegion, insertNearRegion, mergeRegion, moveRegion, promoteRegion, splitRegion, toRegion, unwrapRegion } from "./actions.js";
 
 /** @param {Region | null | undefined} region @returns {string} the title, else the label, else the type: never empty */
@@ -122,6 +124,26 @@ export function createRegionCommands(messages) {
                 messages: { choose: (/** @type {{ options: unknown[] }} */ p) => text('chooser', { count: p.options.length }) },
             },
             run: (nabu, ctx, data) => createRegionHere(nabu, ctx.block, typeof data?.type === 'string' ? data.type : undefined),
+        },
+
+        // Typing `:::` + Enter in a paragraph of a region body closes a region (the hook of the extension runs it at once when only one
+        // region holds the caret, else offers the chooser; a typed trigger, no key to bind). `exec` runs it directly: `{ region }` (a
+        // region holding the caret block) closes that one, without it the innermost.
+        'region:close': {
+            label: () => text('closeCommand'),
+            when: (/** @type {any} */ ctx) => closeChain(ctx.nabu, ctx.block).length > 0,
+            confirm: {
+                strategy: 'choose',
+                options: (/** @type {any} */ ctx) => closeOptions(closeChain(ctx.nabu, ctx.block), text),
+                footer: () => text('closeFooter'),
+                messages: { choose: (/** @type {{ options: unknown[] }} */ p) => text('closeChooser', { count: p.options.length }) },
+            },
+            run: (nabu, ctx, data) => {
+                const chain = closeChain(nabu, ctx.block);
+                const wanted = givesRegion(data) ? toRegion(nabu, data.region) : chain[0];
+                if (!ctx.block || !wanted) return false;
+                return closeRegionAt(nabu, wanted, ctx.block);
+            },
         },
 
         'region:merge-previous': {

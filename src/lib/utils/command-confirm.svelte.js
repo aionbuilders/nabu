@@ -466,6 +466,7 @@ export class CommandConfirmation {
             this.#moveSelection(event.key === 'ArrowDown' ? 1 : -1);
             return true;
         }
+        if (event.key === 'Enter' && plain && event.repeat) { event.preventDefault(); return true; } // a repeat never confirms (a held Enter that opened the chooser)
         if (event.key === 'Enter' && plain) { event.preventDefault(); this.choose(session.pending.selectedIndex); return true; }
         if (event.key === 'Escape') { event.preventDefault(); this.cancel('escape'); return true; }
         if (plain && /^[1-9]$/.test(event.key) && Number(event.key) <= choices.length) { event.preventDefault(); this.choose(Number(event.key) - 1); return true; }

@@ -50,6 +50,11 @@
  * @property {string | ((p: RegionTypeParams) => string)} [createNext]  entry for a type created as a SIBLING after the current region ("Next section")
  * @property {string | ((p: RegionTypeParams) => string)} [slash]  title of the slash-menu entry of a type ("Section")
  * @property {string | (() => string)} [untitled]  placeholder of an empty title (ADR 018)
+ * @property {string | (() => string)} [closeCommand]  label of `region:close`
+ * @property {string | ((p: RegionNameParams & { typeName: string }) => string)} [closeOption]  entry of the `:::` + Enter chooser ("Close Scene 2.2 — The ferryman"). `p.typeName`
+ *   is the readable name of the type, `p.prefix` its numbering prefix, `p.title` its plain-text title (all may be empty but the type name)
+ * @property {string | ((p: { count: number }) => string)} [closeChooser]  prompt of the `:::` + Enter chooser (announced to screen readers)
+ * @property {string | (() => string)} [closeFooter]  hint under the `:::` + Enter chooser ("↑↓ choose · ↵ close · Esc cancel")
  * @property {string | (() => string)} [groupHere]  header of the chooser group of the types created INSIDE the current region (or at the root) ("Here")
  * @property {string | (() => string)} [groupNext]  header of the chooser group of the sibling entries ("Next")
  * @property {string | (() => string)} [chooserFooter]  hint under the chooser ("↑↓ choose · ↵ create · Esc cancel")
@@ -84,6 +89,11 @@ export const DEFAULT_REGION_MESSAGES = {
     createOption: ({ name }) => name,
     createNext: ({ name }) => `Next ${name.charAt(0).toLowerCase()}${name.slice(1)}`,
     slash: ({ name }) => name,
+    closeCommand: 'Close the region here',
+    // The prefix often holds the type name already ("Chapter 2"): it is not repeated.
+    closeOption: ({ typeName, prefix, title }) => `Close ${prefix && prefix.toLowerCase().startsWith(typeName.toLowerCase()) ? prefix : `${typeName}${prefix ? ` ${prefix}` : ''}`}${title ? ` — ${title}` : ''}`,
+    closeChooser: ({ count }) => `Close a region: ${count} choices. Arrow keys and Enter, or a number, to choose. Escape cancels.`,
+    closeFooter: '↑↓ choose · ↵ close · Esc cancel',
     groupHere: 'Here',
     groupNext: 'Next',
     chooserFooter: '↑↓ choose · ↵ create · Esc cancel',
