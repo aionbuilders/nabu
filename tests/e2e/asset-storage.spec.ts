@@ -422,7 +422,8 @@ test.describe('history modes (ADR 014 lot 3): full keeps everything, compact rel
     await bootWith(page, id, compactOptions('&archive=1'));
     expect(await page.evaluate(() => (window as any).__archived)).toEqual([first.snapshotBytes]);
     const state = await idb(page, id);
-    expect(state.snapshotBytes).toBeLessThan(first.snapshotBytes / 2);
+    // loro-crdt >= 1.13 keeps the meta of deleted tree nodes in a shallow snapshot (revivable): churn that deletes blocks compacts to ~0.65, not ~0.15
+    expect(state.snapshotBytes).toBeLessThan(first.snapshotBytes * 0.8);
     expect(state.assets).toHaveLength(0);
     expect(state.docRefs).toEqual([]);
     expect(await page.evaluate(() => (window as any).nabu.doc.isShallow())).toBe(true);
@@ -440,7 +441,8 @@ test.describe('history modes (ADR 014 lot 3): full keeps everything, compact rel
     const first = await writeHistory(page, id);
     await bootWith(page, id, '&options=' + encodeURIComponent(JSON.stringify({ history: { mode: 'compact', retain: 0 } })));
     const state = await idb(page, id);
-    expect(state.snapshotBytes).toBeLessThan(first.snapshotBytes / 2); // compacted
+    // loro-crdt >= 1.13 keeps the meta of deleted tree nodes in a shallow snapshot (revivable): churn that deletes blocks compacts to ~0.65, not ~0.15
+    expect(state.snapshotBytes).toBeLessThan(first.snapshotBytes * 0.8); // compacted
     expect(state.assets).toHaveLength(1); // too recent to delete from the shared store (another tab may use it)
     expect(state.docRefs).toEqual(first.docRefs); // tracked in this document's docRefs, reconsidered next time
     expect(await page.evaluate(() => Object.keys((window as any).nabu.doc.getMap('assetIndex').toJSON()))).toEqual([]);

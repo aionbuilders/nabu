@@ -7,7 +7,7 @@
       "dependencies": {
         "@aionbuilders/pulse": "^1.0.1",
         "esm-env": "^1.2.2",
-        "loro-crdt": "^1.10.6",
+        "loro-crdt": "^1.17.1",
         "vite-plugin-top-level-await": "^1.6.0",
         "vite-plugin-wasm": "^3.5.0",
       },
@@ -387,7 +387,7 @@
 
     "locate-character": ["locate-character@3.0.0", "", {}, "sha512-SW13ws7BjaeJ6p7Q6CO2nchbYEc3X3J6WrmTTDto7yMPqVSZTUyY5Tjbid+Ab8gLnATtygYtiDIJGQRRn2ZOiA=="],
 
-    "loro-crdt": ["loro-crdt@1.10.6", "", {}, "sha512-ije6m7wrSRtzdyEd7n+rjgA+UCzfvz2PkjLk5Lf86zf1LgcbWY3g2nE3+7TDADiiX/ziYTovHnGRBiylPt2ipw=="],
+    "loro-crdt": ["loro-crdt@1.17.1", "", {}, "sha512-83hWRYG6eMMpPezm+yXWlOqCuUsC0BYY1MVCPW9x2zlikgkHhL7GC7Q6JFH+Hjvauyn287Q1MiwTuRW0lUOUag=="],
 
     "loupe": ["loupe@3.2.1", "", {}, "sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ=="],
 

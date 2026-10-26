@@ -86,7 +86,7 @@
 	"dependencies": {
 		"@aionbuilders/pulse": "^1.0.1",
 		"esm-env": "^1.2.2",
-		"loro-crdt": "^1.10.6",
+		"loro-crdt": "^1.17.1",
 		"vite-plugin-top-level-await": "^1.6.0",
 		"vite-plugin-wasm": "^3.5.0"
 	}

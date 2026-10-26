@@ -20,6 +20,20 @@ import { createMessages } from "./messages.js";
 const isContainer = (v) => !!v && typeof v === 'object' && typeof (/** @type {any} */ (v)).kind === 'function';
 
 /**
+ * The `fields` map of a region node's data map, created on first use. It is a MERGEABLE child (`ensureMergeableMap`): two peers that
+ * each create it concurrently get the same container id, so their writes converge instead of one branch being hidden by the map's
+ * LWW. A document written before the mergeable API holds a REGULAR child there: it is returned as-is (`ensureMergeable*` would
+ * refuse a slot holding a non-mergeable value). Anything else in the slot (never written by Nabu) is replaced by a regular map.
+ * @param {any} data the node's data map @returns {LoroMap}
+ */
+export function fieldsMap(data) {
+    const existing = data.get('fields');
+    if (isContainer(existing) && existing.kind() === 'Map') return /** @type {LoroMap} */ (existing);
+    try { return /** @type {LoroMap} */ (data.ensureMergeableMap('fields')); }
+    catch { return /** @type {LoroMap} */ (data.setContainer('fields', new LoroMap())); }
+}
+
+/**
  * Writes `value` into the `fields` map under `name`, following the declared type of the field.
  * Returns false (and writes nothing) when the value is invalid for a declared field.
  * - declared field: validated (see `validateField`); `null` / `undefined` clear it;
@@ -287,7 +301,7 @@ export class RegionBlock extends MegaBlock {
             this.nabu.warn(`Region field "${name}" (${spec.kind}) refused an invalid value: ${JSON.stringify(value)}`);
             return false;
         }
-        const map = /** @type {LoroMap} */ (data.getOrCreateContainer('fields', new LoroMap()));
+        const map = fieldsMap(data);
         writeField(map, spec, name, value);
         this.#read();
         if (commit) this.commit();
@@ -542,7 +556,7 @@ export class RegionBlock extends MegaBlock {
         const regionType = typeof props.regionType === 'string' && props.regionType ? props.regionType : config.defaultType;
         data.set("type", "region");
         data.set("regionType", regionType);
-        const map = /** @type {LoroMap} */ (data.setContainer("fields", new LoroMap()));
+        const map = fieldsMap(data);
         const text = /** @type {LoroText} */ (data.setContainer("text", new LoroText()));
         const def = config.types.get(regionType);
         const { title: fieldsTitle, ...values } = props.fields && typeof props.fields === 'object' ? props.fields : /** @type {Record<string, any>} */ ({});

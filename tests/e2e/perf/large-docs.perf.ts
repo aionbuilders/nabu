@@ -11,6 +11,7 @@
  *   NABU_PERF_SIZES        block counts of the documents (default 1000,5000,10000)
  *   NABU_PERF_CAP_MS       cap of one operation that may never come back (Select-all + Backspace, Undo, paste, import), default 240000.
  *                          An operation that hits it is reported as "> cap" and its page is abandoned (a finding, not a failure).
+ *   NABU_PERF_IMPORT_MAX   largest block count of the importJSON growth curve (default: all of 500 / 1000 / 2000 / 4000 / 5000)
  *   NABU_PERF_IMPORT_10K=1 also attempt `importJSON` of 10 000 blocks (capped; skipped by default: the 4 000 / 5 000 curve is enough)
  *   NABU_PERF_PROFILE=1    print the V8 sampling-profiler top functions of the typing / Enter / Backspace runs at the middle of the
  *                          document (names are minified in the production build: profile an unminified build, see harness.ts)
@@ -373,7 +374,8 @@ test.describe('perf', () => {
 
   test('importJSON growth curve (500 / 1000 / 2000 / 4000 / 5000)', async ({ browser }) => {
     test.setTimeout(1_800_000);
-    const sizes = [500, 1000, 2000, 4000, 5000, ...(process.env.NABU_PERF_IMPORT_10K === '1' ? [10000] : [])];
+    const importMax = Number(process.env.NABU_PERF_IMPORT_MAX ?? Infinity); // e.g. 2000: skip the bigger (slow, O(N^2)) sizes
+    const sizes = [500, 1000, 2000, 4000, 5000, ...(process.env.NABU_PERF_IMPORT_10K === '1' ? [10000] : [])].filter((n) => n <= importMax);
     const points: any[] = [];
     for (const n of sizes) {
       const g = genDoc({ blocks: n });
