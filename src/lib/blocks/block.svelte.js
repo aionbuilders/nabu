@@ -157,6 +157,8 @@ export class Block {
         if (!config.enabled) return '';
         const text = this.behaviors.get("text");
         if (!text || text.text) return '';
+        // The composed text is on screen (the model only catches up at compositionend): a placeholder would overlap it.
+        if (this.nabu.composingBlock === this) return '';
         if (config.show === 'focus') {
             const sel = this.nabu.selection;
             if (!sel.isCollapsed || sel.anchorBlock !== this) return '';

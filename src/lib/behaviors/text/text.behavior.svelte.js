@@ -252,6 +252,9 @@ export class TextBehavior {
         return range.toString().length;
     }
 
+    /** The render of an EMPTY block when an IME composition started (Svelte's own child nodes and their text), to put back if it is canceled. @type {{ nodes: Node[], data: string[] } | null} */
+    #emptySnapshot = null;
+
     /** Svelte's own nodes around a trailing render filler when an IME composition started: its text nodes and the filler with its place. @type {{ texts: Set<Node>, filler: Element, parent: Node, next: Node | null } | null} */
     #compositionSnapshot = null;
 
@@ -265,6 +268,13 @@ export class TextBehavior {
     snapshotForComposition() {
         const element = this.block.element;
         this.#compositionSnapshot = null;
+        this.#emptySnapshot = null;
+        // An EMPTY block renders a lone "\n" text node: a canceled composition makes the browser swap it for a <br> (caret lost).
+        if (element && !this.text) {
+            const nodes = [...element.childNodes];
+            this.#emptySnapshot = { nodes, data: nodes.map((n) => n.nodeType === Node.TEXT_NODE ? /** @type {Text} */ (n).data : '') };
+            return;
+        }
         const filler = element?.querySelector('[data-nabu-filler]');
         if (!element || !filler?.parentNode) return;
         const texts = new Set();
@@ -283,6 +293,14 @@ export class TextBehavior {
         const snap = this.#compositionSnapshot;
         this.#compositionSnapshot = null;
         const element = this.block.element;
+        const empty = this.#emptySnapshot;
+        this.#emptySnapshot = null;
+        if (empty && element && !composedText) {
+            // Canceled in an empty block: the render text node (not a browser <br>) with its text, as Svelte left it.
+            element.replaceChildren(...empty.nodes);
+            empty.nodes.forEach((n, i) => { if (n.nodeType === Node.TEXT_NODE && /** @type {Text} */ (n).data !== empty.data[i]) /** @type {Text} */ (n).data = empty.data[i]; });
+            return;
+        }
         if (!snap || !element) return;
         /** @type {Node[]} */
         const stray = [];

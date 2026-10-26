@@ -315,7 +315,7 @@ test.describe('3 · composition positions', () => {
     expect(await composing(page)).toBe(false);
   });
 
-  test.fixme('3i · in an EMPTY paragraph: the placeholder goes away during the composition and is never inserted as text — FINDING: P2: the placeholder stays painted (data-placeholder is model-driven, the model is still empty) next to the composed text until compositionend', async ({ page }) => {
+  test('3i · in an EMPTY paragraph: the placeholder goes away during the composition and is never inserted as text', async ({ page }) => {
     const para = page.locator('[data-block-type="paragraph"]').first();
     await focusEmpty(page);
     await expect(para).toHaveAttribute('data-placeholder', 'Start writing...');
@@ -353,7 +353,7 @@ test.describe('3 · composition positions', () => {
     expect(await canUndo(page)).toBe(false);
   });
 
-  test.fixme('3j · a CANCELED composition in an empty paragraph brings the placeholder back and leaves the model empty — FINDING: P1: after a canceled composition the browser swaps the render text node for a <br>: selection/caret lost (no .selected, no model anchor) and the next keystroke is swallowed', async ({ page }) => {
+  test('3j · a CANCELED composition in an empty paragraph brings the placeholder back and leaves the model empty', async ({ page }) => {
     const para = page.locator('[data-block-type="paragraph"]').first();
     await focusEmpty(page);
     await ime('か');
@@ -372,7 +372,7 @@ test.describe('3 · composition positions', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('4 · composition with a non-collapsed selection', () => {
-  test.fixme('4a · within one block: the selection is replaced by the composed text, no duplication, one undo step — FINDING: P1: the selected text is NOT replaced: compositionend inserts at selection.from and never deletes the range -> `hello かworld` (the DOM shows `hello か` during the composition, then `world` reappears)', async ({ page }) => {
+  test('4a · within one block: the selection is replaced by the composed text, no duplication, one undo step', async ({ page }) => {
     await buildBlocks(page, [Para('hello world')]);
     await selectRange(page, 'hello world', 6, 'hello world', 11); // "world"
     const id = await idOf(page, 'hello world');
@@ -385,7 +385,7 @@ test.describe('4 · composition with a non-collapsed selection', () => {
     expect(await canUndo(page)).toBe(false);
   });
 
-  test.fixme('4b · a selection that starts at the very beginning of the block — FINDING: P1: same as 4a, the selected range is kept (`かhello world`)', async ({ page }) => {
+  test('4b · a selection that starts at the very beginning of the block', async ({ page }) => {
     await buildBlocks(page, [Para('hello world')]);
     await selectRange(page, 'hello world', 0, 'hello world', 5);
     await ime('か');
@@ -393,7 +393,7 @@ test.describe('4 · composition with a non-collapsed selection', () => {
     await expectCommitted(page, 'p(か world)', 'か| world');
   });
 
-  test.fixme('4c · over SEVERAL blocks: the range is replaced (blocks merged into one holding the composed text), nothing duplicated — FINDING: P0/P1: DOM/model desync: the browser natively merges the 3 blocks in the DOM during the composition, the model keeps all 3 untouched (+ composed text) -> DOM shows 1 block, tree has 3, nothing re-renders the removed blocks', async ({ page }) => {
+  test('4c · over SEVERAL blocks: the range is replaced (blocks merged into one holding the composed text), nothing duplicated', async ({ page }) => {
     await buildBlocks(page, [Para('hello'), Para('there'), Para('world')]);
     await selectRange(page, 'hello', 2, 'world', 3); // he[llo there wor]ld
     await ime('か');
@@ -402,6 +402,19 @@ test.describe('4 · composition with a non-collapsed selection', () => {
     await expect.poll(() => flat(page)).toBe('p(heかなld)');
     await expect.poll(() => caret(page)).toBe('heかな|ld');
     expect(await composing(page)).toBe(false);
+  });
+
+  test('4d · over SEVERAL blocks: the DOM matches the model during the composition and ONE undo brings the 3 blocks back', async ({ page }) => {
+    await buildBlocks(page, [Para('hello'), Para('there'), Para('world')]);
+    await selectRange(page, 'hello', 2, 'world', 3);
+    await ime('か');
+    expect(await composing(page)).toBe(true);
+    expect(await flat(page)).toBe('p(held)'); // the range is already deleted in the model, head and tail merged
+    await commit('か');
+    await expectCommitted(page, 'p(heかld)', 'heか|ld');
+    await undo(page);
+    await expect.poll(() => flat(page)).toBe('p(hello) ; p(there) ; p(world)');
+    expect(await canUndo(page)).toBe(false);
   });
 });
 
@@ -422,7 +435,7 @@ test.describe('5 · Enter / Backspace / Escape during a composition', () => {
     expect(await composing(page)).toBe(false);
   });
 
-  test.fixme('5b · a real Enter keydown (CDP key event, not 229) while composing: the block is not split and the text is not lost — FINDING: P2: a real Enter keydown during the composition reaches handleInsertParagraph with a stale model offset -> uncaught `The end index cannot be less than the start index` (Loro sliceDelta) and the composition state stays on; IMEs normally swallow Enter, but nothing guards beforeinput types other than insertCompositionText', async ({ page }) => {
+  test('5b · a real Enter keydown (CDP key event, not 229) while composing: the block is not split and the text is not lost', async ({ page }) => {
     await buildBlocks(page, [Para('abc')]);
     await focusEnd(page, 'abc');
     await ime('か');
@@ -642,7 +655,7 @@ test.describe('8 · programmatic / remote model change during a composition', ()
     await expect.poll(() => caret(page)).toBe('abcかな|');
   });
 
-  test.fixme('8c · the SAME block edited programmatically (text inserted at its start) during the composition: both edits survive, once — FINDING: P1: a programmatic/remote edit of the SAME block before the caret during a composition shifts the text: the composed text lands at the stale compositionstart offset (`>>abかなc`); only the BroadcastChannel path (8e) is protected by the hold', async ({ page }) => {
+  test('8c · the SAME block edited programmatically (text inserted at its start) during the composition: both edits survive, once', async ({ page }) => {
     await buildBlocks(page, [Para('abc')]);
     await focusEnd(page, 'abc');
     await ime('か');
@@ -658,6 +671,28 @@ test.describe('8 · programmatic / remote model change during a composition', ()
     await settle(page);
     await expect.poll(() => flat(page)).toBe('p(>>abcかな)');
     await expect.poll(() => caret(page)).toBe('>>abcかな|');
+  });
+
+  test('8c′ · a Loro update imported DIRECTLY (nabu.importRemote) into the SAME block during the composition shifts the composition anchor', async ({ page }) => {
+    await buildBlocks(page, [Para('abc')]);
+    await focusEnd(page, 'abc');
+    await ime('か');
+    await page.evaluate(() => {
+      const n = (window as any).nabu;
+      const b = [...n.blocks.values()].find((x: any) => x.behaviors?.get('text')?.text === 'abc') as any;
+      const peer = new (n.doc.constructor)();
+      peer.import(n.doc.export({ mode: 'snapshot' }));
+      peer.getText(b.behaviors.get('text').container.id).insert(0, '>>');
+      peer.commit();
+      n.importRemote(peer.export({ mode: 'update', from: n.doc.version() }));
+    });
+    await settle(page);
+    await ime('かな');
+    await commit('かな');
+    await settle(page);
+    await expect.poll(() => flat(page)).toBe('p(>>abcかな)');
+    await expect.poll(() => caret(page)).toBe('>>abcかな|');
+    expect(await composing(page)).toBe(false);
   });
 
   test('8d · live sync (BroadcastChannel): a remote edit of ANOTHER block is held during the composition and applied after it', async ({ context }) => {

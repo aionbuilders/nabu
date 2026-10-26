@@ -6,7 +6,7 @@ import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, deleteRange, selectionRange, findDirectChildOf, findLCA, textBlocksInOrder } from './container.utils.js';
 import { jsonToPasteBlocks, degradeUnknownBlocks, CLIPBOARD_FORMAT_VERSION, JSON_FORMAT_VERSION, isSupportedJsonVersion } from '../utils/extensions.js';
 import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
-import { tick } from 'svelte';
+import { tick, flushSync } from 'svelte';
 import { Files } from '../files/files.svelte.js';
 import { Pulse } from '@aionbuilders/pulse';
 import { CommandRegistry } from '../utils/commands.js';
@@ -15,7 +15,7 @@ import { normalizePlaceholders } from '../utils/placeholders.js';
 import { normalizeLang } from '../utils/spellcheck.js';
 import { resolveTabMode, handleTabKey, isModifierKey, DEFAULT_TAB_HINT } from '../utils/tab.js';
 import { moveBlocks } from './move.js';
-import { captureSelection, explicitSelection, legacySelection, restoreSelection } from './undo-selection.js';
+import { captureSelection, explicitSelection, legacySelection, restoreSelection, makeEndpoint, resolveOffset } from './undo-selection.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
 
@@ -111,8 +111,20 @@ export class Nabu {
     #composing = false;
     /** True during an IME composition: the browser owns the DOM, the caret must not be touched. */
     get composing() { return this.#composing; }
-    /** @type {number | null} offset modèle au début de la composition */
+    /** @type {number | null} offset modèle au début de la composition (repli si le curseur Loro ne se résout pas) */
     #compositionStartOffset = null;
+    /**
+     * Where the composed text goes, as Loro cursors (P-101): an edit of the SAME block before the caret during the composition
+     * (a programmatic insert, a direct `importRemote`) shifts it, a plain offset would not.
+     * @type {import('./undo-selection.js').Endpoint | null}
+     */
+    #compositionAnchor = null;
+    /** The block a composition runs in, reactive: its placeholder is hidden meanwhile (P-103). @type {Block | null} */
+    #composingBlock = $state.raw(null);
+    /** The block holding the running composition, or null. Reactive. */
+    get composingBlock() { return this.#composingBlock; }
+    /** An undo group is open: the deletion of a selection replaced by a composition and the composed text are ONE undo step. */
+    #compositionGroup = false;
     /** @type {Block | null} bloc cible au début de la composition */
     #compositionStartBlock = null;
     /** Configured UndoManager merge window (ms), restored after a paste isolation. */
@@ -794,6 +806,9 @@ export class Nabu {
      * events. The caret of the local user stays on the same CHARACTER: it is captured as Loro cursors before the import and put
      * back after the render (a text node rewritten by Svelte would otherwise send it to the start of the block); the page is
      * never scrolled for it. Idempotent (importing what the document already has changes nothing).
+     * Called DURING an IME composition it is applied at once (not held): the model is safe, because the composition anchor is a Loro
+     * cursor that follows the edit, and the caret restore is skipped meanwhile (the browser owns it). (`persistence/sync.js` still
+     * holds the updates it receives while composing, which keeps the composing text node untouched by the render.)
      * @param {Uint8Array} bytes a Loro snapshot or update
      * @returns {import('loro-crdt').ImportStatus}
      */
@@ -1066,6 +1081,13 @@ export class Nabu {
         if (this.#composing && (e.inputType === 'insertCompositionText' || e.inputType === 'deleteCompositionText')) {
             return;
         }
+        // Any other input while a composition runs (a real Enter that the IME did not swallow, a paste, a delete…): the model
+        // does not hold the composing text yet, so acting on it would use a stale offset (P-102). It is ignored; the composition
+        // goes on and its commit (compositionend) follows. Never throws, `composing` is only ever reset by compositionend.
+        if (this.#composing) {
+            e.preventDefault();
+            return;
+        }
         this.selection.normalize(); // a caret on a dead position (void block, wrapper…) must not swallow the keystroke
         e.preventDefault(); // Toujours bloquer les mutations natives
         this.dispatchEventToSelection('beforeinput', e, 'onBeforeInput');
@@ -1080,18 +1102,55 @@ export class Nabu {
      */
     handleCompositionStart(e) {
         this.selection.sync();
+        // A second compositionstart in the SAME block while one runs (Chrome silently restarts a composition when a script
+        // rewrites its text node, e.g. a programmatic edit of the block: no compositionend in between): the first start is the
+        // one that counts, its Loro-cursor anchor already follows the edit.
+        if (this.#composing && this.#compositionStartBlock && this.#compositionStartBlock === this.selection.anchorBlock) return;
+        // A composition over a selection replaces it (P-98 / P-99): the range is deleted through the MODEL first, rendered, and the
+        // caret put at the junction, BEFORE the browser starts mutating the DOM (it would otherwise merge the blocks natively and
+        // leave the model untouched). The deletion and the composed text are one undo step (see #compositionGroup).
+        if (!this.selection.isCollapsed) this.#replaceSelectionForComposition();
         this.#composing = true;
         const anchor = this.selection.anchorBlock;
         if (!anchor) {
             this.#compositionStartBlock = null;
             this.#compositionStartOffset = null;
+            this.#compositionAnchor = null;
+            this.#endCompositionGroup();
             return;
         }
         const behavior = anchor.behaviors?.get('text');
         const sel = behavior?.selection;
         this.#compositionStartBlock = anchor;
         this.#compositionStartOffset = sel?.from ?? 0;
+                this.#compositionAnchor = behavior ? makeEndpoint(anchor, sel?.from ?? 0, 'end') : null;
+        this.#composingBlock = anchor;
         /** @type {any} */ (behavior)?.snapshotForComposition?.();
+    }
+
+    /**
+     * Delete the selected range (one block or several, isolated fields honoured: exactly what typing a character over it does,
+     * see {@link deleteRange}) and leave a collapsed caret at the junction, with the DOM rendered synchronously.
+     * Undo: the deletion opens an undo group that the end of the composition closes, so "replace the selection with the composed
+     * text" is ONE step; a composition canceled right away leaves the deletion as its own step.
+     */
+    #replaceSelectionForComposition() {
+        const range = selectionRange(this);
+        if (!range) return;
+        try { this.undoManager.groupStart(); this.#compositionGroup = true; } catch { this.#compositionGroup = false; }
+        const junction = deleteRange(this, range);
+        if (!junction) { this.#endCompositionGroup(); return; }
+        this.commit();  // the Loro transaction (and its undo step) is made synchronously; the await is only the render
+        flushSync();    // the DOM matches the model before the browser starts the composition
+        const block = this.blocks.get(junction.block.id) ?? junction.block;
+        this.selection.setCursor(block, junction.offset);
+        this.selection.sync();
+    }
+
+    #endCompositionGroup() {
+        if (!this.#compositionGroup) return;
+        this.#compositionGroup = false;
+        try { this.undoManager.groupEnd(); } catch { /* the group already ended (remote import) */ }
     }
 
     /**
@@ -1109,17 +1168,30 @@ export class Nabu {
     handleCompositionEnd(e) {
         this.#composing = false;
         const composedIn = this.#compositionStartBlock?.behaviors?.get('text');
+        const composedBlock = this.#compositionStartBlock;
+        this.#composingBlock = null;
         /** @type {any} */ (composedIn)?.restoreAfterComposition?.(e.data || ''); // before the model catches up: no duplicate of the composed text
-        this.#syncComposition(e);
+        try {
+            this.#syncComposition(e);
+        } finally {
+            this.#endCompositionGroup();
+        }
         this.selection.normalize(); // a dead caret must not survive the composition
+        // A canceled composition in an EMPTY block: its render is back (restoreAfterComposition), so is the caret.
+        if (!(e.data || '') && composedBlock && composedBlock.element?.isConnected && !composedIn?.text) {
+            this.selection.setCursor(composedBlock, 0);
+            tick().then(() => { if (!this.#composing && composedBlock.element?.isConnected && !composedIn?.text) this.selection.setCursor(composedBlock, 0); });
+        }
     }
 
     /** @param {CompositionEvent} e */
     #syncComposition(e) {
         const block = this.#compositionStartBlock;
-        const startOffset = this.#compositionStartOffset;
+        let startOffset = this.#compositionStartOffset;
+        const anchor = this.#compositionAnchor;
         this.#compositionStartBlock = null;
         this.#compositionStartOffset = null;
+        this.#compositionAnchor = null;
         if (!block || startOffset === null) return;
 
         // The block may have been destroyed/replaced during the composition
@@ -1136,10 +1208,18 @@ export class Nabu {
         const composedText = e.data || '';
         if (!composedText) return;
 
+        // Where the composition began NOW: the Loro cursors followed every edit of this text made meanwhile (P-101).
+        if (anchor) {
+            const moved = resolveOffset(this.doc, anchor, behavior.container.length);
+            if (moved !== null) startOffset = moved;
+        }
+        startOffset = Math.max(0, Math.min(startOffset, behavior.container.length));
+
         behavior.insert(startOffset, composedText);
         block.commit();
+        const caret = startOffset + composedText.length;
         tick().then(() => {
-            this.selection.setCursor(block, startOffset + composedText.length);
+            this.selection.setCursor(block, caret);
         });
     }
 
