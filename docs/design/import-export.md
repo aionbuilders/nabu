@@ -7,7 +7,7 @@ format: see `clipboard-format.md`.
 Fidelity is checked by `tests/unit/roundtrip-structure.test.js` (kitchen-sink document, trees compared on the MODEL: every key stored on
 the Loro nodes) and `tests/e2e/import-export.spec.ts` (same, in the browser, into a fresh editor).
 
-Zone / variables / Context are out of scope (parked). Region markers (ADR 016) are covered below (JSON row, markdown row and the data-comment exception).
+Zone / variables / Context are out of scope (parked). Regions (ADR 016, containers since ADR 018) are covered below (JSON row, markdown row and the data-comment exception).
 
 ## 1. JSON
 
@@ -56,7 +56,7 @@ Zone / variables / Context are out of scope (parked). Region markers (ADR 016) a
 | `list` | `listType`: `bullet` `ordered` `todo`; `start` (ordered, only when not 1) | none | `list-item`s |
 | `list-item` | `checked` (only in a to-do list) | runs | sublists (zero or several, of different types: P-28) |
 | `image`, `video`, `file` | `ref`, `alt`, `name`, `status` (only when not `ready`) | none | none |
-| `region` (marker) | `regionType`, `fields` (`title` + the declared fields; richtext as Loro deltas, an unknown field as it is stored) | none | none |
+| `region` (container) | `regionType`, `fields` (the declared fields, never the title; richtext as Loro deltas, an unknown field as it is stored) | the title (runs) | the body: any blocks and sub-regions |
 
 Older exports wrote the `checked` of a to-do item next to `type` (not in `props`); `importJSON` still reads it (any top-level key
 other than `id` / `type` / `props` / `content` / `children` is read as a prop).
@@ -99,7 +99,7 @@ idempotent (`serialize -> import -> serialize` gives the same string); this sect
 | image | `![alt](ref)` | **exact**: `ref`, `alt` (escaped; a ref with spaces or parentheses is written `<…>`). Lossy: `name`, `status` |
 | video | `[alt or name or video](ref)` | **lossy**: comes back as a *paragraph with a link* (type, `name` / `alt` distinction and `status` are lost) |
 | file | `[name or file](ref)` | **lossy**: a paragraph with a link, like the video |
-| region (marker) | data comment + readable heading (below) | **exact** for type + fields (the comment); the heading is a **readable echo**, recomputed on export and ignored on import. Lossy: richtext fields take the paragraph limits (whitespace at the edge of a mark moves outside it); an unknown region type falls back to the default top-level type |
+| region (container) | data comment + title heading + body, closing comment only when needed (below) | **exact**: type + fields (the comment), title (the heading, inline marks), body and nesting (deduced from the levels, or from the closing comment). Lossy: richtext fields take the paragraph limits (whitespace at the edge of a mark moves outside it); an unknown region type falls back to the default top-level type |
 
 Other markdown limits: a `nabu-asset:<id>` ref is exported as is (the bytes are only exported by JSON): it is meaningful in the same
 document or a peer; elsewhere it imports as `missing`. A pending media exports as its label (no source). Everything markdown cannot
@@ -130,46 +130,71 @@ Toggle block with `collapsed = !open`, the summary parsed as inline markdown and
 model (a toggle has no prop but `collapsed`); no HTML is ever created, and the inline parser keeps `<script>` / `<img onerror>` as text.
 A `<details>` can interrupt a paragraph (CommonMark). The rule lives in `blocks/toggle/markdown.js`.
 
-### The region marker exception (data comment + heading)
+### The region exception (data comment + title heading + inferred end)
 
-Nabu exports a region marker (ADR 016) as TWO lines:
+A region (ADR 018) is a container: a title, a body (blocks and sub-regions). Nabu exports it as:
 
 ```
-<!-- region:chapter {"status":"draft","synopsis":"A *short* summary","title":"La forêt"} -->
-## Chapitre 2 — La forêt
+<!-- region:chapter {"status":"draft","synopsis":"A *short* summary"} -->
+## La *forêt*
+
+Body, as block markdown (sub-regions included).
 ```
 
-- Line 1, the **data comment**, is the source of truth: `<!-- region:<type> <json> -->`. The type is the declared region type id (characters outside
-  `[A-Za-z0-9_-]` are percent-encoded). The JSON is `fields`: minimal (no whitespace), keys sorted at every level, with `<`, `>`, `&` and the line
-  separators written as `\uXXXX` escapes, so a field can never contain `-->` or markup. **Richtext** fields (declared `richtext`) are written as inline
-  markdown strings (a Loro delta would be unreadable) and parsed back with the inline parser: marks and links survive, with the same limits as a
-  paragraph (whitespace at the edge of a mark moves outside it). The other kinds (text, number, boolean, enum, date, unknown fields) are plain JSON.
-- Line 2, the **echo**, is an ATX heading of level `clamp(region level, 1, 6)` whose text is the computed label (`Chapitre 2 — La forêt`: the type's
-  label template, numbering and title; the type id when the label is empty, so the echo line is never missing). It is for humans and other markdown tools.
+- Line 1, the **data comment**, is the source of truth for the type and the fields: `<!-- region:<type> <json> -->`. The type is the declared
+  region type id (characters outside `[A-Za-z0-9_-]` are percent-encoded). The JSON is `fields` (the title is NOT among them): minimal (no
+  whitespace), keys sorted at every level, with `<`, `>`, `&` and the line separators written as `\uXXXX` escapes, so a field can never contain
+  `-->` or markup. **Richtext** fields (declared `richtext`) are written as inline markdown strings (a Loro delta would be unreadable) and parsed
+  back with the inline parser: marks and links survive, with the same limits as a paragraph (whitespace at the edge of a mark moves outside it).
+  The other kinds (text, number, boolean, enum, date, unknown fields) are plain JSON.
+- Line 2, the **title**, is an ATX heading of level `clamp(region level, 1, 6)` whose text is the TITLE as inline markdown (marks kept). It is the real
+  title, not an echo. An **empty title** is written as the comment alone (the body follows after a blank line); the one exception is a body that
+  opens with a heading of its own, which would be read as the title: then a bare heading (`##`) stands for the empty title.
+- Then the body blocks, separated by blank lines, exactly as at the root.
 
-Import and paste recognise **only this construct**: a line that is exactly `<!-- region:<type> {…} -->` whose JSON parses to an object, optionally
-followed IMMEDIATELY (next line, no blank line) by a heading, which is **consumed** as the marker's echo - it never becomes a heading block.
-Decisions:
+**End of a region** (nothing is written when it can be deduced). On import a region contains the blocks that follow it until the first of:
 
-- **Edited heading**: the comment wins. If a human changes the heading text (or level) elsewhere, the title stays the comment's and the next export
-  rewrites the heading from it. To rename a region in the markdown, edit the `title` in the comment. (No warning is raised: the heading is not data.)
-- **Unknown region type** (a document from a richer editor): the marker takes the declared default type (the lowest level) and keeps its fields;
+1. an explicit **closing comment** `<!-- /region -->` (consumed with the region). It closes the INNERMOST region still open;
+2. the next **opening comment of a region of the same or a higher level** (level = the declared level of its type; an undeclared type counts as the
+   default type): it closes this region and every sub-region still open. A DEEPER one nests: it starts a sub-region of this one;
+3. the end of the enclosing region's body, or of the document.
+
+Comments inside fenced code blocks are code, never constructs (an unclosed fence runs to the end of the text, as the code block does).
+
+**Export writes the closing comment only when needed**: when, after the region (and its closing, if the parent writes one), comes content that is not
+the end of the text and not the opening of a region of the same or a higher level. So a document of consecutive sections has no closing comments; text
+after a sub-region (back in the parent's body), text after a region at the root, and a deeper region following a shallower one at the root get one.
+When a region closes, the sub-regions still open at the end of its body close too (each writes its own comment: `/region` closes one level). Inference
+equals the model in every case; the round trips are pinned.
+
+Import and paste recognise **only these constructs**. Decisions:
+
+- **The heading after the comment** is the title only when it is on the line RIGHT AFTER the comment (no blank line); its level is ignored (the type
+  decides). Otherwise the title is empty and the following heading is a real heading block of the body. A heading without the comment is a heading;
+  regions are never inferred from headings.
+- **Unknown region type** (a document from a richer editor): the region takes the declared default type (the lowest level) and keeps its fields;
   the original type id is lost. (JSON import and the internal clipboard keep an unknown type as it is; the registry treats it as an unnumbered leaf.)
 - **Invalid values** for a declared field (a wrong type, a value outside an `enum`) are dropped with `nabu.warn`; unknown fields are kept.
-- **A heading without the comment** is a heading; regions are never inferred from headings. **Any other HTML comment** and a comment with invalid
-  JSON, a JSON that is not an object, a different shape (extra text on the line, missing spaces) stay literal text, as before. A blank line between
-  the comment and a heading makes that heading a real heading block.
-- A marker inside a `<details>` body is read, then hoisted after the toggle (root-only rule).
+- **Any other HTML comment**, a comment with invalid JSON, a JSON that is not an object, a different shape (extra text on the line, missing spaces)
+  stay literal text. A **stray** `<!-- /region -->` (nothing to close) stays literal text too (it is not dropped: nothing is lost by importing).
+- A comment on the line right after a paragraph line (no blank line) interrupts the paragraph. A region inside a `<details>` body is read, then
+  hoisted after the toggle (root-only rule, regions live at the root or in a region body).
+- Older exports (ADR 016) wrote the heading as the computed label echo and the title in the comment: the heading is now read as the title.
 
 Idempotency: `serialize('markdown') -> importMarkdown -> serialize('markdown')` is a fixed point for documents with regions (pinned by
-`tests/unit/regions-io.test.js` and `tests/unit/roundtrip-structure.test.js`). The rule lives in `blocks/region/format.js`.
+`tests/unit/regions-io.test.js` and `tests/unit/roundtrip-structure.test.js`). The rules live in `blocks/region/format.js` (comment, scan of the extent),
+`serialize.js` (text forms, closing rule) and `region.svelte.js` (the block statics). The generic engine only hands every markdown serializer the
+siblings that follow (`after`, like `before`); the markdown block parser already lets a rule choose its own extent (as the toggle does).
 
 ### HTML
 
-The clipboard `text/html` writes a marker as `<hN data-nabu-region="chapter" data-nabu-fields='{…}'>label</hN>` (`N` = `clamp(level, 1, 6)`; the
-same minimal JSON and richtext form, escaped as an attribute). HTML paste turns ONLY an element carrying a non-empty `data-nabu-region` into a marker
-(type id read as text, an unknown one falls back to the default type, `data-nabu-fields` parsed as JSON - invalid, oversized or non-object data
-gives a marker without fields -, richtext links sanitized); the element's own content is ignored. A plain `<h2>` from the web is a heading.
+The clipboard `text/html` writes a region as `<section data-nabu-region="chapter" data-nabu-fields='{…}'><hN>title</hN>…body…</section>` (`N` =
+`clamp(level, 1, 6)`; the same minimal JSON and richtext form, escaped as an attribute; nested regions are nested sections). HTML paste turns ONLY a
+`<section>` carrying a non-empty `data-nabu-region` (at most 200 characters) into a region: the type id is read as text (an unknown one falls back to the
+default type), `data-nabu-fields` is parsed as JSON (invalid, oversized or non-object data gives a region without fields; richtext links are
+sanitized), the **first element child**, if it is a heading `h1`-`h6`, is the title (inline content, marks kept; its level is ignored), and the other
+children are the body, read like any HTML (sub-sections nest). Nothing else of the element is passed through. A plain `<section>` is a transparent
+wrapper, a plain `<h2>` is a heading, and `data-nabu-region` on any other element means nothing.
 
 ### Lists: markers
 

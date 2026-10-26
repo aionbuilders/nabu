@@ -135,3 +135,12 @@ Décidé le 2026-10-23 (propriétaire). **Stockage** et **comportement** sont di
 3. **Niveaux** : garder `level` comme règle d'imbrication (sous-région strictement plus profonde, normaliseur correcteur) ? → **oui**.
 4. **Promouvoir** une scène au rang de chapitre : les scènes qui la suivent dans le même chapitre **la suivent** (deviennent ses sous-régions, comme dans le modèle à repères) ou **restent** dans l'ancien chapitre ? → **elles la suivent** (le découpage visible du texte ne change pas).
 5. **Markdown** : commentaire de fin seulement quand il est nécessaire ? → **oui**.
+
+## 7. Notes d'implémentation — lot C (2026-10-26)
+
+Formes de référence : `docs/design/import-export.md` (« The region exception »), `docs/design/clipboard-format.md`. Code : `blocks/region/format.js` (commentaire, `scanRegion` : étendue d'une région), `serialize.js` (formes texte, règle du commentaire de fin), `region.svelte.js` (statiques).
+
+- **Import markdown** : règle à étendue propre (comme le toggle) ; `scanRegion` parcourt les lignes avec une pile des sous-régions ouvertes (un `<!-- /region -->` ferme la plus interne ; une ouverture de niveau ≤ ferme tout ce qui est ouvert jusqu'à elle) et saute les blocs de code. Le titre est le titre ATX **juste après** le commentaire (niveau ignoré) ; sinon titre vide. Un `<!-- /region -->` orphelin reste du texte littéral.
+- **Écriture du commentaire de fin** : seulement si ce qui suit la région n'est ni la fin ni l'ouverture d'une région de niveau ≤ ; si le parent ferme, le dernier enfant ferme aussi (sinon le commentaire du parent serait pris pour le sien). Titre vide : commentaire seul, ou `##` nu quand le corps commence par un titre.
+- **Cœur** : seul ajout générique, `after` (les frères suivants) à côté de `before` dans le contexte des sérialiseurs markdown statiques (`nabu.svelte.js`). Le chemin d'instance (export du document) lit ses frères dans l'arbre.
+- **Import HTML** : `section[data-nabu-region]` (priorité 100) ; le titre est le **premier enfant élément** s'il est `h1`–`h6` (pas « le premier titre quelconque » : un titre plus loin resterait un titre du corps).

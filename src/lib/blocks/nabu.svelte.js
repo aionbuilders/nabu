@@ -1251,16 +1251,16 @@ export class Nabu {
 
         // Recursive serializers — dispatch to each BlockClass's static toMarkdown/toHtml.
         // helpers.recurse lets blocks serialize a child without knowing its type; helpers.recurseAll serializes a list of
-        // siblings in order, telling each one the siblings before it (`before`: a block may depend on its neighbours,
-        // e.g. adjacent lists must not read back as one).
+        // siblings in order, telling each one the siblings before it (`before`) and after it (`after`): a block may depend on
+        // its neighbours (adjacent lists must not read back as one; a block that closes only when something follows it).
         /** @param {import('../utils/extensions.js').PasteBlock} pb @param {Record<string,any>} [ctx] @returns {string} */
         const pbToMarkdown = (pb, ctx = {}) => {
             const BlockClass = /** @type {any} */ (this.registry.get(pb.type));
             if (BlockClass?.toMarkdown) {
                 return BlockClass.toMarkdown(pb, {
                     ...ctx,
-                    recurse: (/** @type {any} */ child, /** @type {any} */ childCtx) => pbToMarkdown(child, { ...ctx, before: [], ...childCtx }),
-                    recurseAll: (/** @type {any[]} */ children, /** @type {any} */ childCtx) => children.map((child, k) => pbToMarkdown(child, { ...ctx, ...childCtx, before: children.slice(0, k) })),
+                    recurse: (/** @type {any} */ child, /** @type {any} */ childCtx) => pbToMarkdown(child, { ...ctx, before: [], after: [], ...childCtx }),
+                    recurseAll: (/** @type {any[]} */ children, /** @type {any} */ childCtx) => children.map((child, k) => pbToMarkdown(child, { ...ctx, ...childCtx, before: children.slice(0, k), after: children.slice(k + 1) })),
                 });
             }
             return (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
@@ -1282,7 +1282,7 @@ export class Nabu {
             ? pasteBlocks[0] : null;
         const plain = single
             ? /** @type {any[]} */ (single.delta).map(op => typeof op.insert === 'string' ? op.insert : '').join('')
-            : files.externalize(pasteBlocks).map((pb, k, all) => pbToMarkdown(pb, { before: all.slice(0, k) })).join('\n\n');
+            : files.externalize(pasteBlocks).map((pb, k, all) => pbToMarkdown(pb, { before: all.slice(0, k), after: all.slice(k + 1) })).join('\n\n');
         dt.setData('text/plain', plain);
         dt.setData('text/html',  files.externalize(pasteBlocks, { inline: true }).map(pb => pbToHtml(pb)).join('\n'));
         return true;

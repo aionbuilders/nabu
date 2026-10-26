@@ -27,7 +27,7 @@ import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
 import { RegionsExtension } from '$lib/blocks/region/index.js';
 
 // Regions (ADR 018, containers): every field type, so that the JSON form of a region is checked on the model. The markdown
-// form is checked by the export tests of regions-io.test.js; its import is not written yet (TODO(ADR-018 lot C)).
+// form (title + body, closing comments) is round-tripped with the rest of the sink below, and tested in depth in regions-io.test.js.
 const REGION_TYPES = {
     part: { level: 1, label: 'Part {index}' },
     chapter: { level: 2, label: 'Chapter {index} - {title}', numbering: 'document', fields: { synopsis: 'richtext', status: { type: 'enum', values: ['draft', 'final'] }, due: 'date', words: 'number', done: 'boolean', pov: 'text' } },
@@ -268,11 +268,9 @@ describe('JSON round trip (structure)', () => {
 // ── Markdown ─────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The part of the sink markdown can express exactly: no video / file (they are links), no image name.
- * TODO(ADR-018 lot C): no region either, until the markdown import of the container form (title + body) is written.
+ * The part of the sink markdown can express exactly: no video / file (they are links), no image name. Regions are in it.
  */
-const NO_REGION = (b) => b.type !== 'region';
-const MD_SINK = SINK.filter((b) => b.type !== 'video' && b.type !== 'file' && NO_REGION(b)).map((b) => (b.type === 'image' ? { ...b, props: { ...b.props, name: undefined } } : b));
+const MD_SINK = SINK.filter((b) => b.type !== 'video' && b.type !== 'file').map((b) => (b.type === 'image' ? { ...b, props: { ...b.props, name: undefined } } : b));
 
 const roundTrip = async (engine) => {
     const out = new Nabu({ extensions });
@@ -290,7 +288,7 @@ describe('markdown round trip (structure)', () => {
     });
 
     it('documented loss: an image keeps ref + alt but not its name; a video / file comes back as a paragraph with a link', async () => {
-        const a = await make(SINK.filter(NO_REGION));
+        const a = await make(SINK);
         const b = await roundTrip(a);
         const A = tree(a);
         const B = tree(b);

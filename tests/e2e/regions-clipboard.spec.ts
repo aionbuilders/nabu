@@ -8,8 +8,8 @@
  * unreliable for custom MIME types). Seeded document (`?seed=regions`): preamble, "The ferryman" ⊃ "The bank", "The water", then
  * "The return".
  *
- * The READING side of markdown / HTML (a pasted markdown or `<section>` becoming regions, `importMarkdown`) is lot C: those tests
- * are `test.skip` with `TODO(ADR-018 lot C)`. A TEXT selection across titles copies the text blocks only (ADR 018 §3.9): the
+ * The READING side of markdown / HTML (a pasted markdown or `<section>` becoming regions, `importMarkdown`, the end of a region
+ * deduced from the levels, the closing comment) is covered at the end of this file. A TEXT selection across titles copies the text blocks only (ADR 018 §3.9): the
  * structure of whole regions travels by a structure gesture (seam, future block selection), which the tests below stand in for
  * with `regionClip` (the payloads of the whole regions, built from the model).
  */
@@ -58,14 +58,14 @@ async function regionClip(page: Page, ...titles: string[]) {
     const plain = (pb: any) => (pb.delta ?? []).map((op: any) => op.insert).join('');
     const md = (pb: any, ctx: any = {}): string => {
       const Class = n.registry.get(pb.type);
-      return Class?.toMarkdown ? Class.toMarkdown(pb, { ...ctx, recurse: (c: any, o: any) => md(c, o), recurseAll: (cs: any[]) => cs.map((c) => md(c)) }) : plain(pb);
+      return Class?.toMarkdown ? Class.toMarkdown(pb, { ...ctx, recurse: (c: any, o: any) => md(c, o), recurseAll: (cs: any[], o: any) => cs.map((c, k) => md(c, { ...o, before: cs.slice(0, k), after: cs.slice(k + 1) })) }) : plain(pb);
     };
     const html = (pb: any): string => {
       const Class = n.registry.get(pb.type);
       return Class?.toHtml ? Class.toHtml(pb, { recurse: html }) : `<p>${plain(pb)}</p>`;
     };
     const raw = JSON.stringify({ version: 1, blocks });
-    return { type: 'copy', defaultPrevented: true, nabuRaw: raw, nabu: JSON.parse(raw), text: blocks.map((b: any) => md(b)).join('\n\n'), html: blocks.map(html).join('\n') };
+    return { type: 'copy', defaultPrevented: true, nabuRaw: raw, nabu: JSON.parse(raw), text: blocks.map((b: any, k: number) => md(b, { before: blocks.slice(0, k), after: blocks.slice(k + 1) })).join('\n\n'), html: blocks.map(html).join('\n') };
   }, titles);
 }
 
@@ -250,25 +250,23 @@ test.describe('JSON and markdown export', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// Lot C — reading markdown / HTML back into regions (not implemented yet)
+// Lot C — reading markdown / HTML back into regions
 // ════════════════════════════════════════════════════════════════════════════
 
 test.describe('markdown / HTML import of regions', () => {
   test.beforeEach(async ({ page }) => { await gotoEditor(page, { seed: 'regions' }); });
 
-  test.skip('the markdown text/plain alone (another app) restores the regions, and so does Nabu\'s own text/html', async ({ page }) => {
-    // TODO(ADR-018 lot C): markdownRules / htmlRules of the region block are empty until the reading side is rewritten
+  test('the markdown text/plain alone (another app) restores the regions, and so does Nabu\'s own text/html', async ({ page }) => {
     const ev = await regionClip(page, 'The bank', 'The water');
     await focusEnd(page, 'Closing text.');
     await paste(page, { 'text/plain': ev.text });
     await expect(page.locator('.nabu-region')).toHaveCount(6);
-    await focusEnd(page, 'Text of the water.');
+    await focusEnd(page, 'Opening of the first section.');
     await paste(page, { 'text/html': ev.html });
     await expect(page.locator('.nabu-region')).toHaveCount(8);
   });
 
-  test.skip('importMarkdown of a document with regions: titles, nesting deduced from the levels, idempotent', async ({ page }) => {
-    // TODO(ADR-018 lot C): the end of a region is deduced at reading (next opening of the same or a higher level)
+  test('importMarkdown of a document with regions: titles, nesting deduced from the levels, idempotent', async ({ page }) => {
     const md = [
       'Preface',
       '<!-- region:section-1 {} -->\n# La forêt',
@@ -285,8 +283,24 @@ test.describe('markdown / HTML import of regions', () => {
     expect(second).toBe(first);
   });
 
-  test.skip('an invalid or foreign comment stays visible text; a heading without comment is never a region', async ({ page }) => {
-    // TODO(ADR-018 lot C): meaningful once valid comments are read back (today every comment stays text)
+  test('importMarkdown with closing comments: text after a sub-region goes back to its parent; the document is a fixed point', async ({ page }) => {
+    const md = [
+      '<!-- region:section-1 {} -->\n# Part',
+      'In the part.',
+      '<!-- region:section-2 {} -->\n## Sub',
+      'In the sub.',
+      '<!-- /region -->',
+      'Back in the part.',
+      '<!-- /region -->',
+      'At the root.',
+    ].join('\n\n');
+    await page.evaluate((m) => (window as any).nabu.importMarkdown(m), md);
+    await expectOutline(page, 'R:section-1(Part){ p(In the part.) ; R:section-2(Sub){ p(In the sub.) } ; p(Back in the part.) } ; p(At the root.)');
+    expect(await page.evaluate(() => (window as any).nabu.serialize('markdown'))).toBe(md);
+    expect(await violations(page)).toEqual([]);
+  });
+
+  test('an invalid or foreign comment stays visible text; a heading without comment is never a region', async ({ page }) => {
     await page.evaluate(() => (window as any).nabu.importMarkdown('<!-- region:section-1 {broken -->\n\n<!-- just a comment -->\n\n## Heading'));
     await expect(page.locator('.nabu-region')).toHaveCount(0);
     await expectOutline(page, 'p(<!-- region:section-1 {broken -->) ; p(<!-- just a comment -->) ; heading(Heading)');

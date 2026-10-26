@@ -3,8 +3,8 @@ import { MegaBlock } from "../megablock.svelte.js";
 import { TextBehavior, deltaToHtml, deltaToMarkdown } from "../../behaviors/text";
 import RegionComponent from "./Region.svelte";
 import { resolveConfig, fieldSpec, validateField } from "./types.js";
-import { parseRegionMarkdown, parseRegionHtml, sanitizeFieldDelta } from "./format.js";
-import { regionBlockToMarkdown, regionBlockToHtml } from "./serialize.js";
+import { scanRegion, parseRegionComment, parseRegionHtml, sanitizeFieldDelta, levelOfType } from "./format.js";
+import { regionBlockToMarkdown, regionBlockToHtml, closingNeeded, followOf, regionTypeOf } from "./serialize.js";
 import { createMessages } from "./messages.js";
 
 /**
@@ -110,8 +110,32 @@ export class RegionBlock extends MegaBlock {
             delta: this.container.sliceDelta(0, this.container.length),
             children: this.children.map(c => c.serialize('application/x-nabu+json')).filter(Boolean)
         }));
-        // Markdown: the data comment + the title as a heading + the body (see serialize.js).
-        this.serializers.set('markdown', () => regionBlockToMarkdown(this.config, this.exportProps, this.behavior.toMarkdown(), /** @type {any} */ (this.children.map(c => c.serialize('markdown')))));
+        // Markdown: the data comment + the title as a heading + the body (+ the closing comment when needed, see serialize.js).
+        // `context.tail` is what follows the PARENT region (set by a parent region for its children, see `#markdown`).
+        this.serializers.set('markdown', (/** @type {{ tail?: import('./serialize.js').Follow }} */ context = {}) => this.#markdown(context.tail ?? 'end'));
+    }
+
+    /**
+     * The markdown of this region. Whether it closes depends on what follows it in the text: the next siblings (read lazily,
+     * a region is compared by level without being serialized), else what follows the parent (`tail`). Its body is told what
+     * follows ITS last child: the closing comment of this region when it writes one, else what follows this region.
+     * @param {import('./serialize.js').Follow} tail
+     * @returns {string}
+     */
+    #markdown(tail) {
+        const config = this.config;
+        const siblings = /** @type {any[]} */ (this.parent?.children ?? this.nabu.children);
+        const at = siblings.indexOf(this);
+        const after = (function* () {
+            for (let k = at + 1; at >= 0 && k < siblings.length; k++) {
+                const next = siblings[k];
+                yield next.type === 'region' ? { region: levelOfType(config, regionTypeOf(config, { regionType: next.regionType })) } : String(next.serialize('markdown') ?? '');
+            }
+        })();
+        const follow = followOf(after, tail);
+        const close = closingNeeded(config, regionTypeOf(config, { regionType: this.regionType }), follow);
+        const body = this.children.map(c => String(c.serialize('markdown', { tail: close ? 'close' : follow }) ?? ''));
+        return regionBlockToMarkdown(config, this.exportProps, this.behavior.toMarkdown(), body, { close });
     }
 
     // ── Capability flags ────────────────────────────────────────────────────
@@ -391,14 +415,26 @@ export class RegionBlock extends MegaBlock {
     // ── Statics ─────────────────────────────────────────────────────────────
 
     /**
-     * Clipboard `text/plain` (several blocks) and static export: the data comment, the title as a heading, the body (serialize.js).
+     * Clipboard `text/plain` (several blocks) and static export: the data comment, the title as a heading, the body, and the
+     * closing comment when what follows would be swallowed (serialize.js). `after` (the following siblings) and `tail` (what
+     * follows the parent) are the neighbour context the engine hands to every serializer.
      * @param {import('../../utils/extensions.js').PasteBlock} pb
-     * @param {{ recurse?: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, recurseAll?: (children: import('../../utils/extensions.js').PasteBlock[], ctx?: object) => string[] }} [helpers]
+     * @param {{ recurse?: (child: import('../../utils/extensions.js').PasteBlock, ctx?: object) => string, recurseAll?: (children: import('../../utils/extensions.js').PasteBlock[], ctx?: object) => string[], after?: import('../../utils/extensions.js').PasteBlock[], tail?: import('./serialize.js').Follow }} [helpers]
      */
-    static toMarkdown(pb, { recurse, recurseAll } = {}) {
+    static toMarkdown(pb, { recurse, recurseAll, after = [], tail = 'end' } = {}) {
+        const config = this.config;
+        const props = pb.props ?? {};
+        const next = (function* () {
+            for (const sibling of after) {
+                yield sibling.type === 'region' ? { region: levelOfType(config, regionTypeOf(config, sibling.props ?? {})) } : (recurse ? recurse(sibling) : '');
+            }
+        })();
+        const follow = followOf(next, tail);
+        const close = closingNeeded(config, regionTypeOf(config, props), follow);
         const children = pb.children || [];
-        const body = recurseAll ? recurseAll(children) : children.map(c => recurse ? recurse(c) : '');
-        return regionBlockToMarkdown(this.config, pb.props ?? {}, deltaToMarkdown(pb.delta || []), body);
+        const ctx = { tail: close ? 'close' : follow };
+        const body = recurseAll ? recurseAll(children, ctx) : children.map(c => recurse ? recurse(c, ctx) : '');
+        return regionBlockToMarkdown(config, props, deltaToMarkdown(pb.delta || []), body, { close });
     }
 
     /**
@@ -411,39 +447,84 @@ export class RegionBlock extends MegaBlock {
         return regionBlockToHtml(this.config, pb.props ?? {}, deltaToHtml(pb.delta || []), body);
     }
 
-    // TODO(ADR-018 lot C): markdown / HTML IMPORT. The rules are disabled (a region is exported, not yet read back: the
-    // reading side must build the title and the body, and infer where the region ends). The detection below is the old
-    // marker format, kept as the starting point of the rewrite.
-
-    /** Markdown rules (paste AND `importMarkdown`): none for now, see the TODO above. */
+    /**
+     * Markdown rules (paste AND `importMarkdown`): the opening data comment (exact form, see format.js). `detect` is cheap (one
+     * line); `consume` computes the extent of the region (`scanRegion`: explicit close, next opening of the same or a higher
+     * level, end of the lines), and `fromMarkdown` reads the title and parses the body as a document of its own, exactly like
+     * the toggle, so sub-regions nest by recursion. A stray `<!-- /region -->` (nothing to close) is not a rule: literal text.
+     */
     static get markdownRules() {
-        return [];
+        const config = this.config;
+        return [{
+            priority: 20,
+            interruptsParagraph: true,
+            detect: (/** @type {string} */ line) => !!parseRegionComment(config, line),
+            consume: (/** @type {string[]} */ lines, /** @type {number} */ i) => (scanRegion(config, lines, i)?.end ?? i) - i,
+        }];
     }
 
     /**
-     * The old marker form: the exact data comment `<!-- region:<type> {json} -->` (+ the heading line after it).
-     * Not reachable while `markdownRules` is empty.
-     * @param {string[]} lines
+     * The region: type and fields from the comment, the title (inline markdown) from the heading right after it, the body
+     * (the lines up to the end of the region, closing comment excluded) parsed as a document of its own.
+     * @param {string[]} lines  exactly the lines `consume` took
+     * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], parseBlocks?: (lines: string[]) => import('../../utils/extensions.js').PasteBlock[] }} helpers
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
-    static fromMarkdown(lines) {
-        const parsed = parseRegionMarkdown(this.config, lines, 0);
-        return parsed ? { type: 'region', props: { regionType: parsed.regionType, fields: parsed.fields }, partial: false } : null;
+    static fromMarkdown(lines, { parseInline, parseBlocks }) {
+        const region = scanRegion(this.config, lines, 0);
+        if (!region) return null;
+        const children = parseBlocks ? parseBlocks(lines.slice(region.bodyStart, region.bodyEnd)) : [];
+        return {
+            type: 'region',
+            props: { regionType: region.regionType, fields: region.fields },
+            delta: region.title ? parseInline(region.title) : [],
+            partial: false,
+            ...(children.length ? { children } : {}),
+        };
     }
 
-    /** HTML rules (paste): none for now, see the TODO above. */
+    /**
+     * HTML rules (paste): `<section data-nabu-region="type">` with a plausible type id. A `<section>` without it, or with an
+     * empty / absurd one, is not matched: it stays a transparent wrapper, as before.
+     */
     static get htmlRules() {
-        return [];
+        return [{
+            selector: 'section[data-nabu-region]',
+            priority: 100,
+            filter: (/** @type {Element} */ el) => { const id = el.getAttribute('data-nabu-region')?.trim() ?? ''; return id.length > 0 && id.length <= 200; },
+        }];
     }
 
     /**
-     * The old marker form: an element carrying `data-nabu-region`. Not reachable while `htmlRules` is empty.
+     * The region of a `<section data-nabu-region>`: type and fields from the attributes (invalid fields = no fields, never
+     * markup), the title from the heading (`h1`-`h6`) that is its FIRST element child (inline), the body from the other
+     * children, read like the toggle's.
      * @param {Element} el
+     * @param {{ parseInline: (el: Element) => import('loro-crdt').Delta<string>[], parseChildren?: (el: Element) => import('../../utils/extensions.js').PasteBlock[] }} helpers
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
-    static fromHTML(el) {
+    static fromHTML(el, { parseInline, parseChildren }) {
         const parsed = parseRegionHtml(this.config, el);
-        return parsed ? { type: 'region', props: { regionType: parsed.regionType, fields: parsed.fields }, partial: false } : null;
+        if (!parsed) return null;
+        const [first, ...rest] = [...el.children];
+        const hasTitle = !!first && /^h[1-6]$/i.test(first.tagName);
+        const delta = hasTitle ? parseInline(first) : [];
+        const bodyEls = hasTitle ? rest : [first, ...rest].filter(Boolean);
+        /** @type {import('../../utils/extensions.js').PasteBlock[]} */
+        let children = [];
+        const ownerDoc = el.ownerDocument;
+        if (parseChildren && bodyEls.length && ownerDoc) {
+            const wrapper = ownerDoc.createElement('div');
+            for (const bodyEl of bodyEls) wrapper.appendChild(bodyEl.cloneNode(true));
+            children = parseChildren(wrapper);
+        }
+        return {
+            type: 'region',
+            props: { regionType: parsed.regionType, fields: parsed.fields },
+            delta,
+            partial: false,
+            ...(children.length ? { children } : {}),
+        };
     }
 
     /**

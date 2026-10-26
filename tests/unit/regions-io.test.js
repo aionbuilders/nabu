@@ -2,10 +2,9 @@
 /**
  * Unit tests for the text forms and the clipboard of regions (ADR 016 lot 3, container model of ADR 018): markdown export
  * (data comment + title as a heading + body), HTML export (`<section data-nabu-region>`), `text/plain` of a copy, the internal
- * clipboard round trip (spanning regions, into a list / toggle: placement rule), JSON with every field type.
- *
- * TODO(ADR-018 lot C): the markdown / HTML IMPORT of a region (title + body, end-of-region inference) is not written yet:
- * the tests of that side are skipped (`describe.skip` / `it.skip`) and are the starting point of lot C.
+ * clipboard round trip (spanning regions, into a list / toggle: placement rule), JSON with every field type; and the markdown /
+ * HTML IMPORT (ADR 018 lot C): title + body, the end of a region inferred from the levels, the closing comment written only when
+ * needed, nested round trips.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -16,11 +15,12 @@ import { HeadingExtension } from '$lib/blocks/heading/index.js';
 import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
 import { ToggleExtension } from '$lib/blocks/toggle/index.js';
 import { CalloutExtension } from '$lib/blocks/callout/index.js';
+import { CodeExtension } from '$lib/blocks/code/index.js';
 import { BlockExtension } from '$lib/blocks/block.extension.js';
 import { RichTextExtension } from '$lib/behaviors/text/index.js';
 import { RegionsExtension } from '$lib/blocks/region/index.js';
 import { MarkdownPasteExtension, HtmlPasteExtension, NabuPasteExtension, PlainTextPasteExtension } from '$lib/paste/index.js';
-import { regionToMarkdown, regionToHtml, safeJson, encodeTypeId } from '$lib/blocks/region/format.js';
+import { safeJson, encodeTypeId } from '$lib/blocks/region/format.js';
 import { regionBlockToMarkdown } from '$lib/blocks/region/serialize.js';
 
 const BOOK = {
@@ -30,7 +30,7 @@ const BOOK = {
 };
 
 const EXTENSIONS = (types = BOOK) => [
-  ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, ToggleExtension, CalloutExtension, RichTextExtension,
+  ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, ToggleExtension, CalloutExtension, CodeExtension, RichTextExtension,
   RegionsExtension(types ? { types } : undefined), MarkdownPasteExtension, HtmlPasteExtension, NabuPasteExtension, PlainTextPasteExtension, BlockExtension,
 ];
 
@@ -85,9 +85,9 @@ describe('markdown export of a region', () => {
     ].join('\n\n'));
   });
 
-  it('the title is inline markdown (marks kept); an empty title leaves a bare heading', async () => {
+  it('the title is inline markdown (marks kept); an empty title leaves the comment alone', async () => {
     const engine = await load(await makeEditor({ scene: { level: 3 } }), [{ ...R('scene'), delta: [D('Le '), D('seuil', { italic: true })] }, R('scene')]);
-    expect(engine.serialize('markdown')).toBe('<!-- region:scene {} -->\n### Le *seuil*\n\n<!-- region:scene {} -->\n###');
+    expect(engine.serialize('markdown')).toBe('<!-- region:scene {} -->\n### Le *seuil*\n\n<!-- region:scene {} -->');
   });
 
   it('every field type is carried in the comment (richtext as an inline markdown string), but not the title', async () => {
@@ -143,21 +143,75 @@ describe('markdown export of a region', () => {
   });
 });
 
-// TODO(ADR-018 lot C): markdown IMPORT of a region (title + body, end inferred). The rules are disabled; these tests describe the
-// old marker format and are kept as the starting point of the rewrite.
-describe.skip('markdown import of a marker (TODO ADR-018 lot C)', () => {
-  it('the comment is the source of truth; the following heading is CONSUMED (no heading block), whatever it says', async () => {
-    const engine = await makeEditor();
-    await engine.importMarkdown('Preface\n\n<!-- region:chapter {"title":"La forêt","status":"draft"} -->\n## Edited by a human\n\nBody');
-    expect(outline(engine)).toBe('p(Preface) ; R:chapter(La forêt) ; p(Body)');
-    expect(engine.regions.list[0].label).toBe('Chapitre 1 — La forêt'); // recomputed: the edited text is not kept
-    expect(markers(engine)[0].fields).toEqual({ title: 'La forêt', status: 'draft' });
+// The closing comment: written only when what follows the region would be swallowed by it.
+describe('markdown export: empty title and the closing comment', () => {
+  const md = async (blocks, types = BOOK) => (await load(await makeEditor(types), blocks)).serialize('markdown');
+
+  it('an empty title is the comment alone; a body that opens with a heading gets a bare heading (it would be read as the title)', async () => {
+    expect(await md([R('scene', {}, [p('x')])])).toBe('<!-- region:scene {} -->\n\nx');
+    const heading = { type: 'heading', partial: false, props: { level: 2 }, delta: [D('Sub')] };
+    expect(await md([R('scene', {}, [heading]), R('scene', {})])).toBe('<!-- region:scene {} -->\n###\n\n## Sub\n\n<!-- region:scene {} -->');
   });
 
-  it('the heading line is optional', async () => {
+  it('no closing comment at the end of the document, nor when a region of the same or a higher level follows', async () => {
+    expect(await md([R('chapter', { title: 'A' }, [p('x')])])).toBe('<!-- region:chapter {} -->\n## A\n\nx');
+    expect(await md([R('chapter', { title: 'A' }, [p('x')]), R('chapter', { title: 'B' })])).not.toContain('/region');
+    expect(await md([R('chapter', { title: 'A' }, [p('x')]), R('part', { title: 'B' })])).not.toContain('/region');
+    // an empty paragraph exports nothing: it does not count as content after the region
+    expect(await md([R('chapter', { title: 'A' }, [p('x')]), { type: 'paragraph', partial: false, delta: [] }])).not.toContain('/region');
+  });
+
+  it('a closing comment when content follows the region at its parent level', async () => {
+    expect(await md([R('chapter', { title: 'A' }, [p('x')]), p('y')])).toBe('<!-- region:chapter {} -->\n## A\n\nx\n\n<!-- /region -->\n\ny');
+    // a DEEPER region after it would nest in it: closed too
+    expect(await md([R('chapter', { title: 'A' }), R('scene', { title: 'B' })])).toBe('<!-- region:chapter {} -->\n## A\n\n<!-- /region -->\n\n<!-- region:scene {} -->\n### B');
+  });
+
+  it('text after a sub-region closes the sub-region only; text after the region closes both (a region whose parent closes closes too)', async () => {
+    const doc = (tail) => [R('part', { title: 'P' }, [R('chapter', { title: 'C' }, [p('c')]), p('in part')]), ...tail];
+    expect(await md(doc([]))).toBe('<!-- region:part {} -->\n# P\n\n<!-- region:chapter {} -->\n## C\n\nc\n\n<!-- /region -->\n\nin part');
+    expect(await md(doc([p('after')]))).toBe('<!-- region:part {} -->\n# P\n\n<!-- region:chapter {} -->\n## C\n\nc\n\n<!-- /region -->\n\nin part\n\n<!-- /region -->\n\nafter');
+    const deep = [R('part', { title: 'P' }, [R('chapter', { title: 'C' }, [R('scene', { title: 'S' }, [p('s')])])]), p('after')];
+    expect((await md(deep)).match(/<!-- \/region -->/g)).toHaveLength(3);
+    // ... but when the parent does not close (end of document), the last child does not either
+    expect((await md(deep.slice(0, 1))).match(/<!-- \/region -->/g)).toBeNull();
+  });
+
+  it('the static serializer (clipboard text/plain) applies the same rules from the following siblings', async () => {
     const engine = await makeEditor();
-    await engine.importMarkdown('<!-- region:part {"title":"I"} -->\n\nText');
-    expect(outline(engine)).toBe('R:part(I) ; p(Text)');
+    const Region = engine.registry.get('region');
+    const md = (b, ctx = {}) => {
+      const Class = engine.registry.get(b.type);
+      return Class.toMarkdown(b, { ...ctx, recurse: (c, o) => md(c, o), recurseAll: (cs, o) => cs.map((c, k) => md(c, { ...o, after: cs.slice(k + 1) })) });
+    };
+    const part = R('part', { title: 'P' }, [R('chapter', { title: 'C' }, [p('c')]), p('in part')]);
+    expect(md(part, { after: [] })).not.toContain('/region -->\n\nafter');
+    expect(md(part, { after: [p('after')] }).match(/<!-- \/region -->/g)).toHaveLength(2);
+    expect(md(part, { after: [R('part', { title: 'Q' })] }).match(/<!-- \/region -->/g)).toHaveLength(1); // only the chapter's
+    expect(Region.toMarkdown(R('part', { title: 'P' }), { after: [p('x')], recurse: () => 'x' })).toBe('<!-- region:part {} -->\n# P\n\n<!-- /region -->');
+  });
+});
+
+describe('markdown import of a region', () => {
+  it('the comment gives the type and the fields; the heading right after it is the TITLE (no heading block), the rest is the body', async () => {
+    const engine = await makeEditor();
+    await engine.importMarkdown('Preface\n\n<!-- region:chapter {"status":"draft"} -->\n## La *forêt*\n\nBody\n\nMore');
+    expect(outline(engine)).toBe('p(Preface) ; R:chapter(La forêt){p(Body) p(More)}');
+    expect(engine.children[1].behavior.toMarkdown()).toBe('La *forêt*');
+    expect(markers(engine)[0].fields).toEqual({ status: 'draft' });
+    expect(engine.regions.list[0].label).toBe('Chapitre 1 — La forêt');
+  });
+
+  it('the heading level is ignored (the type decides); an empty heading is an empty title', async () => {
+    const engine = await makeEditor();
+    await engine.importMarkdown('<!-- region:chapter {} -->\n###### Whatever\n\nx\n\n<!-- region:chapter {} -->\n##\n\n## Real heading');
+    expect(outline(engine)).toBe('R:chapter(Whatever){p(x)} ; R:chapter(){h2(Real heading)}');
+  });
+
+  it('the title line is optional: after a blank line, a heading is a real heading of the body', async () => {
+    const engine = await makeEditor();
+    await engine.importMarkdown('<!-- region:part {} -->\n\n# Real heading\n\nText');
+    expect(outline(engine)).toBe('R:part(){h1(Real heading) p(Text)}');
   });
 
   it('a heading WITHOUT the comment stays a heading (regions are never inferred from headings)', async () => {
@@ -165,12 +219,6 @@ describe.skip('markdown import of a marker (TODO ADR-018 lot C)', () => {
     await engine.importMarkdown('## Chapitre 2 — La forêt\n\nText');
     expect(outline(engine)).toBe('h2(Chapitre 2 — La forêt) ; p(Text)');
     expect(engine.regions.count).toBe(0);
-  });
-
-  it('only a heading IMMEDIATELY after the comment is its echo; after a blank line it is a real heading', async () => {
-    const engine = await makeEditor();
-    await engine.importMarkdown('<!-- region:part {"title":"I"} -->\n\n# Real heading');
-    expect(outline(engine)).toBe('R:part(I) ; h1(Real heading)');
   });
 
   it('invalid JSON, wrong shape, other comments: the line stays literal text', async () => {
@@ -183,7 +231,6 @@ describe.skip('markdown import of a marker (TODO ADR-018 lot C)', () => {
     expect(roots.every((r) => r.data.get('type') === 'paragraph')).toBe(true);
     expect(roots.map((r) => r.data.get('text').toString())[0]).toBe('<!-- region:part {"title": -->');
     expect(engine.regions.count).toBe(0);
-    // and an invalid comment keeps the heading under it a heading
     const e2 = await makeEditor();
     await e2.importMarkdown('<!-- region:part {nope} -->\n## Title');
     expect(outline(e2)).toBe('p(<!-- region:part {nope} -->) ; h2(Title)');
@@ -191,33 +238,83 @@ describe.skip('markdown import of a marker (TODO ADR-018 lot C)', () => {
 
   it('an unknown region type falls back to the default (top-level) type, fields kept', async () => {
     const engine = await makeEditor();
-    await engine.importMarkdown('<!-- region:saga {"title":"S","mood":"dark","n":3} -->\n# Saga');
-    expect(markers(engine)).toEqual([{ regionType: 'part', fields: { title: 'S', mood: 'dark', n: 3 } }]);
+    await engine.importMarkdown('<!-- region:saga {"mood":"dark","n":3} -->\n# Saga');
+    expect(markers(engine)).toEqual([{ regionType: 'part', title: 'Saga', fields: { mood: 'dark', n: 3 } }]);
   });
 
   it('a field of the wrong type for a declared field is dropped with a warning; unknown fields are kept', async () => {
     const engine = await makeEditor();
     const warn = vi.spyOn(engine, 'warn').mockImplementation(() => {});
-    await engine.importMarkdown('<!-- region:chapter {"title":"T","status":"nope","words":"12","extra":[1,{"a":true}]} -->');
-    expect(markers(engine)).toEqual([{ regionType: 'chapter', fields: { title: 'T', extra: [1, { a: true }] } }]);
+    await engine.importMarkdown('<!-- region:chapter {"status":"nope","words":"12","extra":[1,{"a":true}]} -->\n## T');
+    expect(markers(engine)).toEqual([{ regionType: 'chapter', title: 'T', fields: { extra: [1, { a: true }] } }]);
     expect(warn).toHaveBeenCalled();
   });
 
-  it('a paste (one line = one block) reads the same construct', async () => {
+  it('a paste (one line = one block) reads the same construct, body included', async () => {
     const engine = await makeEditor();
-    const fragment = MarkdownPasteExtension.pasteInterpreters[0].interpret('before\n<!-- region:part {"title":"I"} -->\n# Part 1\nafter', engine);
-    expect(fragment.blocks.map((b) => b.type)).toEqual(['paragraph', 'region', 'paragraph']);
-    expect(fragment.blocks[1].props).toEqual({ regionType: 'part', fields: { title: 'I' } });
+    const fragment = MarkdownPasteExtension.pasteInterpreters[0].interpret('before\n<!-- region:part {"pov":"x"} -->\n# Part 1\nafter', engine);
+    expect(fragment.blocks.map((b) => b.type)).toEqual(['paragraph', 'region']);
+    expect(fragment.blocks[1]).toMatchObject({ props: { regionType: 'part', fields: { pov: 'x' } }, delta: [{ insert: 'Part 1' }], children: [{ type: 'paragraph', delta: [{ insert: 'after' }] }] });
   });
 
-  it('a marker inside a toggle body is hoisted after the toggle (root-only)', async () => {
+  it('a region inside a toggle body is hoisted after the toggle (root-only), its body with it', async () => {
     const engine = await makeEditor();
-    await engine.importMarkdown('<details open>\n<summary>T</summary>\n\nin body\n\n<!-- region:part {"title":"I"} -->\n# Part 1\n\nmore\n\n</details>\n\nafter');
-    expect(outline(engine)).toBe('toggle(T){in body,more} ; R:part(I) ; p(after)');
+    await engine.importMarkdown('<details open>\n<summary>T</summary>\n\nin body\n\n<!-- region:part {} -->\n# Part 1\n\nmore\n\n</details>\n\nafter');
+    expect(outline(engine)).toBe('toggle(T){p(in body)} ; R:part(Part 1){p(more)} ; p(after)');
   });
 });
 
-describe.skip('markdown round trip of documents with regions (TODO ADR-018 lot C)', () => {
+describe('markdown import: where a region ends', () => {
+  const read = async (md, types = BOOK) => { const e = await makeEditor(types); await e.importMarkdown(md); return e; };
+  const O = (type, level, title) => `<!-- region:${type} {} -->\n${'#'.repeat(level)} ${title}`;
+
+  it('the next opening of the same level closes it; a deeper one nests; a higher one closes every level below', async () => {
+    const e = await read(['pre', O('part', 1, 'A'), 'a', O('chapter', 2, 'B'), 'b', O('scene', 3, 'C'), 'c', O('chapter', 2, 'D'), 'd', O('part', 1, 'E'), 'e'].join('\n\n'));
+    expect(outline(e)).toBe('p(pre) ; R:part(A){p(a) R:chapter(B){p(b) R:scene(C){p(c)}} R:chapter(D){p(d)}} ; R:part(E){p(e)}');
+  });
+
+  it('a region ends at the end of the document / of the enclosing region (no closing comment)', async () => {
+    const e = await read([O('part', 1, 'A'), O('chapter', 2, 'B'), 'tail of B'].join('\n\n'));
+    expect(outline(e)).toBe('R:part(A){R:chapter(B){p(tail of B)}}');
+  });
+
+  it('a deeper region at the root nests in the region before it; the explicit closing comment prevents it', async () => {
+    expect(outline(await read([O('chapter', 2, 'A'), O('scene', 3, 'B')].join('\n\n')))).toBe('R:chapter(A){R:scene(B)}');
+    expect(outline(await read([O('chapter', 2, 'A'), '<!-- /region -->', O('scene', 3, 'B')].join('\n\n')))).toBe('R:chapter(A) ; R:scene(B)');
+  });
+
+  it('the explicit closing comment ends the region (and is consumed); text after it is back at the parent level', async () => {
+    const e = await read([O('part', 1, 'P'), O('chapter', 2, 'C'), 'c', '<!-- /region -->', 'in part', '<!-- /region -->', 'after'].join('\n\n'));
+    expect(outline(e)).toBe('R:part(P){R:chapter(C){p(c)} p(in part)} ; p(after)');
+  });
+
+  it('a closing comment closes the INNERMOST open region only', async () => {
+    const e = await read([O('part', 1, 'P'), O('chapter', 2, 'C'), O('scene', 3, 'S'), 's', '<!-- /region -->', 'in chapter', '<!-- /region -->', 'in part'].join('\n\n'));
+    expect(outline(e)).toBe('R:part(P){R:chapter(C){R:scene(S){p(s)} p(in chapter)} p(in part)}');
+  });
+
+  it('a stray closing comment (nothing to close) stays literal text', async () => {
+    const e = await read(['before', '<!-- /region -->', 'after'].join('\n\n'));
+    expect(outline(e)).toBe('p(before) ; p(<!-- /region -->) ; p(after)');
+    expect(e.regions.count).toBe(0);
+  });
+
+  it('comments inside a fenced code block are code, not constructs', async () => {
+    const fence = ['```', '<!-- /region -->', O('part', 1, 'NOT A REGION'), '```'].join('\n');
+    const e = await read([O('chapter', 2, 'A'), fence, 'still in A', O('chapter', 2, 'B')].join('\n\n'));
+    expect(outline(e)).toBe('R:chapter(A){code(<!-- /region -->\n<!-- region:part {} -->\n# NOT A REGION) p(still in A)} ; R:chapter(B)');
+    // an unclosed fence runs to the end: what is in it is code too
+    const open = await read([O('chapter', 2, 'A'), '```', O('part', 1, 'X')].join('\n\n'));
+    expect(open.regions.count).toBe(1);
+  });
+
+  it('an opening comment right after a paragraph line (no blank line) interrupts it', async () => {
+    const e = await read('text\n<!-- region:part {} -->\n# P\nbody');
+    expect(outline(e)).toBe('p(text) ; R:part(P){p(body)}');
+  });
+});
+
+describe('markdown round trip of documents with regions', () => {
   const roundTrip = async (blocks, types = BOOK) => {
     const a = await load(await makeEditor(types), blocks);
     const md = a.serialize('markdown');
@@ -225,42 +322,77 @@ describe.skip('markdown round trip of documents with regions (TODO ADR-018 lot C
     await b.importMarkdown(md);
     return { a, b, md };
   };
-
-  it('the tree (types + every field) and the markdown are fixed points', async () => {
-    const { a, b, md } = await roundTrip([
-      p('Preface'), R('part', { title: 'I' }), R('chapter', { title: 'La forêt', status: 'final', due: '2026-10-22', words: 3, done: false, pov: 'Anna' }),
-      p('Text'), R('scene', { title: 'Seuil', extra: { deep: [1, 2] } }), p('Scene text'), R('chapter', { title: '' }), R('chapter', { title: 'Fin' }),
-    ]);
-    expect(markers(b)).toEqual(markers(a));
-    expect(b.regions.list.map((r) => r.label)).toEqual(a.regions.list.map((r) => r.label));
-    expect(b.serialize('markdown')).toBe(md);
+  const model = (engine) => allBlocks(engine).filter((b) => b.type === 'region').map((b) => ({ regionType: b.regionType, title: b.title, titleMd: b.behavior.toMarkdown(), fields: b.exportFields, parent: b.parent?.title ?? null }));
+  const same = async (blocks, types) => {
+    const { a, b, md } = await roundTrip(blocks, types);
     expect(outline(b)).toBe(outline(a));
+    expect(model(b)).toEqual(model(a));
+    expect(b.serialize('markdown')).toBe(md);
+    return { a, b, md };
+  };
+
+  it('nested regions with every field type, text after sub-regions, preamble and postamble: tree, fields and markdown are fixed points', async () => {
+    const { md } = await same([
+      p('Preface'),
+      R('part', { title: 'I' }, [
+        p('x'),
+        R('chapter', { title: 'La forêt', status: 'final', due: '2026-10-22', words: 3, done: false, pov: 'Anna' }, [
+          p('c1'),
+          R('scene', { title: 'Seuil', extra: { deep: [1, 2] } }, [p('s1'), p('s2')]),
+          p('after the scene'),
+          R('scene', { title: 'Second' }, [p('s3')]),
+        ]),
+        p('after the chapter'),
+        R('chapter', { title: 'Fin' }, [p('end')]),
+      ]),
+      p('Postamble'),
+      R('part', { title: 'II' }, [R('chapter', { title: 'Alone' })]),
+    ]);
+    expect(md).toContain('<!-- /region -->');
   });
 
-  it('richtext fields survive the markdown form (marks, links, line break, escapes)', async () => {
-    const { a, b, md } = await roundTrip([R('chapter', { title: 'T', synopsis: FULL.synopsis })]);
-    expect(b.serialize('markdown')).toBe(md);
+  it('empty titles, a body that opens with a heading, empty regions and regions in a row', async () => {
+    const heading = { type: 'heading', partial: false, props: { level: 2 }, delta: [D('Sub')] };
+    await same([R('chapter', {}, [heading, p('x')]), R('chapter', {}), R('chapter', { title: '' }, [p('y')]), p('z'), R('part', {}), R('chapter', {})]);
+  });
+
+  it('titles with marks and awkward characters', async () => {
+    const withMarks = { ...R('chapter'), delta: [D('Le '), D('seuil', { italic: true }), D(' & '), D('lien', { link: 'https://example.com/' }), D(' # *x* <b> \\')] };
+    const { b } = await same([withMarks, p('x')]);
+    expect(b.children[0].title).toBe('Le seuil & lien # *x* <b> \\');
+  });
+
+  it('richtext fields survive (marks, links, line break, escapes)', async () => {
+    const { a, b } = await same([R('chapter', { title: 'T', synopsis: FULL.synopsis })]);
     expect(markers(b)[0].fields.synopsis).toEqual(markers(a)[0].fields.synopsis);
   });
 
-  it('a document that STARTS or ENDS with a marker', async () => {
-    const { b, md } = await roundTrip([R('part', { title: 'A' }), p('x'), R('part', { title: 'B' })]);
-    expect(b.serialize('markdown')).toBe(md);
-    expect(b.regions.count).toBe(2);
-  });
-
-  it('nested levels give heading levels 1, 2, 3 (labels from the registry)', async () => {
-    const { md } = await roundTrip([R('part', { title: 'A' }), R('chapter', { title: 'B' }), R('scene', { title: 'C' })]);
-    expect(md.split('\n\n').map((s) => s.split('\n')[1])).toEqual(['# Part 1', '## Chapitre 1 — B', '### 1.1.1 C']);
+  it('a document that STARTS or ENDS with a region; regions at the root among text', async () => {
+    const { b } = await same([R('part', { title: 'A' }), p('x'), R('part', { title: 'B' }, [p('in B')]), p('y'), R('chapter', { title: 'C' })]);
+    expect(b.regions.count).toBe(3);
   });
 
   it('the default sections: levels 1..3, labels "1.", "1.1"', async () => {
-    const a = await load(await makeEditor(null), [R('section-1', { title: 'One' }), R('section-2', { title: 'Two' }), R('section-3', { title: 'Three' })]);
+    const a = await load(await makeEditor(null), [R('section-1', { title: 'One' }, [R('section-2', { title: 'Two' }, [R('section-3', { title: 'Three' })])])]);
     expect(a.serialize('markdown')).toBe([
-      '<!-- region:section-1 {"title":"One"} -->\n# 1. One',
-      '<!-- region:section-2 {"title":"Two"} -->\n## 1.1 Two',
-      '<!-- region:section-3 {"title":"Three"} -->\n### 1.1.1 Three',
+      '<!-- region:section-1 {} -->\n# One',
+      '<!-- region:section-2 {} -->\n## Two',
+      '<!-- region:section-3 {} -->\n### Three',
     ].join('\n\n'));
+    const b = await makeEditor(null);
+    await b.importMarkdown(a.serialize('markdown'));
+    expect(outline(b)).toBe('R:section-1(One){R:section-2(Two){R:section-3(Three)}}');
+    expect(b.regions.list.map((r) => r.label)).toEqual(['1. One', '1.1 Two', '1.1.1 Three']);
+  });
+
+  it('a region among other containers (toggle, list, callout) keeps the whole document', async () => {
+    await same([
+      R('part', { title: 'A' }, [
+        { type: 'toggle', partial: false, props: { collapsed: false }, delta: [D('T')], children: [p('in toggle')] },
+        { type: 'list', partial: false, props: { listType: 'bullet' }, children: [{ type: 'list-item', partial: false, delta: [D('one')] }, { type: 'list-item', partial: false, delta: [D('two')] }] },
+      ]),
+      p('after'),
+    ]);
   });
 });
 
@@ -279,38 +411,64 @@ describe('HTML form of a region', () => {
     expect(html).not.toMatch(/<b>|<script/);
   });
 
-  // TODO(ADR-018 lot C): HTML IMPORT of a region (the `<section data-nabu-region>` form). The rule is disabled.
-  it.skip('paste: ONLY an element carrying data-nabu-region becomes a marker; type validated, fields parsed and sanitized', async () => {
+});
+
+describe('HTML import of a region', () => {
+  const NESTED = '<p>before</p><section data-nabu-region="chapter" data-nabu-fields=\'{"status":"draft","pov":"Anna"}\'><h2>Le <em>seuil</em></h2><p>a</p>'
+    + '<section data-nabu-region="scene" data-nabu-fields=\'{}\'><h3>Inner</h3><p>b</p></section><p>c</p></section><p>after</p>';
+
+  it('a <section data-nabu-region> is a region: the first heading is the title (inline), the other children the body, nested', async () => {
     const engine = await makeEditor();
-    const pb = engine.children.length ? null : null; void pb;
-    const src = await load(await makeEditor(), [R('chapter', FULL)]);
-    const html = regionToHtml(config(src), src.children[0].serialize('application/x-nabu+json').props, src.children[0].serialize('application/x-nabu+json').echo);
-    const fragment = htmlInterpret(engine, `<p>before</p>${html}<p>after</p>`);
+    const fragment = htmlInterpret(engine, NESTED);
     expect(fragment.blocks.map((b) => b.type)).toEqual(['paragraph', 'region', 'paragraph']);
+    expect(fragment.blocks[1]).toMatchObject({ props: { regionType: 'chapter', fields: { status: 'draft', pov: 'Anna' } }, delta: [{ insert: 'Le ' }, { insert: 'seuil', attributes: { italic: true } }] });
+    expect(fragment.blocks[1].children.map((c) => c.type)).toEqual(['paragraph', 'region', 'paragraph']);
     await load(engine, fragment.blocks);
-    const [m] = markers(engine);
-    expect(m.regionType).toBe('chapter');
-    expect(m.fields).toEqual(markers(src)[0].fields);
+    expect(outline(engine)).toBe('p(before) ; R:chapter(Le seuil){p(a) R:scene(Inner){p(b)} p(c)} ; p(after)');
   });
 
-  it.skip('a plain <h2> from the web stays a heading; an empty or hostile attribute does not make a marker out of nothing', async () => {
+  it('round trip: Nabu\'s own HTML (every field, richtext, nested, empty title) comes back identical', async () => {
+    const src = await load(await makeEditor(), [R('part', { title: 'I' }, [p('one'), R('chapter', FULL, [p('two'), R('scene', { title: '', pov: 'Bo' }, [p('in')]), p('three')])]), p('tail')]);
+    const wholeHtml = (i) => wholeRegion(src, i).html;
+    const html = wholeHtml(0);
     const engine = await makeEditor();
+    await load(engine, htmlInterpret(engine, html).blocks);
+    const model = (e) => allBlocks(e).filter((b) => b.type === 'region').map((b) => ({ regionType: b.regionType, title: b.title, titleMd: b.behavior.toMarkdown(), fields: b.exportFields }));
+    expect(outline(engine)).toBe('R:part(I){p(one) R:chapter(La forêt){p(two) R:scene(){p(in)} p(three)}}');
+    expect(model(engine)).toEqual(model(await load(await makeEditor(), [src.children[0].serializeForClipboard()])));
+    expect(engine.serialize('markdown')).toBe(wholeRegion(src, 0).text);
+  });
+
+  it('a plain <section> and a plain <h2> keep their current meaning', async () => {
+    const engine = await makeEditor();
+    expect(htmlInterpret(engine, '<section><h2>T</h2><p>x</p></section>').blocks.map((b) => b.type)).toEqual(['heading', 'paragraph']);
     expect(htmlInterpret(engine, '<h2>Chapitre 2</h2><h1 data-other="x">T</h1>').blocks.map((b) => b.type)).toEqual(['heading', 'heading']);
-    expect(htmlInterpret(engine, '<h2 data-nabu-region="">T</h2>').blocks.map((b) => b.type)).toEqual(['heading']);
+    expect(htmlInterpret(engine, '<section data-nabu-region=""><h2>T</h2><p>x</p></section>').blocks.map((b) => b.type)).toEqual(['heading', 'paragraph']);
+    expect(htmlInterpret(engine, '<section data-nabu-region="' + 'x'.repeat(300) + '"><p>x</p></section>').blocks.map((b) => b.type)).toEqual(['paragraph']);
+    // the attribute on anything but a <section> is nothing (the old heading marker is gone)
+    expect(htmlInterpret(engine, '<h2 data-nabu-region="chapter">T</h2>').blocks.map((b) => b.type)).toEqual(['heading']);
   });
 
-  it.skip('invalid / hostile data: bad JSON = a marker without fields; unknown type = default type; unsafe link in richtext dropped; no HTML ever passes through', async () => {
+  it('a section whose first child is not a heading has an empty title; only the FIRST child can be the title', async () => {
     const engine = await makeEditor();
-    const one = (attrs) => htmlInterpret(engine, `<h2 ${attrs}>x</h2>`).blocks;
+    const [region] = htmlInterpret(engine, '<section data-nabu-region="part"><p>intro</p><h2>Later</h2></section>').blocks;
+    expect(region.delta ?? []).toEqual([]);
+    expect(region.children.map((c) => c.type)).toEqual(['paragraph', 'heading']);
+  });
+
+  it('invalid / hostile data: bad JSON = a region without fields; unknown type = default type; unsafe link dropped; no HTML ever passes through', async () => {
+    const engine = await makeEditor();
+    const one = (attrs, inner = '<h2>x</h2>') => htmlInterpret(engine, `<section ${attrs}>${inner}</section>`).blocks;
     expect(one(`data-nabu-region="chapter" data-nabu-fields="{nope"`)[0].props).toEqual({ regionType: 'chapter', fields: {} });
     expect(one(`data-nabu-region="chapter" data-nabu-fields="[1]"`)[0].props.fields).toEqual({});
-    expect(one(`data-nabu-region="saga" data-nabu-fields='{"title":"T","__proto__":{"x":1}}'`)[0].props).toEqual({ regionType: 'part', fields: { title: 'T' } });
-    const evil = one(`data-nabu-region="chapter" data-nabu-fields='{"synopsis":"[click](javascript:alert(1)) <img src=x onerror=alert(1)>","title":"<script>x</script>"}'`)[0];
+    expect(one(`data-nabu-region="saga" data-nabu-fields='{"mood":"dark","__proto__":{"x":1}}'`)[0].props).toEqual({ regionType: 'part', fields: { mood: 'dark' } });
+    const evil = one(`data-nabu-region="chapter" data-nabu-fields='{"synopsis":"[click](javascript:alert(1)) <img src=x onerror=alert(1)>"}' onclick="alert(1)"`, '<h2><script>alert(1)</script>T</h2><p onclick="x()">b</p>')[0];
     expect(JSON.stringify(evil.props.fields.synopsis)).not.toContain('javascript');
     await load(engine, [evil]);
-    expect(engine.children[0].fields.title).toBe('<script>x</script>'); // text, never markup
+    expect(engine.children[0].title).not.toContain('<');
     expect(engine.children[0].richtext('synopsis').toString()).toContain('click');
     expect(JSON.stringify(engine.children[0].exportFields.synopsis)).not.toContain('javascript');
+    expect(JSON.stringify(engine.serialize('json'))).not.toMatch(/onclick|<script/);
   });
 });
 
@@ -367,7 +525,7 @@ function wholeRegion(engine, index) {
   const pb = engine.children[index].serializeForClipboard();
   const md = (b, ctx = {}) => {
     const Class = engine.registry.get(b.type);
-    return Class?.toMarkdown ? Class.toMarkdown(b, { ...ctx, recurse: (c, o) => md(c, o), recurseAll: (cs) => cs.map((c) => md(c)) }) : (b.delta ?? []).map((op) => op.insert).join('');
+    return Class?.toMarkdown ? Class.toMarkdown(b, { ...ctx, recurse: (c, o) => md(c, o), recurseAll: (cs, o) => cs.map((c, k) => md(c, { ...o, before: cs.slice(0, k), after: cs.slice(k + 1) })) }) : (b.delta ?? []).map((op) => op.insert).join('');
   };
   const html = (b) => {
     const Class = engine.registry.get(b.type);
@@ -440,7 +598,15 @@ describe('clipboard: a whole region (structure) round trip', () => {
       'two',
       '<!-- region:chapter {} -->\n## Le lac',
       'three',
-    ].join('\n\n'));
+    ].join('\n\n')); // the whole region is last: nothing follows, no closing comment
+  });
+
+  it('text/plain: the closing comments appear when text follows the region, then it reads back identically', async () => {
+    const engine = await load(await makeEditor(), SOURCE());
+    const { pb } = wholeRegion(engine, 1);
+    const Region = engine.registry.get('region');
+    const text = Region.toMarkdown(pb, { after: [p('tail')], recurse: (c) => (c.type === 'region' ? '' : c.delta[0].insert), recurseAll: (cs, o) => cs.map((c, k) => (c.type === 'region' ? Region.toMarkdown(c, { ...o, recurse: (x) => x.delta[0].insert, recurseAll: (xs) => xs.map((x) => x.delta[0].insert), after: cs.slice(k + 1) }) : c.delta[0].insert)) });
+    expect(text.endsWith('three\n\n<!-- /region -->\n\n<!-- /region -->')).toBe(true); // the last chapter and the part
   });
 
   it('text/html: <section> elements nested like the regions', async () => {
@@ -474,9 +640,24 @@ describe('clipboard: a whole region (structure) round trip', () => {
     expect(poor.children.filter((b) => b.type === 'region').map((b) => b.regionType)).toEqual(['part']);
   });
 
-  // TODO(ADR-018 lot C): "only the markdown text/plain" and "only the text/html" restore the regions (the import rules are disabled).
-  it.skip('only the markdown text/plain (another application’s clipboard) restores the regions too', () => {});
-  it.skip('only the text/html (Nabu’s own HTML, no internal fragment) restores the regions too', () => {});
+  const EXPECTED = 'p(intro) ; R:part(I){p(one) R:chapter(La forêt){p(two)} R:chapter(Le lac){p(three)}} ; p(tail';
+
+  it('only the markdown text/plain (another application’s clipboard) restores the regions too', async () => {
+    const engine = await load(await makeEditor(), SOURCE());
+    const { text } = wholeRegion(engine, 1);
+    await pasteAt(engine, { 'text/plain': text }, 'tail', 4);
+    expect(outline(engine)).toBe(`${EXPECTED}) ; R:part(I){p(one) R:chapter(La forêt){p(two)} R:chapter(Le lac){p(three)}}`);
+    expect(engine.regions.list.map((r) => r.label)).toEqual(['Part 1', 'Chapitre 1 — La forêt', 'Chapitre 2 — Le lac', 'Part 2', 'Chapitre 3 — La forêt', 'Chapitre 4 — Le lac']);
+  });
+
+  it('only the text/html (Nabu’s own HTML, no internal fragment) restores the regions too', async () => {
+    const engine = await load(await makeEditor(), SOURCE());
+    const { html } = wholeRegion(engine, 1);
+    await pasteAt(engine, { 'text/html': html }, 'tail', 4);
+    expect(outline(engine)).toBe(`${EXPECTED}) ; R:part(I){p(one) R:chapter(La forêt){p(two)} R:chapter(Le lac){p(three)}}`);
+    const [first, second] = engine.regions.tree;
+    expect(first.children.map((r) => r.block.exportFields)).toEqual(second.children.map((r) => r.block.exportFields));
+  });
 });
 
 describe('clipboard: regions pasted into containers follow the placement rule', () => {

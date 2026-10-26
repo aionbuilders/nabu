@@ -26,22 +26,23 @@ Status: implemented (P-52). Complements `copy-paste.md` (§3.3 sketches the form
   (the ref is `nabu-asset:sha256-<hex>`); the beta used a `<uuid>` and such keys / refs are still read. Older readers ignore the unknown field. Absent when the
   fragment has no such media, or when their total size exceeds `files.maxInlineSize` (then `nabu.warn`, and the blocks keep only the ref).
 
-## Region markers (ADR 016)
+## Regions (ADR 016, containers since ADR 018)
 
-A marker travels as an ordinary block: `{ "type": "region", "partial": false, "props": { "regionType": "chapter", "fields": { "title": "La forêt", "synopsis": [{ "insert": "un " }, { "insert": "résumé", "attributes": { "bold": true } }], "status": "draft" } }, "echo": { "label": "Chapitre 2 — La forêt", "level": 2 } }`.
-`fields` is exactly the stored map (richtext as Loro deltas). `echo` is NOT data and is ignored on paste: it is the label and heading level the
-registry computes at copy time, carried so that the static `text/plain` and `text/html` writers (which get blocks, not the document) can write the
-readable heading of the marker. The other two payloads of a copy:
+A region travels as a block with children, like a toggle: `{ "type": "region", "partial": false, "props": { "regionType": "chapter", "fields": { "synopsis": [{ "insert": "un " }, { "insert": "résumé", "attributes": { "bold": true } }], "status": "draft" } }, "delta": [{ "insert": "La forêt" }], "children": [ …body blocks and sub-regions… ] }`.
+`delta` is the TITLE (inline marks); `fields` is exactly the stored map (richtext as Loro deltas) and never holds the title. A TEXT selection copies
+text blocks only (never a region or a title: ADR 018 §3.9); the structure of whole regions travels by a structure gesture. The other two payloads of
+such a copy, same forms as the document export (`import-export.md`, "The region exception"):
 
-- `text/plain` (several blocks, so markdown): the data comment + heading of `import-export.md` ("The region marker exception"). A marker alone is
-  not a text block, so it is not the raw-text case: copying just a marker gives its two lines.
-- `text/html`: `<hN data-nabu-region="…" data-nabu-fields='…'>label</hN>`.
+- `text/plain` (several blocks, so markdown): the data comment, the title as a heading, the body, and the closing comment `<!-- /region -->` only when
+  what follows the region in the copied blocks would be swallowed by it. The engine hands each serializer the sibling blocks after it (`after`, as it
+  hands `before`), so the static `toMarkdown` can tell; a region copied last in the clipboard never closes.
+- `text/html`: `<section data-nabu-region="…" data-nabu-fields='…'><hN>title</hN>…body…</section>`, nested like the regions.
 
-Pasting reads, in this order, the internal fragment, the HTML, then the plain text; each of the three restores the marker (the last two through
-the exact constructs above). A marker pasted into a container (list item, toggle body, callout) follows the root-only rule: it is hoisted right
-AFTER the top-level container (a list is cut around it), in the same undo step as the paste. An unknown `regionType` in a fragment is kept
-as is (the registry treats it as an unnumbered leaf); the receiving editor without the Regions extension degrades the marker to an empty paragraph
-(`degradeUnknownBlocks`).
+Pasting reads, in this order, the internal fragment, the HTML, then the plain text; each of the three restores the regions (the last two through the
+exact constructs above: title, body, nesting, end inferred from the levels). A region pasted into a container (list item, toggle body, callout)
+follows the root-only rule: it is hoisted right AFTER the top-level container (a list is cut around it), in the same undo step as the paste. An
+unknown `regionType` in a fragment is kept as is (the registry treats it as an unnumbered leaf; the markdown and HTML paste falls back to the default
+type); the receiving editor without the Regions extension degrades the region to an empty paragraph (`degradeUnknownBlocks`).
 
 ## Media stored in the document (P-51)
 
