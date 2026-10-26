@@ -9,6 +9,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
 import { createPersistedEditor } from '$lib/persistence/persistence.js';
 import { openDB, loadRecords, listQuarantined, saveSnapshot, isSnapshotBytes } from '$lib/persistence/indexeddb.js';
+import { recordStatuses } from './helpers/persistence-status.svelte.js';
+import { writeTail, MAX_TAIL_BYTES } from '$lib/persistence/tail.js';
 
 const EXTENSIONS = [ParagraphExtension];
 const tick = async (n = 12) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
@@ -276,7 +278,6 @@ describe('save status and errors (P-95)', () => {
   });
 
   it('the status is a reactive $state (an effect sees pending -> saving -> saved)', async () => {
-    const { recordStatuses } = await import('./helpers/persistence-status.svelte.js');
     const engine = await open('d');
     const seen = recordStatuses(engine.persistence);
     await edit(engine, 'x');
@@ -491,7 +492,6 @@ describe('the tail in localStorage (P-91: a page that goes away before IndexedDB
   });
 
   it('too big, or no localStorage: no tail, no error', async () => {
-    const { writeTail, MAX_TAIL_BYTES } = await import('$lib/persistence/tail.js');
     expect(writeTail('big', new Uint8Array(MAX_TAIL_BYTES + 1))).toBe(false);
     expect(writeTail('empty', new Uint8Array(0))).toBe(false);
     vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError'); });

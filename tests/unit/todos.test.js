@@ -4,13 +4,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { Nabu } from '$lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List, ListItem, Todos } from '$lib/blocks/list/index.js';
+import { RichTextExtension } from '$lib/behaviors/text/index.js';
 
 describe('Todos aggregation system', () => {
     it('aggregates 3 todo items, counts done/remaining, and reports progress', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ListExtension, ListItemExtension, List, ListItem, Todos } = await import('$lib/blocks/list/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, RichTextExtension] });
         const list = List.create(engine, 'list', { listType: 'todo' });
@@ -30,10 +30,6 @@ describe('Todos aggregation system', () => {
     });
 
     it('uncheckAll sets all todos to unchecked', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ListExtension, ListItemExtension, List, ListItem, Todos } = await import('$lib/blocks/list/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, RichTextExtension] });
         const list = List.create(engine, 'list', { listType: 'todo' });
@@ -52,10 +48,6 @@ describe('Todos aggregation system', () => {
     });
 
     it('checkAll sets all todos to checked', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ListExtension, ListItemExtension, List, ListItem, Todos } = await import('$lib/blocks/list/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, RichTextExtension] });
         const list = List.create(engine, 'list', { listType: 'todo' });
@@ -74,10 +66,6 @@ describe('Todos aggregation system', () => {
     });
 
     it('Todos.get returns the same singleton instance', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ListExtension, ListItemExtension, Todos } = await import('$lib/blocks/list/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, RichTextExtension] });
 
@@ -88,10 +76,6 @@ describe('Todos aggregation system', () => {
     });
 
     it('progress is 0 when there are no todos', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ListExtension, ListItemExtension, Todos } = await import('$lib/blocks/list/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, RichTextExtension] });
         await engine.commit();

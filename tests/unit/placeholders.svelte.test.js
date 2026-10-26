@@ -16,6 +16,7 @@ import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
 import { normalizePlaceholders, resolvePlaceholderText, getPlaceholder } from '$lib/utils/placeholders.js';
 import { Paragraph } from '$lib/blocks/paragraph/paragraph.svelte.js';
 import { Heading } from '$lib/blocks/heading/heading.svelte.js';
+import { createEditor, createMinimalEditor } from '$lib/presets.js';
 
 const extensions = [ParagraphExtension, HeadingExtension, BlockquoteExtension];
 
@@ -200,7 +201,6 @@ describe('block.placeholder — options', () => {
 
 describe('factories forward the placeholders option', () => {
   it('createEditor / createMinimalEditor pass it to Nabu', async () => {
-    const { createEditor, createMinimalEditor } = await import('$lib/presets.js');
     expect(createEditor({ preset: [ParagraphExtension], placeholders: false }).placeholders.enabled).toBe(false);
     expect(createMinimalEditor({ placeholders: { show: 'empty' } }).placeholders.show).toBe('empty');
     expect(createMinimalEditor().placeholders).toEqual({ enabled: true, show: 'focus', text: {} });

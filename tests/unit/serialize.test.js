@@ -6,6 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { deltaToMarkdown, deltaToHtml } from '$lib/behaviors/text/text.behavior.svelte.js';
+import { ListItem } from '$lib/blocks/list/list-item.svelte.js';
+import { List } from '$lib/blocks/list/list.svelte.js';
 
 // Re-use static methods and serializer logic directly (no rune constructors needed)
 
@@ -51,7 +53,6 @@ describe('Dialogue markdown serialization', () => {
 describe('ListItem.toMarkdown (static)', () => {
   // Static method — safe to import without constructor
   it('produces correct bullet markdown', async () => {
-    const { ListItem } = await import('$lib/blocks/list/list-item.svelte.js');
     const pb = { type: 'list-item', delta: [{ insert: 'item one' }] };
     const helpers = {
       recurse: () => '',
@@ -63,13 +64,11 @@ describe('ListItem.toMarkdown (static)', () => {
   });
 
   it('produces correct ordered markdown', async () => {
-    const { ListItem } = await import('$lib/blocks/list/list-item.svelte.js');
     const pb = { type: 'list-item', delta: [{ insert: 'second' }] };
     expect(ListItem.toMarkdown(pb, { recurse: () => '', listType: 'ordered', index: 1, depth: 0 })).toBe('2. second');
   });
 
   it('indents nested items', async () => {
-    const { ListItem } = await import('$lib/blocks/list/list-item.svelte.js');
     const pb = { type: 'list-item', delta: [{ insert: 'nested' }] };
     expect(ListItem.toMarkdown(pb, { recurse: () => '', listType: 'bullet', index: 0, indent: '    ' })).toBe('    - nested');
   });
@@ -79,7 +78,6 @@ describe('ListItem.toMarkdown (static)', () => {
 
 describe('ListItem.toHtml (static)', () => {
   it('wraps in <li>', async () => {
-    const { ListItem } = await import('$lib/blocks/list/list-item.svelte.js');
     const pb = { type: 'list-item', delta: [{ insert: 'item' }] };
     expect(ListItem.toHtml(pb, { recurse: () => '' })).toBe('<li>item</li>');
   });
@@ -89,7 +87,6 @@ describe('ListItem.toHtml (static)', () => {
 
 describe('List.toMarkdown (static)', () => {
   it('joins children markdown', async () => {
-    const { List } = await import('$lib/blocks/list/list.svelte.js');
     const pb = {
       type: 'list',
       props: { listType: 'bullet' },
@@ -108,7 +105,6 @@ describe('List.toMarkdown (static)', () => {
 
 describe('List.toHtml (static)', () => {
   it('wraps bullet list in <ul>', async () => {
-    const { List } = await import('$lib/blocks/list/list.svelte.js');
     const pb = {
       type: 'list',
       props: { listType: 'bullet' },
@@ -119,7 +115,6 @@ describe('List.toHtml (static)', () => {
   });
 
   it('wraps ordered list in <ol>', async () => {
-    const { List } = await import('$lib/blocks/list/list.svelte.js');
     const pb = {
       type: 'list',
       props: { listType: 'ordered' },

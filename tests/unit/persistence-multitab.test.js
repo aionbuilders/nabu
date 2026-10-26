@@ -11,7 +11,7 @@ import { LoroDoc } from 'loro-crdt';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
 import { createPersistedEditor } from '$lib/persistence/persistence.js';
-import { loadRecords, listQuarantined } from '$lib/persistence/indexeddb.js';
+import { loadRecords, listQuarantined, openDB } from '$lib/persistence/indexeddb.js';
 import { mergeStored } from '$lib/persistence/merge.js';
 import { startSync, channelName } from '$lib/persistence/sync.js';
 import { readRev, revToken } from '$lib/persistence/tail.js';
@@ -181,7 +181,6 @@ describe('merge before save (sync: false)', () => {
     other.getText('t').insert(0, 'zzz'); other.commit();
     other.getText('t').insert(3, 'y'); other.commit();
     const shallow = other.export({ mode: 'shallow-snapshot', frontiers: other.frontiers() });
-    const { openDB } = await import('$lib/persistence/indexeddb.js');
     const db = await openDB();
     await new Promise((resolve, reject) => { const tx = db.transaction('snapshots', 'readwrite'); tx.objectStore('snapshots').put({ docId: 'd', snapshot: shallow, savedAt: 5 }); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
     db.close();

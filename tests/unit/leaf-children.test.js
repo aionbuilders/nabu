@@ -11,6 +11,7 @@ import { Nabu } from '$lib/blocks/nabu.svelte.js';
 import { Block } from '$lib/blocks/block.svelte.js';
 import { MegaBlock } from '$lib/blocks/megablock.svelte.js';
 import { extension } from '$lib/utils/extensions.js';
+import { BlockExtension } from '$lib/blocks/block.extension.js';
 
 class Crate extends MegaBlock {}
 class Pebble extends Block {}
@@ -117,7 +118,6 @@ describe('children of a block that cannot hold any', () => {
   });
 
   it('a block:transform to a leaf type keeps every child (programmatic data.set + transformBlock path)', async () => {
-    const { BlockExtension } = await import('$lib/blocks/block.extension.js');
     const engine = new Nabu({
       extensions: [extension('crate', { block: Crate }), extension('pebble', { block: Pebble }), BlockExtension],
     });

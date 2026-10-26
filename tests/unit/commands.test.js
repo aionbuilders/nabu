@@ -10,6 +10,7 @@ import { Extension } from '$lib/utils/extensions.js';
 import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
 import { ListExtension, ListItemExtension, List, ListItem } from '$lib/blocks/list/index.js';
 import { RichTextExtension } from '$lib/behaviors/text/index.js';
+import { createEditor } from '$lib/presets.js';
 
 let warn;
 afterEach(() => { warn?.mockRestore(); warn = undefined; });
@@ -408,7 +409,6 @@ describe('keymap option', () => {
   });
 
   it('is forwarded by the factories', async () => {
-    const { createEditor } = await import('$lib/presets.js');
     const engine = createEditor({ preset: [ParagraphExtension, RichTextExtension], keymap: { 'mark:bold': ['Mod-Alt-b'] } });
     expect(engine.commands.get('mark:bold').keys).toEqual(['Mod-Alt-b']);
   });

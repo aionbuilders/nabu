@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { makeEditor, interpret, outline, fmtDelta } from './html-paste.helpers.js';
 import { unwrapGoogleRedirect, resolveLinkHref, parseStyle } from '$lib/paste/html.paste.js';
+import { NabuPasteExtension } from '$lib/paste/nabu.paste.js';
 
 let engine;
 beforeAll(async () => { engine = await makeEditor(); });
@@ -324,7 +325,6 @@ describe('rule 7 — Word junk produces nothing', () => {
 
 describe('internal Nabu path is untouched by the empty-block rule', () => {
   it('the HTML interpreter is the only place empties are dropped (the nabu+json interpreter keeps an empty paragraph)', async () => {
-    const { NabuPasteExtension } = await import('$lib/paste/nabu.paste.js');
     const nabu = await makeEditor();
     const fragment = NabuPasteExtension.pasteInterpreters[0].interpret(JSON.stringify({ version: 1, blocks: [{ type: 'paragraph', partial: false, delta: [] }] }), nabu);
     expect(fragment?.blocks).toHaveLength(1);

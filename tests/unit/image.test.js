@@ -4,30 +4,31 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { ImageBlock } from '$lib/blocks/image/image.svelte.js';
+import { Nabu } from '$lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
+import { ImageExtension } from '$lib/blocks/image/index.js';
+import { Files } from '$lib/files/files.svelte.js';
 
 describe('ImageBlock statics', () => {
     it('toMarkdown renders ![alt](ref) format', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const pb = { type: 'image', props: { alt: 'a', ref: 'u' } };
         expect(ImageBlock.toMarkdown(pb)).toBe('![a](u)');
     });
 
     it('toMarkdown handles empty alt and ref', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const pb = { type: 'image', props: {} };
         expect(ImageBlock.toMarkdown(pb)).toBe(''); // no source: alt text only (here none)
         expect(ImageBlock.toMarkdown({ type: 'image', props: { alt: 'cat' } })).toBe('cat');
     });
 
     it('toHtml renders <img src alt> tag', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const pb = { type: 'image', props: { alt: 'a', ref: 'u' } };
         const html = ImageBlock.toHtml(pb);
         expect(html).toContain('<img src="u" alt="a">');
     });
 
     it('toHtml handles empty props gracefully', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const pb = { type: 'image', props: {} };
         const html = ImageBlock.toHtml(pb);
         expect(html).toBe(''); // no source: no live <img>
@@ -35,7 +36,6 @@ describe('ImageBlock statics', () => {
     });
 
     it('fromMarkdown parses alt and ref from image syntax', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const result = ImageBlock.fromMarkdown(['![cat](http://x/y.png)']);
         expect(result).toEqual({
             type: 'image',
@@ -45,7 +45,6 @@ describe('ImageBlock statics', () => {
     });
 
     it('fromMarkdown handles empty alt text', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const result = ImageBlock.fromMarkdown(['![](https://example.com/img.jpg)']);
         expect(result).toEqual({
             type: 'image',
@@ -55,13 +54,11 @@ describe('ImageBlock statics', () => {
     });
 
     it('fromMarkdown returns null when input does not match image syntax', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         expect(ImageBlock.fromMarkdown(['plain text'])).toBeNull();
         expect(ImageBlock.fromMarkdown(['[link](url)'])).toBeNull();
     });
 
     it('fromHTML converts <img> element to image PasteBlock', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const el = document.createElement('img');
         el.setAttribute('src', 'http://example.com/photo.png');
         el.setAttribute('alt', 'a photo');
@@ -74,7 +71,6 @@ describe('ImageBlock statics', () => {
     });
 
     it('fromHTML: an <img> without src (lazy placeholder) is no image block; a missing alt is empty', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         expect(ImageBlock.fromHTML(document.createElement('img'))).toBeNull();
         const el = document.createElement('img');
         el.setAttribute('src', ' https://example.com/a.png ');
@@ -82,14 +78,12 @@ describe('ImageBlock statics', () => {
     });
 
     it('markdownRules[0].detect matches image markdown', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const rule = ImageBlock.markdownRules[0];
         expect(rule.detect.test('![a](u)')).toBe(true);
         expect(rule.detect.test('![](http://example.com/img.png)')).toBe(true);
     });
 
     it('markdownRules[0].detect does NOT match plain text', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         const rule = ImageBlock.markdownRules[0];
         // Reset lastIndex (regex is not global, so no issues — but be safe)
         expect(rule.detect.test('text')).toBe(false);
@@ -97,26 +91,20 @@ describe('ImageBlock statics', () => {
     });
 
     it('markdownRules[0].priority is 25', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         expect(ImageBlock.markdownRules[0].priority).toBe(25);
     });
 
     it('markdownRules[0].consume always returns 1', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         expect(ImageBlock.markdownRules[0].consume()).toBe(1);
     });
 
     it('htmlRules has selector "img"', async () => {
-        const { ImageBlock } = await import('$lib/blocks/image/image.svelte.js');
         expect(ImageBlock.htmlRules[0].selector).toBe('img');
     });
 });
 
 describe('ImageBlock integration', () => {
     it('image:insert action creates an image block with correct data', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ImageExtension } = await import('$lib/blocks/image/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ImageExtension] });
         await engine.exec('image:insert', { ref: 'http://x/y.png', alt: 'cat' });
@@ -134,9 +122,6 @@ describe('ImageBlock integration', () => {
     });
 
     it('ImageBlock.create sets all metadata fields', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ImageExtension, ImageBlock } = await import('$lib/blocks/image/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ImageExtension] });
         const block = ImageBlock.create(engine, 'image', { ref: 'https://cdn/img.jpg', alt: 'desc', status: 'ready' });
@@ -151,9 +136,6 @@ describe('ImageBlock integration', () => {
     });
 
     it('ImageBlock serializes to markdown correctly', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ImageExtension, ImageBlock } = await import('$lib/blocks/image/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ImageExtension] });
         const block = ImageBlock.create(engine, 'image', { ref: 'https://cdn/img.jpg', alt: 'my photo' });
@@ -165,9 +147,6 @@ describe('ImageBlock integration', () => {
 
 describe('Files system', () => {
     it('Files.get returns the same instance for the same nabu', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { Files } = await import('$lib/files/files.svelte.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension] });
         const f1 = Files.get(engine);
@@ -176,9 +155,6 @@ describe('Files system', () => {
     });
 
     it('Files.resolve returns identity for external URLs', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { Files } = await import('$lib/files/files.svelte.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension] });
         const files = Files.get(engine);
@@ -186,9 +162,6 @@ describe('Files system', () => {
     });
 
     it('Files.resolve returns empty string for empty ref', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { Files } = await import('$lib/files/files.svelte.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension] });
         const files = Files.get(engine);
@@ -196,9 +169,6 @@ describe('Files system', () => {
     });
 
     it('Files.resolve uses custom config.resolve for non-nabu refs', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { Files } = await import('$lib/files/files.svelte.js');
 
         const engine = new Nabu({
             extensions: [ParagraphExtension],
@@ -209,9 +179,6 @@ describe('Files system', () => {
     });
 
     it('Files.persist stores the bytes in the asset store (not in Loro) and returns a nabu-asset:sha256 ref (if URL.createObjectURL available)', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { Files } = await import('$lib/files/files.svelte.js');
 
         // If File.arrayBuffer or URL.createObjectURL are unavailable, skip
         if (typeof URL.createObjectURL !== 'function') {

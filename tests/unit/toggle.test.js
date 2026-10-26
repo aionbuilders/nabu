@@ -4,12 +4,16 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { ToggleBlock } from '$lib/blocks/toggle/toggle.svelte.js';
+import { Nabu } from '$lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
+import { ToggleExtension } from '$lib/blocks/toggle/index.js';
+import { RichTextExtension } from '$lib/behaviors/text/index.js';
 
 // ── ToggleBlock.toHtml ──────────────────────────────────────────────────────
 
 describe('ToggleBlock.toHtml', () => {
     it('renders <details open> with <summary> when collapsed=false', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const pb = { type: 'toggle', props: { collapsed: false }, delta: [{ insert: 'Header' }], children: [] };
         const result = ToggleBlock.toHtml(pb, { recurse: () => '' });
         expect(result).toContain('<details open>');
@@ -18,7 +22,6 @@ describe('ToggleBlock.toHtml', () => {
     });
 
     it('renders <details> WITHOUT " open" when collapsed=true', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const pb = { type: 'toggle', props: { collapsed: true }, delta: [{ insert: 'Header' }], children: [] };
         const result = ToggleBlock.toHtml(pb, { recurse: () => '' });
         expect(result).toContain('<details>');
@@ -27,7 +30,6 @@ describe('ToggleBlock.toHtml', () => {
     });
 
     it('renders body children via recurse', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const child = { type: 'paragraph', delta: [{ insert: 'body text' }] };
         const pb = { type: 'toggle', props: { collapsed: false }, delta: [{ insert: 'H' }], children: [child] };
         const result = ToggleBlock.toHtml(pb, { recurse: () => '<p>body text</p>' });
@@ -35,7 +37,6 @@ describe('ToggleBlock.toHtml', () => {
     });
 
     it('defaults to open when props is absent', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const pb = { type: 'toggle', props: {}, delta: [], children: [] };
         const result = ToggleBlock.toHtml(pb, { recurse: () => '' });
         expect(result).toContain('<details open>');
@@ -46,14 +47,12 @@ describe('ToggleBlock.toHtml', () => {
 
 describe('ToggleBlock.toMarkdown', () => {
     it('wraps header in <details> + <summary>…</summary> (<details open> when expanded)', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const pb = { delta: [{ insert: 'H' }], children: [] };
         expect(ToggleBlock.toMarkdown({ ...pb, props: { collapsed: true } }, { recurse: () => '' })).toBe('<details>\n<summary>H</summary>\n\n</details>');
         expect(ToggleBlock.toMarkdown({ ...pb, props: { collapsed: false } }, { recurse: () => '' })).toMatch(/^<details open>\n<summary>H<\/summary>/);
     });
 
     it('includes body children serialized by recurse', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const pb = { delta: [{ insert: 'H' }], children: [{}] };
         const result = ToggleBlock.toMarkdown(pb, { recurse: () => 'body line' });
         expect(result).toContain('body line');
@@ -61,7 +60,6 @@ describe('ToggleBlock.toMarkdown', () => {
     });
 
     it('closes with </details>', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const pb = { delta: [{ insert: 'X' }], children: [] };
         const result = ToggleBlock.toMarkdown(pb, { recurse: () => '' });
         expect(result).toContain('</details>');
@@ -84,7 +82,6 @@ function html(str) {
 
 describe('ToggleBlock.fromHTML', () => {
     it('parses <details open> as collapsed=false with summary delta', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
 
         const el = html('<details open><summary>Hi</summary></details>');
 
@@ -101,7 +98,6 @@ describe('ToggleBlock.fromHTML', () => {
     });
 
     it('parses <details> WITHOUT open as collapsed=true', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
 
         const el = html('<details><summary>Closed</summary></details>');
 
@@ -115,7 +111,6 @@ describe('ToggleBlock.fromHTML', () => {
     });
 
     it('returns empty delta when no summary element present', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
 
         const el = html('<details open><p>body only</p></details>');
 
@@ -132,7 +127,6 @@ describe('ToggleBlock.fromHTML', () => {
 
 describe('ToggleBlock.htmlRules', () => {
     it('has a rule matching the "details" selector', async () => {
-        const { ToggleBlock } = await import('$lib/blocks/toggle/toggle.svelte.js');
         const selectors = ToggleBlock.htmlRules.map(r => r.selector);
         expect(selectors).toContain('details');
     });
@@ -142,10 +136,6 @@ describe('ToggleBlock.htmlRules', () => {
 
 describe('ToggleBlock integration', () => {
     it('creates a toggle with correct type, text, and collapsed=false by default', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ToggleBlock, ToggleExtension } = await import('$lib/blocks/toggle/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ToggleExtension, RichTextExtension] });
 
@@ -158,10 +148,6 @@ describe('ToggleBlock integration', () => {
     });
 
     it('setCollapsed(true) persists to Loro and updates reactive state', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ToggleBlock, ToggleExtension } = await import('$lib/blocks/toggle/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ToggleExtension, RichTextExtension] });
 
@@ -176,10 +162,6 @@ describe('ToggleBlock integration', () => {
     });
 
     it('collapsed positions excludes children, expanded positions includes them', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ToggleBlock, ToggleExtension } = await import('$lib/blocks/toggle/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ToggleExtension, RichTextExtension] });
 
@@ -211,10 +193,6 @@ describe('ToggleBlock integration', () => {
     });
 
     it('capability flags are set correctly', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ToggleBlock, ToggleExtension } = await import('$lib/blocks/toggle/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ToggleExtension, RichTextExtension] });
         const t = ToggleBlock.create(engine, 'toggle', {});

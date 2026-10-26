@@ -6,6 +6,10 @@
 import { describe, it, expect } from 'vitest';
 import { List } from '$lib/blocks/list/list.svelte.js';
 import { ListItem } from '$lib/blocks/list/list-item.svelte.js';
+import { Nabu } from '$lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
+import { RichTextExtension } from '$lib/behaviors/text/index.js';
 
 function parseInline(text) {
     return [{ insert: text }];
@@ -146,10 +150,6 @@ describe('ListItem.toHtml — task items', () => {
 
 describe('ListItem integration — checked metadata', () => {
     it('persists checked=true in Loro data and exposes isTodo + checked', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ListExtension, ListItemExtension, List, ListItem } = await import('$lib/blocks/list/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, RichTextExtension] });
 
@@ -168,10 +168,6 @@ describe('ListItem integration — checked metadata', () => {
     });
 
     it('persists checked=false in Loro data', async () => {
-        const { Nabu } = await import('$lib/blocks/nabu.svelte.js');
-        const { ParagraphExtension } = await import('$lib/blocks/paragraph/index.js');
-        const { ListExtension, ListItemExtension, List, ListItem } = await import('$lib/blocks/list/index.js');
-        const { RichTextExtension } = await import('$lib/behaviors/text/index.js');
 
         const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, RichTextExtension] });
 

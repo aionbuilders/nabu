@@ -8,12 +8,13 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { Paragraph } from '$lib/blocks/paragraph/paragraph.svelte.js';
+import { Heading } from '$lib/blocks/heading/heading.svelte.js';
 
 // Static method and PasteBlock parser tests — no rune construction needed
 
 describe('Paragraph.fromMarkdown (static)', () => {
   it('returns a PasteBlock from plain text lines', async () => {
-    const { Paragraph } = await import('$lib/blocks/paragraph/paragraph.svelte.js');
     const result = Paragraph.fromMarkdown(['hello world'], {
       parseInline: (text) => [{ insert: text }],
     });
@@ -26,7 +27,6 @@ describe('Paragraph.fromMarkdown (static)', () => {
   });
 
   it('returns a whole block when importing (joinLines)', async () => {
-    const { Paragraph } = await import('$lib/blocks/paragraph/paragraph.svelte.js');
     const result = Paragraph.fromMarkdown(['hello world'], {
       parseInline: (text) => [{ insert: text }],
       joinLines: true,
@@ -35,7 +35,6 @@ describe('Paragraph.fromMarkdown (static)', () => {
   });
 
   it('returns null for empty input', async () => {
-    const { Paragraph } = await import('$lib/blocks/paragraph/paragraph.svelte.js');
     const result = Paragraph.fromMarkdown([''], {
       parseInline: () => [],
     });
@@ -43,7 +42,6 @@ describe('Paragraph.fromMarkdown (static)', () => {
   });
 
   it('joins multiple lines with a space', async () => {
-    const { Paragraph } = await import('$lib/blocks/paragraph/paragraph.svelte.js');
     const result = Paragraph.fromMarkdown(['line one', 'line two'], {
       parseInline: (text) => [{ insert: text }],
     });
@@ -53,7 +51,6 @@ describe('Paragraph.fromMarkdown (static)', () => {
 
 describe('Paragraph.fromHTML (static)', () => {
   it('returns a PasteBlock from a <p> element', async () => {
-    const { Paragraph } = await import('$lib/blocks/paragraph/paragraph.svelte.js');
     const el = document.createElement('p');
     el.textContent = 'hello';
     const result = Paragraph.fromHTML(el, {
@@ -66,7 +63,6 @@ describe('Paragraph.fromHTML (static)', () => {
 
 describe('Paragraph.toMarkdown (static)', () => {
   it('delegates to deltaToMarkdown', async () => {
-    const { Paragraph } = await import('$lib/blocks/paragraph/paragraph.svelte.js');
     const result = Paragraph.toMarkdown({
       type: 'paragraph',
       delta: [{ insert: 'hello' }],
@@ -77,7 +73,6 @@ describe('Paragraph.toMarkdown (static)', () => {
 
 describe('Paragraph.toHtml (static)', () => {
   it('wraps in <p>', async () => {
-    const { Paragraph } = await import('$lib/blocks/paragraph/paragraph.svelte.js');
     const result = Paragraph.toHtml({
       type: 'paragraph',
       delta: [{ insert: 'hello' }],
@@ -90,7 +85,6 @@ describe('Paragraph.toHtml (static)', () => {
 
 describe('Heading static methods', () => {
   it('Heading.fromMarkdown parses # heading level 1', async () => {
-    const { Heading } = await import('$lib/blocks/heading/heading.svelte.js');
     if (!Heading.fromMarkdown) return; // guard
     const result = Heading.fromMarkdown(['# Hello'], {
       parseInline: (text) => [{ insert: text }],
@@ -100,7 +94,6 @@ describe('Heading static methods', () => {
   });
 
   it('Heading.fromMarkdown parses ## heading level 2', async () => {
-    const { Heading } = await import('$lib/blocks/heading/heading.svelte.js');
     if (!Heading.fromMarkdown) return;
     const result = Heading.fromMarkdown(['## Section'], {
       parseInline: (text) => [{ insert: text }],
