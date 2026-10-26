@@ -33,8 +33,10 @@ import { detectPlatform, parseChord, chordId, eventChordId, formatChord, hasComm
  *  - `{ strategy: 'hold', holdMs?, target?(ctx), messages? }`: hold the chord for `holdMs` (default 700, global default: the
  *    `commandConfirm.holdMs` init option); `target(ctx)` is what draws the progress (a block, an element).
  *  - `{ strategy: 'invite', inviteMs?, messages? }`: first press asks, the same chord again confirms (timeout default 5000).
- *  - `{ strategy: 'choose', options(ctx), messages? }`: variants; `options` returns `[{ id, label, display?, ...any }]` and
- *    `run(nabu, ctx, option)` receives the chosen one. (Several commands tying on a key use `choose` automatically.)
+ *  - `{ strategy: 'choose', options(ctx), footer?, messages? }`: variants; `options` returns
+ *    `[{ id, label, display?, group?, detail?, ...any }]` and `run(nabu, ctx, option)` receives the chosen one. `group` titles
+ *    consecutive options under a small header, `detail` is a muted right-aligned text, `footer` (a string or `(ctx) => string`)
+ *    a hint under the list. (Several commands tying on a key use `choose` automatically.)
  *  - `messages`: texts of the prompt / outcome for this command (see `ConfirmMessages`).
  * @typedef {{ strategy: 'hold' | 'invite' | 'choose', [option: string]: any }} CommandConfirm
  */

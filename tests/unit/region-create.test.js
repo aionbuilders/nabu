@@ -16,7 +16,8 @@ import { CodeExtension } from '$lib/blocks/code/index.js';
 import { BlockExtension } from '$lib/blocks/block.extension.js';
 import { RichTextExtension } from '$lib/behaviors/text/index.js';
 import { RegionsExtension } from '$lib/blocks/region/index.js';
-import { placeOf, regionChoices } from '$lib/blocks/region/create.js';
+import { placeOf, regionChoices, previewPrefix, createOptions } from '$lib/blocks/region/create.js';
+import { createMessages } from '$lib/blocks/region/messages.js';
 
 const BOOK = {
   part: { level: 1, name: 'Part', label: 'Part {index}' },
@@ -199,12 +200,12 @@ describe('the chooser (strategy choose)', () => {
     expect(engine.pendingCommand.message).toContain('3 types');
   });
 
-  it('in a chapter: the deeper types first, then the "next" siblings', async () => {
+  it('in a chapter: the deeper types first, then the "next" siblings (the chapter\'s own type first)', async () => {
     const engine = await makeEditor(BOOK);
     await build(engine, [R('part', 'P', [R('chapter', 'C', [P('')])])]);
     setCaret(engine, at(engine, ''), 0);
     engine.commandConfirm.offer('region:create');
-    expect(chooser(engine)).toEqual(['scene', 'Next part', 'Next chapter']);
+    expect(chooser(engine)).toEqual(['scene', 'Next chapter', 'Next part']);
   });
 
   it('nowhere to create (a list item): nothing opens', async () => {
@@ -255,7 +256,7 @@ describe('the chooser (strategy choose)', () => {
     await build(engine, [R('chapter', 'C', [P('')])]);
     setCaret(engine, at(engine, ''), 0);
     engine.commandConfirm.offer('region:create');
-    expect(chooser(engine)).toEqual(['Nouveau scene', 'Suite : Part', 'Suite : Chapter']);
+    expect(chooser(engine)).toEqual(['Nouveau scene', 'Suite : Chapter', 'Suite : Part']);
     expect(engine.pendingCommand.message).toBe('3 types');
   });
 });
@@ -396,5 +397,129 @@ describe('slash-menu entries', () => {
   it('titles are overridable', async () => {
     const engine = await makeEditor(BOOK, { messages: { slash: ({ name }) => `Insérer : ${name}` } });
     expect(engine.slashCommands[0].title).toBe('Insérer : Part');
+  });
+});
+
+
+// ─── groups, number previews, footer (lot D) ───────────────────────────────
+
+describe('the chooser in groups, with the number each type would get', () => {
+  const pending = (engine) => engine.pendingCommand;
+  const rows = (engine) => pending(engine).options.map((o) => [o.group, o.label, o.detail ?? '']);
+
+  it('at the root: one "Here" group with every type, no "Next"; the details are the prefixes', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [P('')]);
+    setCaret(engine, at(engine, ''), 0);
+    engine.commandConfirm.offer('region:create');
+    expect(rows(engine)).toEqual([['Here', 'Part', 'Part 1'], ['Here', 'Chapter', 'Chapter 1'], ['Here', 'scene', '1']]);
+    expect(pending(engine).footer).toBe('↑↓ choose · ↵ create · Esc cancel');
+  });
+
+  it('in a region: "Here" (deeper types) then "Next" (own type first), with the numbers they would get', async () => {
+    const engine = await makeEditor(undefined);
+    await build(engine, [R('section-1', 'One', [R('section-2', 'A', [P('x')]), R('section-2', 'B', [P('')]), P('after')]), R('section-1', 'Two', [P('t')])]);
+    setCaret(engine, at(engine, ''), 0);
+    engine.commandConfirm.offer('region:create');
+    // caret in "1.2 B": a sub-subsection is its first (1.2.1); the next subsection would be 1.3, the next section 2. ("Two" becomes 3.)
+    expect(rows(engine)).toEqual([
+      ['Here', 'Sub-subsection', '1.2.1'],
+      ['Next', 'Next subsection', '1.3'],
+      ['Next', 'Next section', '2.'],
+    ]);
+  });
+
+  it('the "Next" group is absent at the deepest level when nothing is shallower; the "Here" group when nothing fits inside', async () => {
+    const engine = await makeEditor(undefined);
+    await build(engine, [R('section-3', 'S', [P('')])]);
+    setCaret(engine, at(engine, ''), 0);
+    engine.commandConfirm.offer('region:create');
+    expect([...new Set(pending(engine).options.map((o) => o.group))]).toEqual(['Next']);
+    expect(pending(engine).options.map((o) => o.id)).toEqual(['section-3', 'section-1', 'section-2']);
+  });
+
+  it('groups, the footer and the other texts are overridable', async () => {
+    const engine = await makeEditor(BOOK, { messages: { groupHere: 'Ici', groupNext: 'Ensuite', chooserFooter: '↑↓ choisir' } });
+    await build(engine, [R('part', 'P', [P('')])]);
+    setCaret(engine, at(engine, ''), 0);
+    engine.commandConfirm.offer('region:create');
+    expect([...new Set(pending(engine).options.map((o) => o.group))]).toEqual(['Ici', 'Ensuite']);
+    expect(pending(engine).footer).toBe('↑↓ choisir');
+  });
+
+  it('digits count across the groups, and the highlight crosses them', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('part', 'P', [P('')])]);
+    setCaret(engine, at(engine, ''), 0);
+    engine.commandConfirm.offer('region:create');
+    expect(pending(engine).options.map((o) => o.id)).toEqual(['chapter', 'scene', 'part']);
+    press(engine, 'ArrowDown'); press(engine, 'ArrowDown');
+    expect(pending(engine).selectedIndex).toBe(2); // first of "Next"
+    press(engine, '3');
+    await flush();
+    expect(doc(engine)).toBe('R:part(P) ; R:part(){p()}'); // the "Next part" sibling (the empty caret paragraph is replaced)
+  });
+});
+
+describe('previewPrefix: the prefix a new region would get', () => {
+  const defOf = (engine, id) => engine.regions.config.types.get(id);
+  const preview = (engine, id, block, parent) => previewPrefix(engine, defOf(engine, id), block, parent);
+
+  it('"document" numbering continues over the document, "parent" numbering counts the siblings and carries the path', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [
+      R('part', 'P1', [R('chapter', 'C1', [P('a')]), R('chapter', 'C2', [P('b'), P('c')])]),
+      R('part', 'P2', [P('d')]),
+    ]);
+    const [, , c2, p2] = engine.regions.list;
+    expect(preview(engine, 'chapter', at(engine, 'd'), p2)).toBe('Chapter 3'); // inside P2: the third chapter of the document
+    expect(preview(engine, 'part', at(engine, 'd'), p2)).toBe('Part 3'); // "next" of P2
+    expect(preview(engine, 'scene', at(engine, 'd'), p2)).toBe('2.1'); // first scene directly in P2 (the chapters' index is not part of its path)
+    expect(preview(engine, 'scene', at(engine, 'b'), c2)).toBe('1.2.1'); // path = Part 1 > Chapter 2 > scene 1
+    expect(preview(engine, 'chapter', at(engine, 'b'), c2)).toBe('Chapter 3'); // "next" of C2, in P1
+  });
+
+  it('counts only what comes BEFORE the place: later siblings would be renumbered, not counted', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('part', 'P1', [P('a')]), P('mid'), R('part', 'P2', [P('b')])]);
+    expect(preview(engine, 'part', at(engine, 'mid'), null)).toBe('Part 2');
+    expect(preview(engine, 'part', at(engine, 'a'), engine.regions.list[0])).toBe('Part 2'); // "next" of P1, after it
+    await build(engine, [P('mid'), R('part', 'P1', [P('a')])]);
+    expect(preview(engine, 'part', at(engine, 'mid'), null)).toBe('Part 1');
+  });
+
+  it('existing sub-regions before the caret count', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('chapter', 'C', [R('scene', 'S1', [P('x')]), P('y'), R('scene', 'S2', [P('z')]), P('w')])]);
+    const chapter = engine.regions.list[0];
+    expect(preview(engine, 'scene', at(engine, 'y'), chapter)).toBe('1.2');
+    expect(preview(engine, 'scene', at(engine, 'w'), chapter)).toBe('1.3');
+  });
+
+  it('an unnumbered type shows only what its label shows', async () => {
+    const engine = await makeEditor({ ...BOOK, note: { level: 3, numbering: 'none', label: '{title}' } });
+    await build(engine, [R('part', 'P', [P('a')])]);
+    expect(preview(engine, 'note', at(engine, 'a'), engine.regions.list[0])).toBe('');
+  });
+
+  it('the default types: "1." sections, "1.1" subsections', async () => {
+    const engine = await makeEditor(undefined);
+    await build(engine, [R('section-1', 'One', [P('a')])]);
+    expect(preview(engine, 'section-1', at(engine, 'a'), engine.regions.list[0])).toBe('2.');
+    expect(preview(engine, 'section-2', at(engine, 'a'), engine.regions.list[0])).toBe('1.1');
+  });
+});
+
+describe('createOptions (pure)', () => {
+  it('the options carry group and detail, in the order Here then Next (own type first)', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('part', 'P', [R('chapter', 'C', [P('')])])]);
+    const text = createMessages(undefined);
+    const options = createOptions(engine, at(engine, ''), engine.regions.list[1], text);
+    expect(options.map((o) => [o.group, o.id, o.detail])).toEqual([
+      ['Here', 'scene', '1.1.1'],
+      ['Next', 'chapter', 'Chapter 2'],
+      ['Next', 'part', 'Part 2'],
+    ]);
   });
 });

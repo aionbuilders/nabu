@@ -30,6 +30,8 @@ import {
   blockBox, hoverPoint, dropPoint, type Box,
 } from './helpers/ui.js';
 
+/** A region spec for `buildTree`. */
+const region = (regionType: string) => (title: string, ...children: TreeSpec[]): TreeSpec => ({ type: 'region', props: { regionType, title }, children });
 const MOD = process.platform === 'darwin' ? 'Meta' : 'Control';
 const HANDLE = '.nabu-drag-handle';
 const TOOLBAR = '.nabu-toolbar';
@@ -699,6 +701,8 @@ async function measureAll(page: Page) {
   // region seam label + the hold hint
   await m('region seam label', '.nabu-region-label');
   await focusAt(page, 'Opening of the first section.', 0);
+  await m('region label in the rail colour (caret inside)', '[data-region-caret] > .nabu-region-seam .nabu-region-label'); // the rail takes the same colour
+  await m('region end marker', '.nabu-region-end-text'); // the empty root paragraph added above follows the last region
   await page.keyboard.down('Backspace');
   await page.waitForSelector('[data-region-hint]', { timeout: 2000 });
   await m('region hold hint', '[data-region-hint]');
@@ -740,6 +744,15 @@ async function measureAll(page: Page) {
   await m('chooser option', '.nabu-command-option:not(.active) .nabu-command-option-label');
   await m('chooser option index', '.nabu-command-option-index');
   await m('chooser option shortcut', '.nabu-command-option-display');
+  await press(page, 'Escape');
+
+  // the `:::` chooser: group header, detail, footer
+  await focusEmpty(page);
+  await page.keyboard.type('::: ');
+  await expect(page.locator('.nabu-command-group').first()).toBeVisible();
+  await m('region chooser group header', '.nabu-command-group');
+  await m('region chooser detail', '.nabu-command-option-detail');
+  await m('region chooser footer', '.nabu-command-footer');
   await press(page, 'Escape');
 
   // drag handle glyph (non-text UI component: 3:1)
@@ -934,8 +947,86 @@ test.describe('Region seam', () => {
     expect(await seamProblems(page)).toEqual([]);
   });
 
+  test('16e · the end marker and the margin rail shift nothing: every box of the document is the same with and without them', async ({ page }) => {
+    await gotoEditor(page);
+    await buildTree(page, [Pp('Preamble'), region('section-1')('One', Pp('a'), region('section-2')('Sub', Pp('s')), Pp('b')), Pp('outside'), region('section-1')('Two', Pp('t'))]);
+    const boxes = () => page.evaluate(() => [...document.querySelectorAll('.nabu-editor [data-block-id], .nabu-region, .nabu-region-seam, .nabu-region-body, [data-region-end]')].map((e) => {
+      const r = e.getBoundingClientRect();
+      return [e.getAttribute('data-block-id') ?? String(e.className).split(' ')[0], +r.left.toFixed(2), +r.top.toFixed(2), +r.width.toFixed(2), +r.height.toFixed(2)];
+    }));
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(page.locator('[data-region-caret]')).toHaveCount(0);
+    const without = await boxes();
+    expect(without.filter((b) => String(b[0]).includes('nabu-region-end')).length).toBe(2);
+    const scrollW = await page.evaluate(() => document.documentElement.scrollWidth);
+    for (const [text, at] of [['a', 1], ['s', 0], ['t', 0], ['Two', 2]] as Array<[string, number]>) {
+      await focusAt(page, text, at);
+      await expect(page.locator('[data-region-caret]')).toHaveCount(1);
+      expect(await boxes(), `rail on the region of "${text}"`).toEqual(without);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no horizontal scroll appears').toBe(scrollW);
+    }
+  });
+
+  test('16f · the rail clears the drag handle (it sits just left of the 24px handle strip) and stays inside the page', async ({ page }) => {
+    await gotoEditor(page);
+    await buildTree(page, [region('section-1')('One', Pp('a'), Pp('b'))]);
+    await focusAt(page, 'a', 0);
+    const rail = await page.locator('.nabu-region').first().evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const left = parseFloat(getComputedStyle(el, '::before').left);
+      return { left: r.left + left, right: r.left + left + 2 };
+    });
+    const b = await blockBox(page, 'paragraph', 'b');
+    const p = hoverPoint(b);
+    await page.mouse.move(p.x, p.y, { steps: 2 });
+    await expect(page.locator(HANDLE)).toBeVisible();
+    const h = await mustRect(page, HANDLE);
+    console.log(`rail x=[${rail.left.toFixed(1)}..${rail.right.toFixed(1)}] handle ${fmt(h)}`);
+    expect(rail.right, 'the rail does not run under the handle').toBeLessThanOrEqual(h.left);
+    expect(rail.left, 'the rail is on screen').toBeGreaterThanOrEqual(0);
+  });
+
   test.describe('narrow viewport (375px)', () => {
     test.use({ viewport: { width: 375, height: 700 } });
+
+    test('16b2 · the end marker never overflows (long names are cut with an ellipsis); the rail and the chooser stay inside the page', async ({ page }) => {
+      await gotoEditor(page);
+      const long = 'A very long section title that keeps going well past the width of a phone screen';
+      await buildTree(page, [region('section-1')(long, region('section-2')(long, Pp('s')), Pp('b')), Pp('outside')]);
+      await focusAt(page, 's', 0);
+      const info = await page.evaluate(() => {
+        const vw = document.documentElement.clientWidth;
+        const ends = [...document.querySelectorAll('[data-region-end]')].map((e) => {
+          const r = e.getBoundingClientRect();
+          const t = e.querySelector('.nabu-region-end-text') as HTMLElement;
+          return { left: r.left, right: r.right, height: r.height, ellipsis: getComputedStyle(t).textOverflow === 'ellipsis', clipped: t.scrollWidth > t.clientWidth };
+        });
+        return { vw, ends, scroll: document.documentElement.scrollWidth };
+      });
+      expect(info.ends).toHaveLength(2);
+      for (const e of info.ends) {
+        expect(e.right).toBeLessThanOrEqual(info.vw);
+        expect(e.ellipsis).toBe(true);
+        expect(e.height).toBeCloseTo(11.5 * 2.6, 0); // one line, whatever the text
+      }
+      expect(info.scroll).toBeLessThanOrEqual(info.vw);
+      // the rail (touch-style offset is not used here: a hover device) stays inside the layout viewport or is merely clipped, never a scrollbar
+      const rail = await page.locator('.nabu-region[data-region-caret]').evaluate((el) => { const r = el.getBoundingClientRect(); return r.left + parseFloat(getComputedStyle(el, '::before').left); });
+      expect(rail).toBeGreaterThanOrEqual(0);
+      // the `:::` chooser with its groups and footer fits the width
+      await buildTree(page, [region('section-1')('One', Pp(''))]);
+      await focusEmpty(page);
+      await page.keyboard.type('::: ');
+      await expect(page.getByRole('listbox')).toBeVisible();
+      const box = await mustRect(page, '.nabu-command-chooser');
+      expect(box.left).toBeGreaterThanOrEqual(8 - 0.5);
+      expect(box.right).toBeLessThanOrEqual(375 - 8 + 0.5);
+      const foot = await mustRect(page, '.nabu-command-footer');
+      expect(foot.bottom).toBeLessThanOrEqual(box.bottom + 0.5);
+      expect(foot.right).toBeLessThanOrEqual(box.right + 0.5);
+      expect(await page.evaluate(() => { const c = document.querySelector('.nabu-command-chooser')!; return c.scrollWidth <= c.clientWidth; })).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+    });
 
     test('16b · seams lay out inside a 375px viewport', async ({ page }) => {
       await gotoEditor(page);

@@ -2,6 +2,8 @@
     import Block from "../Block.svelte";
     import RichText from "../../behaviors/text/RichText.svelte";
     import { Regions } from "./regions.svelte.js";
+    import { createMessages } from "./messages.js";
+    import { endMarkerText, needsEndMarker } from "./end-marker.js";
 
     /** @type {{block: import('./region.svelte.js').RegionBlock}}*/
     let {block} = $props();
@@ -10,6 +12,18 @@
     const level = $derived(Math.min(6, Math.max(1, region?.level ?? 1)));
     // The label template applied with an EMPTY title ("1.", "1.1", "Chapter 2"): the editable title follows it.
     const prefix = $derived(region?.prefix ?? '');
+
+    // The end marker (board 9, "only when needed"): when text of the parent follows this region, a discreet line closes it. Reactive:
+    // it appears and goes away as the siblings change. Texts: the `messages` of the extension (`endOf`, `backTo`, `outside`).
+    const endText = $derived.by(() => {
+        if (!region) return '';
+        const siblings = block.parent ? block.parent.children : block.nabu.children;
+        if (!needsEndMarker(siblings, block)) return '';
+        return endMarkerText(createMessages(/** @type {any} */ (block.constructor).messages), region);
+    });
+
+    // The margin rail (board 9, option C): the DEEPEST region holding the caret, only while the editor has the focus.
+    const hasCaret = $derived(!!region && Regions.get(block.nabu).caret === region);
 
     // A protected merge asks to be HELD on this seam (ADR 017 `hold`, ADR 016 lot 2): the command's prompt shows above the
     // seam and the hairline drains in the warning tint while the key is down. Nothing remains once the region is gone.
@@ -31,6 +45,15 @@
     light pages and a lighter one for dark pages, so the hint keeps a 4.5:1 contrast on both — the #b45309 fallback assumes
     a light page).
 
+    End marker (only when text of the parent follows the region): --nb-region-end-color (default: the text colour at 60%, like the seam), --nb-region-end-size
+    (11.5px). Its height is fixed (2.6 × the size, one line, never wraps), which is what lets the rail stop above it.
+
+    Margin rail of the region that holds the caret (focus only, never printed): --nb-region-rail (nabu-theme.css: indigo, lighter on
+    dark pages), --nb-region-rail-offset. It is a pseudo-element of the region, out of the flow: appearing shifts nothing. The default
+    offset (24px + 0.4em to the left of the region) puts the rail just LEFT of the drag handle, which lives in the 24px strip flush
+    against each block (a rail at the usual -0.9em would pass behind its glyph); on touch screens (no handle) it comes closer
+    (-0.9em). A host with no room left of the editor sets --nb-region-rail-offset (e.g. -0.6em).
+
     The hold hint (neutral version of the design of the "8b" board): left-aligned above the seam, no bubble, no background,
     no border, in the warning tint; the hairline drains with the progress (0 → 1). It is positioned ABSOLUTELY in the top
     margin of the seam, so showing it shifts nothing; it needs `--nb-region-margin` to leave about one line above the seam
@@ -43,6 +66,8 @@
     class:debug={block.nabu.debugging}
     class:selected={block.selected}
     class:pending={!!pending}
+    class:has-end={!!endText}
+    data-region-caret={hasCaret ? '' : undefined}
     data-region-pending={pending ? 'hold' : undefined}
     style:--nb-region-progress={pending ? pending.progress : undefined}
 >
@@ -70,9 +95,81 @@
     <div class="nabu-region-body">
         {#each block.children as child (child.id)}<Block block={child} />{/each}
     </div>
+    {#if endText}
+        <!-- Never a caret stop (not editable, not selectable) and not read as text: a separator named by the same sentence. -->
+        <div class="nabu-region-end" data-region-end data-nabu-ui contenteditable="false" role="separator" aria-label={endText}>
+            <span class="nabu-region-end-rule" aria-hidden="true"></span>
+            <span class="nabu-region-end-text" aria-hidden="true">{endText}</span>
+        </div>
+    {/if}
 </div>
 
 <style>
+    /* ── Margin rail: the region that holds the caret (data-region-caret), from its seam to the end of its body ── */
+    @media not print {
+        .nabu-region[data-region-caret] {
+            position: relative;
+        }
+
+        .nabu-region[data-region-caret]::before {
+            content: '';
+            position: absolute;
+            left: var(--nb-region-rail-offset, calc(-24px - 0.4em));
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            border-radius: 2px;
+            background: var(--nb-region-rail, #4F46E5);
+            pointer-events: none;
+            user-select: none;
+        }
+
+        /* The end marker is not part of the region's extent: the rail stops above it. */
+        .nabu-region[data-region-caret].has-end::before {
+            bottom: calc(var(--nb-region-end-size, 11.5px) * 2.6);
+        }
+
+        .nabu-region[data-region-caret] > .nabu-region-seam .nabu-region-label {
+            color: var(--nb-region-rail, #4F46E5);
+        }
+    }
+
+    @media (hover: none) {
+        .nabu-region[data-region-caret]::before {
+            left: var(--nb-region-rail-offset, -0.9em);
+        }
+    }
+
+    /* ── End marker ── */
+    .nabu-region-end {
+        display: flex;
+        align-items: center;
+        gap: 0.6em;
+        height: calc(var(--nb-region-end-size, 11.5px) * 2.6);
+        margin: 0;
+        font-size: var(--nb-region-end-size, 11.5px);
+        line-height: 1.2;
+        letter-spacing: 0.01em;
+        color: var(--nb-region-end-color, color-mix(in srgb, currentColor 60%, transparent));
+        user-select: none;
+        -webkit-user-select: none;
+        pointer-events: none;
+    }
+
+    .nabu-region-end-rule {
+        flex: none;
+        width: 24px;
+        border-top: 1px solid currentColor;
+        opacity: 0.55;
+    }
+
+    .nabu-region-end-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     .nabu-region-seam {
         display: flex;
         align-items: center;

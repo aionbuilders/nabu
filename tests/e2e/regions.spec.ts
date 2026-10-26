@@ -1371,3 +1371,277 @@ test.describe('creating a region (":::" + Space, slash menu)', () => {
     await expectValid(page);
   });
 });
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// Default UI (lot D): the chooser in groups, the end marker, the margin rail of the caret's region
+// ════════════════════════════════════════════════════════════════════════════
+
+test.describe('chooser of ":::" — groups, numbers, footer (board 11)', () => {
+  const chooser = (page: Page) => page.getByRole('listbox');
+  const headers = (page: Page) => chooser(page).locator('.nabu-command-group').allTextContents();
+  const groups = (page: Page) => chooser(page).getByRole('group').evaluateAll((els) => els.map((g) => [g.getAttribute('aria-label'), [...g.querySelectorAll('[role=option]')].length]));
+  const labelsOf = (page: Page) => chooser(page).locator('.nabu-command-option-label').allTextContents();
+  const detailsOf = (page: Page) => chooser(page).locator('.nabu-command-option').evaluateAll((els) => els.map((o) => o.querySelector('.nabu-command-option-detail')?.textContent ?? ''));
+  const selected = (page: Page) => chooser(page).getByRole('option').evaluateAll((els) => els.findIndex((o) => o.getAttribute('aria-selected') === 'true'));
+
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+    await focusEditor(page);
+  });
+
+  test('at the root: only a "Here" group (no "Next"), each type with the number it would get, and the footer hint', async ({ page }) => {
+    await page.keyboard.type('::: ');
+    await expect(chooser(page)).toBeVisible();
+    expect(await headers(page)).toEqual(['Here']);
+    expect(await groups(page)).toEqual([['Here', 3]]);
+    expect(await labelsOf(page)).toEqual(['Section', 'Subsection', 'Sub-subsection']);
+    expect(await detailsOf(page)).toEqual(['1.', '1', '1']);
+    await expect(chooser(page).locator('.nabu-command-footer')).toHaveText('↑↓ choose · ↵ create · Esc cancel');
+  });
+
+  test('in a region: "Here" (deeper types) then "Next" (siblings); details are the numbers computed as if created there', async ({ page }) => {
+    await build(page, [S1('One', S2('A', Pp('x')), Pp(''), Pp('after')), S1('Two', Pp('t'))]);
+    await focusEmpty(page);
+    await page.keyboard.type('::: ');
+    await expect(chooser(page)).toBeVisible();
+    expect(await groups(page)).toEqual([['Here', 2], ['Next', 1]]);
+    expect(await headers(page)).toEqual(['Here', 'Next']);
+    expect(await labelsOf(page)).toEqual(['Subsection', 'Sub-subsection', 'Next section']);
+    // a second subsection of "One" (1.2), the first sub-subsection directly in "One" (1.1), the section after "One" (2. — "Two" would move to 3.)
+    expect(await detailsOf(page)).toEqual(['1.2', '1.1', '2.']);
+    // the group headers are small uppercase labels
+    const style = await chooser(page).locator('.nabu-command-group').first().evaluate((el) => { const c = getComputedStyle(el); return [c.textTransform, parseFloat(c.fontSize) < 12]; });
+    expect(style).toEqual(['uppercase', true]);
+  });
+
+  test('deepest level: "Here" is omitted and "Next {current type}" comes first', async ({ page }) => {
+    await build(page, [S1('One', S2('Two', S3('Three', Pp(''))))]);
+    await focusEmpty(page);
+    await page.keyboard.type('::: ');
+    await expect(chooser(page)).toBeVisible();
+    expect(await headers(page)).toEqual(['Next']);
+    expect(await labelsOf(page)).toEqual(['Next sub-subsection', 'Next section', 'Next subsection']);
+    expect(await detailsOf(page)).toEqual(['1.1.2', '2.', '1.2']);
+  });
+
+  test('digits count across the groups; ArrowDown / ArrowUp cross them', async ({ page }) => {
+    await build(page, [S1('One', S2('A', Pp('x')), Pp(''), Pp('after')), S1('Two', Pp('t'))]);
+    await focusEmpty(page);
+    await page.keyboard.type('::: ');
+    await expect(chooser(page)).toBeVisible();
+    await expect.poll(() => selected(page)).toBe(0);
+    await press(page, 'ArrowDown');
+    await press(page, 'ArrowDown');
+    await expect.poll(() => selected(page)).toBe(2); // first and only entry of "Next"
+    await press(page, 'ArrowUp');
+    await expect.poll(() => selected(page)).toBe(1); // back in "Here"
+    await press(page, '3'); // the third entry overall: "Next section"
+    await expect(chooser(page)).toHaveCount(0);
+    await expectOutline(page, 'R:section-1(One){ R:section-2(A){ p(x) } } ; R:section-1(∅){ p(after) } ; R:section-1(Two){ p(t) }');
+    await expectValid(page);
+  });
+
+  test('the first "Here" entry still picks with 1 (numbering is global)', async ({ page }) => {
+    await build(page, [S1('One', Pp(''))]);
+    await focusEmpty(page);
+    await page.keyboard.type('::: ');
+    await press(page, '1');
+    await expectOutline(page, 'R:section-1(One){ R:section-2(∅){ p(∅) } }');
+  });
+});
+
+test.describe('end marker (board 9, option B: only when needed)', () => {
+  const markers = (page: Page) => page.locator('[data-region-end]');
+  const markerTexts = (page: Page) => markers(page).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+  });
+
+  test('drawn only where text of the parent follows the region: nested ("back to …") and at the root ("outside regions")', async ({ page }) => {
+    await build(page, [
+      S1('One', S2('Sub', Pp('s')), Pp('after'), S2('Last', Pp('l'))),
+      Pp('outside'),
+      S1('Two', Pp('t')),
+      S1('Three', Pp('u')),
+    ]);
+    // "Sub" is followed by text of "One"; "Last" closes "One" (no marker); "One" is followed by root text; "Two" by a region; "Three" is last
+    await expect(markers(page)).toHaveCount(2);
+    expect(await markerTexts(page)).toEqual(['End of 1.1 · back to 1. One', 'End of 1. · outside regions']);
+    // right after the body of the region it closes, inside the region container
+    await expect(regionEl(page, 0).locator('> .nabu-region-body > .nabu-region').first().locator('> [data-region-end]')).toHaveCount(1);
+    await expect(regionEl(page, 0).locator('> [data-region-end]')).toHaveCount(1);
+    // nothing for a region that is followed by a region, or that is last
+    await expect(regionEl(page, 2).locator('> [data-region-end]')).toHaveCount(0);
+    await expect(regionEl(page, 3).locator('> [data-region-end]')).toHaveCount(0);
+  });
+
+  test('it is not part of the content: not editable, not selectable, a separator named by its text, hairline + small muted text', async ({ page }) => {
+    await build(page, [S1('One', Pp('a')), Pp('outside')]);
+    const m = markers(page).first();
+    await expect(m).toHaveAttribute('contenteditable', 'false');
+    await expect(m).toHaveAttribute('data-nabu-ui', '');
+    await expect(m).toHaveAttribute('role', 'separator');
+    await expect(m).toHaveAttribute('aria-label', 'End of 1. · outside regions');
+    await expect(page.getByRole('separator', { name: 'End of 1. · outside regions' })).toHaveCount(1);
+    const info = await m.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const rule = el.querySelector('.nabu-region-end-rule')!.getBoundingClientRect();
+      return { userSelect: cs.userSelect, size: cs.fontSize, rule: rule.width, editable: (el as HTMLElement).isContentEditable, text: el.textContent?.trim() };
+    });
+    expect(info).toMatchObject({ userSelect: 'none', size: '11.5px', rule: 24, editable: false, text: 'End of 1. · outside regions' });
+    // the editor's text stays the document's text (the marker is not part of it)
+    expect(await outline(page)).toBe('R:section-1(One){ p(a) } ; p(outside)');
+  });
+
+  test('it appears after Mod-Shift-Enter (a paragraph now follows the region) and disappears with undo', async ({ page }) => {
+    await build(page, [S1('One', Pp('a'))]);
+    await expect(markers(page)).toHaveCount(0); // the region is last
+    await focusAt(page, 'a', 1);
+    await press(page, `${MOD}+Shift+Enter`);
+    await expectOutline(page, 'R:section-1(One){ p(a) } ; p(∅)');
+    await expect(markers(page)).toHaveCount(1);
+    expect(await markerTexts(page)).toEqual(['End of 1. · outside regions']);
+    await undo(page);
+    await expectOutline(page, 'R:section-1(One){ p(a) }');
+    await expect(markers(page)).toHaveCount(0);
+  });
+
+  test('it follows the structure: removing the text after the region, then a region after it, removes it; the label follows renumbering', async ({ page }) => {
+    await build(page, [S1('One', Pp('a')), Pp('outside')]);
+    await expect(markers(page)).toHaveCount(1);
+    await page.evaluate(async () => { const n = (window as any).nabu; n.insert('region', { regionType: 'section-1', title: 'Zero' }, null, 0); await n.commit(); });
+    await expect.poll(() => markerTexts(page)).toEqual(['End of 2. · outside regions']);
+    await page.evaluate(async () => {
+      const n = (window as any).nabu;
+      const outside = [...n.blocks.values()].find((b: any) => b.behaviors?.get('text')?.text === 'outside');
+      n.delete(outside);
+      await n.commit();
+    });
+    await expect(markers(page)).toHaveCount(0);
+  });
+
+  test('it is never a caret stop: ArrowDown / ArrowUp step over it', async ({ page }) => {
+    await build(page, [S1('One', Pp('abc')), Pp('outside')]);
+    await expect(markers(page)).toHaveCount(1);
+    await focusEnd(page, 'abc');
+    await press(page, 'ArrowDown');
+    await expect.poll(() => caret(page)).toMatch(/^outside$|^[a-z]*\|[a-z]*$/);
+    const where = async () => page.evaluate(() => {
+      const a = window.getSelection()!.anchorNode as Node;
+      const el = a.nodeType === 1 ? (a as Element) : a.parentElement!;
+      return { inUi: !!el.closest('[data-nabu-ui]'), block: n2text(el) };
+      function n2text(e: Element) { return e.closest('[data-block-id]')?.textContent ?? null; }
+    });
+    expect(await where()).toEqual({ inUi: false, block: 'outside' });
+    await press(page, 'ArrowUp');
+    expect(await where()).toEqual({ inUi: false, block: 'abc' });
+    // and with the arrows a character at a time (ArrowRight at the end of "abc" goes to "outside", ArrowLeft comes back)
+    await focusEnd(page, 'abc');
+    await press(page, 'ArrowRight');
+    expect(await where()).toEqual({ inUi: false, block: 'outside' });
+    await press(page, 'ArrowLeft');
+    expect(await where()).toEqual({ inUi: false, block: 'abc' });
+  });
+});
+
+test.describe('margin rail of the caret\'s region (board 9, option C)', () => {
+  const caretRegions = (page: Page) => page.locator('.nabu-region[data-region-caret]');
+  /** The index (document order) of every region that shows the rail. */
+  const railed = (page: Page) => page.locator('.nabu-region').evaluateAll((els) => els.map((e, i) => (e.hasAttribute('data-region-caret') ? i : -1)).filter((i) => i >= 0));
+  const pseudo = (loc: Locator, prop: string) => loc.evaluate((el, p) => getComputedStyle(el, '::before').getPropertyValue(p), prop);
+
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+    await build(page, [S1('One', Pp('a'), S2('Sub', Pp('s')), Pp('b')), S1('Two', Pp('t'))]);
+  });
+
+  test('the deepest region holding the caret (body or title) shows the rail; it follows the caret; only one at a time', async ({ page }) => {
+    await focusAt(page, 'a', 1);
+    expect(await railed(page)).toEqual([0]);
+    await focusAt(page, 's', 0);
+    expect(await railed(page)).toEqual([1]); // the sub-region, not "One" as well
+    await focusAt(page, 'b', 0);
+    expect(await railed(page)).toEqual([0]); // back in the text of "One"
+    await focusAt(page, 'Two', 1); // a title counts as inside its region
+    expect(await railed(page)).toEqual([2]);
+    await focusAt(page, 't', 0);
+    expect(await railed(page)).toEqual([2]);
+    // a range keeps the rail of the region of its anchor
+    await selectRange(page, 'a', 0, 'b', 1);
+    expect(await railed(page)).toEqual([0]);
+    // typing keeps it
+    await focusAt(page, 's', 1);
+    await page.keyboard.type('x');
+    expect(await railed(page)).toEqual([1]);
+  });
+
+  test('a 2px rounded rail in the rail colour, out of the flow; the label of the seam takes the colour; none for other regions', async ({ page }) => {
+    await focusAt(page, 'a', 0);
+    const r = regionEl(page, 0);
+    expect(await pseudo(r, 'position')).toBe('absolute');
+    expect(await pseudo(r, 'width')).toBe('2px');
+    expect(await pseudo(r, 'border-top-left-radius')).toBe('2px');
+    expect(await pseudo(r, 'background-color')).toBe('rgb(79, 70, 229)');
+    expect(await pseudo(r, 'content')).toBe('""');
+    expect(await pseudo(regionEl(page, 2), 'content')).toBe('none');
+    await expect(seamOf(r).locator('.nabu-region-label')).toHaveCSS('color', 'rgb(79, 70, 229)');
+    await expect(seamOf(regionEl(page, 2)).locator('.nabu-region-label')).not.toHaveCSS('color', 'rgb(79, 70, 229)');
+    // the sub-region's own label does not take the colour while the caret is in the parent's own text
+    await expect(seamOf(regionEl(page, 1)).locator('.nabu-region-label')).not.toHaveCSS('color', 'rgb(79, 70, 229)');
+  });
+
+  test('from the seam to the end of the body, the end marker excluded', async ({ page }) => {
+    await focusAt(page, 's', 0); // "Sub" is followed by "b": it has an end marker
+    const sub = regionEl(page, 1);
+    await expect(sub.locator('> [data-region-end]')).toHaveCount(1);
+    const box = (await sub.boundingBox())!;
+    const end = (await sub.locator('> [data-region-end]').boundingBox())!;
+    const body = (await sub.locator('> .nabu-region-body').boundingBox())!;
+    const railH = parseFloat(await pseudo(sub, 'height'));
+    expect(Math.abs(railH - (box.height - end.height))).toBeLessThan(1);
+    expect(Math.abs(railH - (end.y - box.y))).toBeLessThan(1);
+    expect(body.y + body.height).toBeLessThanOrEqual(end.y + 0.5);
+    // a region without a marker: the rail covers the whole region
+    await focusAt(page, 't', 0);
+    const two = regionEl(page, 2);
+    const tb = (await two.boundingBox())!;
+    expect(Math.abs(parseFloat(await pseudo(two, 'height')) - tb.height)).toBeLessThan(1);
+  });
+
+  test('only while the editor has the focus: hidden on blur, back on focus', async ({ page }) => {
+    await focusAt(page, 'a', 1);
+    await expect(caretRegions(page)).toHaveCount(1);
+    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+    await expect(caretRegions(page)).toHaveCount(0);
+    await page.evaluate(() => (document.querySelector('[data-nabu-root]') as HTMLElement).focus());
+    await expect.poll(() => railed(page)).toEqual([0]);
+    // a click outside the editor takes the focus away too
+    await page.mouse.click(2, 2);
+    await expect(caretRegions(page)).toHaveCount(0);
+  });
+
+  test('nothing in print; no rail while the caret is outside any region', async ({ page }) => {
+    await focusAt(page, 'a', 1);
+    await expect(caretRegions(page)).toHaveCount(1);
+    await page.emulateMedia({ media: 'print' });
+    expect(await pseudo(regionEl(page, 0), 'content')).toBe('none');
+    await expect(seamOf(regionEl(page, 0)).locator('.nabu-region-label')).not.toHaveCSS('color', 'rgb(79, 70, 229)');
+    await page.emulateMedia({ media: 'screen' });
+    await build(page, [Pp('plain'), S1('One', Pp('a'))]);
+    await focusAt(page, 'plain', 2);
+    await expect(caretRegions(page)).toHaveCount(0);
+  });
+
+  test('--nb-region-rail and --nb-region-rail-offset are themable', async ({ page }) => {
+    await focusAt(page, 'a', 0);
+    await page.evaluate(() => { const root = document.querySelector('.nabu-editor') as HTMLElement; root.style.setProperty('--nb-region-rail', 'rgb(1, 2, 3)'); root.style.setProperty('--nb-region-rail-offset', '-10px'); });
+    const r = regionEl(page, 0);
+    expect(await pseudo(r, 'background-color')).toBe('rgb(1, 2, 3)');
+    expect(await pseudo(r, 'left')).toBe('-10px');
+  });
+});

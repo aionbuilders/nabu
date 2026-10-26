@@ -30,7 +30,7 @@
 import { Regions } from "./regions.svelte.js";
 import { createMessages } from "./messages.js";
 import { mergePlan, neighbourOf } from "./facts.js";
-import { createRegionHere, placeOf, regionChoices } from "./create.js";
+import { createOptions, createRegionHere, placeOf } from "./create.js";
 import { demoteRegion, exitRegion, goToRegion, insertNearRegion, mergeRegion, moveRegion, promoteRegion, splitRegion, toRegion, unwrapRegion } from "./actions.js";
 
 /** @param {Region | null | undefined} region @returns {string} the title, else the label, else the type: never empty */
@@ -116,12 +116,9 @@ export function createRegionCommands(messages) {
                 options: (/** @type {any} */ ctx) => {
                     const place = placeOf(ctx.nabu, ctx.block);
                     if (!place) return [];
-                    const { here, next } = regionChoices(ctx.nabu, place.parent);
-                    return [
-                        ...here.map((def) => ({ id: def.id, type: def.id, label: text('createOption', { name: def.name, type: def.id }) })),
-                        ...next.map((def) => ({ id: def.id, type: def.id, label: text('createNext', { name: def.name, type: def.id }) })),
-                    ];
+                    return createOptions(ctx.nabu, ctx.block, place.parent, text);
                 },
+                footer: () => text('chooserFooter'),
                 messages: { choose: (/** @type {{ options: unknown[] }} */ p) => text('chooser', { count: p.options.length }) },
             },
             run: (nabu, ctx, data) => createRegionHere(nabu, ctx.block, typeof data?.type === 'string' ? data.type : undefined),

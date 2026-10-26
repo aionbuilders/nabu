@@ -475,6 +475,24 @@ describe('choose', () => {
     expect(run.mock.calls[0][2]).toMatchObject({ id: 'rich', n: 2 });
   });
 
+  it('options may carry a group and a detail, and the command a footer; nothing is added when they are absent', async () => {
+    const engine = await make({ extensions: [ext('x', { 'x:v': cmd({
+      label: 'Pick', keys: ['Mod-Alt-v'],
+      confirm: { strategy: 'choose', footer: () => 'hint', options: () => [{ id: 'a', label: 'A', group: 'G1', detail: '1.1' }, { id: 'b', label: 'B', group: 'G2' }, { id: 'c', label: 'C', group: '', detail: 3 }] },
+    }), 'x:w': cmd({ label: 'Plain', keys: ['Mod-Alt-w'], confirm: { strategy: 'choose', options: () => [{ id: 'p', label: 'P' }] } }) })] });
+    press(engine, 'v', { ctrlKey: true, altKey: true });
+    expect(engine.pendingCommand.options).toEqual([
+      { id: 'a', label: 'A', display: '', group: 'G1', detail: '1.1' },
+      { id: 'b', label: 'B', display: '', group: 'G2' },
+      { id: 'c', label: 'C', display: '' }, // an empty group and a non-string detail are dropped
+    ]);
+    expect(engine.pendingCommand.footer).toBe('hint');
+    press(engine, 'Escape');
+    press(engine, 'w', { ctrlKey: true, altKey: true });
+    expect(engine.pendingCommand.options).toEqual([{ id: 'p', label: 'P', display: '' }]);
+    expect(engine.pendingCommand.footer).toBe('');
+  });
+
   it('variants with no option: the key falls through', async () => {
     const engine = await make({ extensions: [ext('x', { 'x:v': cmd({ keys: ['Mod-Alt-v'], confirm: { strategy: 'choose', options: () => [] } }) })] });
     const event = press(engine, 'v', { ctrlKey: true, altKey: true });

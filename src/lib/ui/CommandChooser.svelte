@@ -10,6 +10,20 @@
   const uid = $props.id();
   const pending = $derived(engine.pendingCommand?.strategy === 'choose' ? engine.pendingCommand : null);
 
+  // Options are shown in order; consecutive options with the same `group` share one small header (`group` is optional: options
+  // without one stay as they are). `i` is the position in the whole list, which is what digits and arrows count.
+  const sections = $derived.by(() => {
+    /** @type {{ group: string | null, items: Array<{ option: import('../utils/command-confirm.svelte.js').PendingOption, i: number }> }[]} */
+    const out = [];
+    (pending?.options ?? []).forEach((option, i) => {
+      const group = option.group || null;
+      const last = out[out.length - 1];
+      if (last && last.group === group) last.items.push({ option, i });
+      else out.push({ group, items: [{ option, i }] });
+    });
+    return out;
+  });
+
   /** @type {HTMLElement | null} */
   let el = $state(null);
   /** @type {import('./anchor.js').Placement} */
@@ -35,6 +49,24 @@
   });
 </script>
 
+{#snippet row(/** @type {import('../utils/command-confirm.svelte.js').PendingOption} */ option, /** @type {number} */ i)}
+  <div
+    id="{uid}-{i}"
+    class="nabu-command-option"
+    class:active={i === pending?.selectedIndex}
+    role="option"
+    aria-selected={i === pending?.selectedIndex}
+    tabindex="-1"
+    onmousedown={(e) => { e.preventDefault(); engine.commandConfirm.choose(i); }}
+    onmouseenter={() => engine.commandConfirm.highlight(i)}
+  >
+    <span class="nabu-command-option-index">{i + 1}</span>
+    <span class="nabu-command-option-label">{option.label}</span>
+    {#if option.detail}<span class="nabu-command-option-detail">{option.detail}</span>{/if}
+    {#if option.display}<kbd class="nabu-command-option-display">{option.display}</kbd>{/if}
+  </div>
+{/snippet}
+
 {#if pending}
 <div
   bind:this={el}
@@ -50,22 +82,17 @@
   style:left="{pos.left}px"
   style:max-height="{pos.maxHeight}px"
 >
-  {#each pending.options ?? [] as option, i (option.id)}
-    <div
-      id="{uid}-{i}"
-      class="nabu-command-option"
-      class:active={i === pending.selectedIndex}
-      role="option"
-      aria-selected={i === pending.selectedIndex}
-      tabindex="-1"
-      onmousedown={(e) => { e.preventDefault(); engine.commandConfirm.choose(i); }}
-      onmouseenter={() => engine.commandConfirm.highlight(i)}
-    >
-      <span class="nabu-command-option-index">{i + 1}</span>
-      <span class="nabu-command-option-label">{option.label}</span>
-      {#if option.display}<kbd class="nabu-command-option-display">{option.display}</kbd>{/if}
-    </div>
+  {#each sections as section, s (s)}
+    {#if section.group}
+      <div class="nabu-command-section" role="group" aria-label={section.group}>
+        <div class="nabu-command-group" aria-hidden="true">{section.group}</div>
+        {#each section.items as { option, i } (option.id)}{@render row(option, i)}{/each}
+      </div>
+    {:else}
+      {#each section.items as { option, i } (option.id)}{@render row(option, i)}{/each}
+    {/if}
   {/each}
+  {#if pending.footer}<div class="nabu-command-footer" aria-hidden="true">{pending.footer}</div>{/if}
 </div>
 {/if}
 
@@ -99,6 +126,28 @@
   border: 1px solid var(--nb-command-border, var(--nb-border, rgba(255,255,255,0.12)));
   border-radius: 4px;
 }
-.nabu-command-option-label { flex: 1; }
+.nabu-command-option-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.nabu-command-option-detail {
+  flex-shrink: 0; margin-left: auto; padding-left: 12px;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+  color: var(--nb-command-muted, var(--nb-text-secondary, rgba(255,255,255,0.5)));
+}
+/* Group headers and the footer hint (optional `group` of the options, `confirm.footer`). */
+.nabu-command-group {
+  padding: 8px 8px 3px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--nb-command-muted, var(--nb-text-secondary, rgba(255,255,255,0.5)));
+  user-select: none;
+}
+.nabu-command-section:first-child > .nabu-command-group { padding-top: 4px; }
+.nabu-command-footer {
+  position: sticky; bottom: -4px;
+  margin: 4px -4px -4px; padding: 6px 12px 7px;
+  background: var(--nb-command-bg, var(--nb-bg-surface, #1a1a1a));
+  border-top: 1px solid var(--nb-command-border, var(--nb-border, rgba(255,255,255,0.12)));
+  font-size: 11.5px;
+  color: var(--nb-command-muted, var(--nb-text-secondary, rgba(255,255,255,0.5)));
+  user-select: none;
+}
 .nabu-command-option-display { font: inherit; font-size: 11px; color: var(--nb-command-muted, var(--nb-text-secondary, rgba(255,255,255,0.5))); }
 </style>

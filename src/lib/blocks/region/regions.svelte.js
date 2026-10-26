@@ -107,8 +107,36 @@ export class Regions {
     /** @type {Nabu} */ #nabu;
     /** @type {RegionsConfig} */ #config;
 
+    /** Whether the editor of this registry holds the focus (set by `focusin` / `focusout`, see {@link Regions#start}). */
+    #focused = $state(false);
+    /** @type {(() => void) | null} */
+    #stopFocus = null;
+
     /** @param {Nabu} nabu @param {RegionsConfig} config */
     constructor(nabu, config) { this.#nabu = nabu; this.#config = config; }
+
+    /**
+     * System hook (`nabu.systems`, called when the editor mounts): follows the focus of the editor, for {@link Regions#caret}.
+     * Idempotent.
+     */
+    start() {
+        if (this.#stopFocus || typeof document === 'undefined') return;
+        /** @param {EventTarget | null} target */
+        const inEditor = (target) => target instanceof Element && !!target.closest('[data-nabu-root]');
+        const onIn = (/** @type {FocusEvent} */ e) => { this.#focused = inEditor(e.target); };
+        const onOut = (/** @type {FocusEvent} */ e) => { this.#focused = inEditor(e.relatedTarget); }; // no related target: the focus left the page or went nowhere
+        document.addEventListener('focusin', onIn);
+        document.addEventListener('focusout', onOut);
+        this.#focused = inEditor(document.activeElement);
+        this.#stopFocus = () => { document.removeEventListener('focusin', onIn); document.removeEventListener('focusout', onOut); };
+    }
+
+    /** System hook: stops following the focus. */
+    stop() {
+        this.#stopFocus?.();
+        this.#stopFocus = null;
+        this.#focused = false;
+    }
 
     /**
      * @param {Nabu} nabu
@@ -198,6 +226,13 @@ export class Regions {
         }
         return null;
     }
+
+    /**
+     * The region that shows the caret: the DEEPEST region holding the selection anchor (a title counts), only while the editor has
+     * the focus. `null` otherwise. Reactive; computed once for all the regions (each `Region.svelte` compares itself to it).
+     * @type {Region | null}
+     */
+    caret = $derived.by(() => (this.#focused ? this.at() : null));
 
     /** The region of a region block. @param {Block | string} block @returns {Region | null} */
     of(block) {

@@ -19,16 +19,22 @@
  * and the region follows it. A region that takes nothing gets one empty default paragraph. One undo step; the caret lands in
  * the title.
  *
+ * The chooser (`createOptions`) shows the two lists as two GROUPS ("Here", "Next"), each option with the numbering prefix the new
+ * region would get (`previewPrefix`, computed from the registry's numbering rules as if it were created there).
+ *
  * @import { Nabu } from "../nabu.svelte.js";
  * @import { Block } from "../block.svelte.js";
  * @import { Region } from "./regions.svelte.js";
  * @import { RegionTypeDef } from "./types.js";
+ * @import { createMessages } from "./messages.js";
  */
 
 import { tick } from "svelte";
 import { Regions } from "./regions.svelte.js";
 import { createRegion } from "./insert.js";
 import { createDefaultBlock, defaultType, kids, parentIdOf } from "./actions.js";
+import { siblingsOf } from "./facts.js";
+import { formatLabel } from "./types.js";
 
 /**
  * Where a region could be created from `block`: `{ parent }` (the region whose body holds it, `null` for the root), or `null`
@@ -69,6 +75,82 @@ export function defaultTypeAt(nabu, parent) {
     return (pick(here, 1) ?? pick(next, -1))?.id ?? regions.config.defaultType;
 }
 
+/**
+ * The region after which a `next` type (not nestable in `parent`) is created as a sibling: the nearest ancestor region (`parent`
+ * included) whose own parent accepts the type (the root, or a region of a shallower level).
+ * @param {Region} parent @param {RegionTypeDef} def
+ * @returns {Region}
+ */
+export function siblingAnchor(parent, def) {
+    let ancestor = parent;
+    while (ancestor.parent && ancestor.parent.level >= def.level) ancestor = ancestor.parent;
+    return ancestor;
+}
+
+/** The position of a block in the document, as the indexes from the root down (ancestors are prefixes). @param {Nabu} nabu @param {Block} block @returns {number[]} */
+function docPath(nabu, block) {
+    /** @type {number[]} */ const out = [];
+    /** @type {Block | null} */ let b = block;
+    while (b) { out.unshift(siblingsOf(nabu, b).indexOf(b)); b = /** @type {Block | null} */ (b.parent); }
+    return out;
+}
+
+/** Whether `a` is before `b` in document order, an ancestor of `b` included. @param {number[]} a @param {number[]} b */
+function startsBefore(a, b) {
+    for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] < b[i];
+    return a.length <= b.length;
+}
+
+/**
+ * The numbering prefix a region of type `def` would get if it were created from `block` inside `parent` (`null` = the root): the
+ * label template of the type applied with an empty title, with the index the registry's numbering rule would give it ("2.1", "3.",
+ * "Chapter 4"). Empty when the type has nothing to show (unnumbered, label made of the title). Pure: reads the tree, changes nothing.
+ *
+ * A nestable type goes into the body of `parent`, at the caret block; any other becomes the sibling of {@link siblingAnchor}, and
+ * takes everything that follows the caret, so in both cases it starts at the caret in document order.
+ * @param {Nabu} nabu @param {RegionTypeDef} def @param {Block} block  the caret block @param {Region | null} parent
+ * @returns {string}
+ */
+export function previewPrefix(nabu, def, block, parent) {
+    const nested = !parent || def.level > parent.level;
+    const anchor = nested ? block : siblingAnchor(/** @type {Region} */ (parent), def).block;
+    const container = nested ? parent : siblingAnchor(/** @type {Region} */ (parent), def).parent;
+    /** @type {number | null} */
+    let index = null;
+    if (def.numbering === 'document') {
+        const at = docPath(nabu, block);
+        index = 1 + Regions.get(nabu).list.filter((r) => r.type === def.id && startsBefore(docPath(nabu, r.block), at)).length;
+    } else if (def.numbering === 'parent') {
+        const siblings = siblingsOf(nabu, anchor);
+        index = 1 + siblings.slice(0, siblings.indexOf(anchor) + 1).filter((b) => b.type === 'region' && /** @type {any} */ (b).regionType === def.id).length;
+    }
+    const path = [...(container ? container.path : []), ...(index == null ? [] : [index])].join('.');
+    return formatLabel(def.label, { index, path, title: '', type: def.id, level: def.level });
+}
+
+/**
+ * The options of the `region:create` chooser at a place, in two groups. "Here" holds the types created inside the body (every type
+ * at the root); "Next" the sibling entries, the current region's own type first (the commonest intent). Each option carries the
+ * prefix the new region would get as its `detail`. A group with no entry is absent (so there is no "Next" at the root).
+ * @param {Nabu} nabu @param {Block} block  the caret block @param {Region | null} parent
+ * @param {ReturnType<typeof createMessages>} text  the region messages (`createMessages`)
+ * @returns {Array<{ id: string, type: string, label: string, group: string, detail: string }>}
+ */
+export function createOptions(nabu, block, parent, text) {
+    const { here, next } = regionChoices(nabu, parent);
+    const own = parent?.type;
+    const ordered = [...next.filter((def) => def.id === own), ...next.filter((def) => def.id !== own)];
+    /** @param {RegionTypeDef[]} defs @param {'createOption' | 'createNext'} message @param {string} group */
+    const list = (defs, message, group) => defs.map((def) => ({
+        id: def.id,
+        type: def.id,
+        label: text(message, { name: def.name, type: def.id }),
+        group,
+        detail: previewPrefix(nabu, def, block, parent),
+    }));
+    return [...list(here, 'createOption', text('groupHere')), ...list(ordered, 'createNext', text('groupNext'))];
+}
+
 /** Whether the creation REPLACES `block`: an empty default paragraph, or one holding only the typed `:::` trigger. @param {Nabu} nabu @param {Block} block */
 function isReplaceable(nabu, block) {
     if (block.type !== defaultType(nabu) || /** @type {any} */ (block).children?.length) return false;
@@ -103,9 +185,7 @@ export async function createRegionHere(nabu, block, type) {
             created = createRegion(nabu, { type: id, parentId: parent?.block.id ?? null, index });
             createDefaultBlock(nabu, {}, created.id, 0);
         } else {
-            /** @type {Region} */
-            let ancestor = /** @type {Region} */ (parent);
-            while (ancestor.parent && ancestor.parent.level >= def.level) ancestor = ancestor.parent;
+            const ancestor = siblingAnchor(/** @type {Region} */ (parent), def);
             /** The siblings that follow `node` in its parent. @param {import("../nabu.svelte.js").NabuNode} node */
             const after = (node) => { const all = kids(/** @type {any} */ (node.parent())); return all.slice(all.findIndex((n) => n.id === node.id) + 1); };
             const followers = after(block.node);

@@ -12,6 +12,15 @@
  */
 
 /**
+ * @typedef {Object} RegionNameParams
+ * @property {string} name  the region named for a reader: its numbering prefix ("1.2"), else its title, else the name of its type
+ * @property {string} prefix  its numbering prefix ("1.2"; may be empty)
+ * @property {string} title  its plain-text title (may be empty)
+ * @property {string} label  its computed label ("1.2 The bank"; may be empty)
+ * @property {string} type  its type id
+ */
+
+/**
  * @typedef {Object} RegionTypeParams
  * @property {string} name  the readable name of the type (its `name`, else its id)
  * @property {string} type  its type id
@@ -41,6 +50,14 @@
  * @property {string | ((p: RegionTypeParams) => string)} [createNext]  entry for a type created as a SIBLING after the current region ("Next section")
  * @property {string | ((p: RegionTypeParams) => string)} [slash]  title of the slash-menu entry of a type ("Section")
  * @property {string | (() => string)} [untitled]  placeholder of an empty title (ADR 018)
+ * @property {string | (() => string)} [groupHere]  header of the chooser group of the types created INSIDE the current region (or at the root) ("Here")
+ * @property {string | (() => string)} [groupNext]  header of the chooser group of the sibling entries ("Next")
+ * @property {string | (() => string)} [chooserFooter]  hint under the chooser ("↑↓ choose · ↵ create · Esc cancel")
+ * @property {string | ((p: RegionNameParams) => string)} [endOf]  first half of the end marker, drawn after a region that is followed by
+ *   text of its parent ("End of 1.2"). `p.name` is the prefix, else the title, else the type name.
+ * @property {string | ((p: RegionNameParams) => string)} [backTo]  second half of the end marker when the parent is a region ("back to 1. The ferryman");
+ *   `p` describes the PARENT region (`p.name` is its label)
+ * @property {string | (() => string)} [outside]  second half of the end marker when the parent is the root ("outside regions")
  * @property {string | ((p: { keys: string, label: string }) => string)} [hold]  the prompt of a protected merge ("Hold ⌫ to merge with “…”"):
  *   shown above the seam and announced to screen readers
  */
@@ -67,6 +84,12 @@ export const DEFAULT_REGION_MESSAGES = {
     createOption: ({ name }) => name,
     createNext: ({ name }) => `Next ${name.charAt(0).toLowerCase()}${name.slice(1)}`,
     slash: ({ name }) => name,
+    groupHere: 'Here',
+    groupNext: 'Next',
+    chooserFooter: '↑↓ choose · ↵ create · Esc cancel',
+    endOf: ({ name }) => `End of ${name}`,
+    backTo: ({ name }) => `back to ${name}`,
+    outside: 'outside regions',
     untitled: 'Untitled',
     hold: ({ keys, label }) => `Hold ${keys} to ${label.charAt(0).toLowerCase()}${label.slice(1)}`,
 };

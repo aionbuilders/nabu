@@ -52,6 +52,9 @@ export const REAL_CLOCK = {
  * @property {string} id  the command id (a tie) or the variant id (explicit `choose`)
  * @property {string} label
  * @property {string} display  shortcut (a tie) or hint (explicit `choose`) to show next to the label; may be empty
+ * @property {string} [group]  explicit `choose` only: the title of the group the option belongs to. Consecutive options with the
+ *   same `group` are shown under one small header; options without one stay ungrouped.
+ * @property {string} [detail]  explicit `choose` only: a short muted text shown right-aligned in the option (a number, a hint)
  */
 export class PendingCommand {
     /**
@@ -63,8 +66,9 @@ export class PendingCommand {
      * @param {string} init.message
      * @param {any} [init.target]
      * @param {PendingOption[]} [init.options]
+     * @param {string} [init.footer]
      */
-    constructor({ id, strategy, label, display, message, target, options }) {
+    constructor({ id, strategy, label, display, message, target, options, footer }) {
         /** command id (`choose:<chord>` for a tie) */
         this.id = id;
         this.strategy = strategy;
@@ -78,6 +82,8 @@ export class PendingCommand {
         this.target = target;
         /** `choose` only */
         this.options = options;
+        /** `choose` only: a short hint shown under the options (`confirm.footer`); empty when none */
+        this.footer = footer ?? '';
         /** `hold`: 0 → 1 over `holdMs` */
         this.progress = $state(0);
         /** `choose`: the highlighted option */
@@ -144,7 +150,7 @@ export function commandTargetElement(target) {
  * @property {number} startedAt
  * @property {number} ms  `hold`: duration; `invite`: timeout
  * @property {(() => void) | null} stopTimer
- * @property {Array<{ id: string, label: string, display: string, run: () => void }>} [choices]  `choose`
+ * @property {Array<{ id: string, label: string, display: string, group?: string, detail?: string, run: () => void }>} [choices]  `choose`
  * @property {{ selection: [Node | null, number, Node | null, number] } | null} dom  selection when it started
  */
 
@@ -313,16 +319,21 @@ export class CommandConfirmation {
             id: String(option?.id ?? i),
             label: String(option?.label ?? option?.id ?? i),
             display: typeof option?.display === 'string' ? option.display : '',
+            group: typeof option?.group === 'string' && option.group ? option.group : undefined,
+            detail: typeof option?.detail === 'string' && option.detail ? option.detail : undefined,
             run: () => this.#runEntry(entry, ctx, event, option),
         }));
-        return this.#openChooser(entry.id, choices, ctx, event, info, chord, display, entry, this.#labelOf(entry, ctx));
+        let footer = '';
+        try { footer = String(typeof confirm.footer === 'function' ? confirm.footer(ctx) ?? '' : confirm.footer ?? ''); }
+        catch (error) { this.#nabu.warn(`commands: confirm.footer of "${entry.id}" failed: ${error}`); }
+        return this.#openChooser(entry.id, choices, ctx, event, info, chord, display, entry, this.#labelOf(entry, ctx), footer);
     }
 
-    #openChooser(/** @type {string} */ id, /** @type {Session['choices']} */ choices, /** @type {CommandContext} */ ctx, /** @type {KeyboardEvent | null} */ event, /** @type {any} */ info, /** @type {string} */ chord, /** @type {string} */ display, /** @type {CommandEntry | undefined} */ entry, /** @type {string | undefined} */ label) {
-        const options = /** @type {NonNullable<Session['choices']>} */ (choices).map(({ id, label, display }) => ({ id, label, display }));
+    #openChooser(/** @type {string} */ id, /** @type {Session['choices']} */ choices, /** @type {CommandContext} */ ctx, /** @type {KeyboardEvent | null} */ event, /** @type {any} */ info, /** @type {string} */ chord, /** @type {string} */ display, /** @type {CommandEntry | undefined} */ entry, /** @type {string | undefined} */ label, /** @type {string} */ footer = '') {
+        const options = /** @type {NonNullable<Session['choices']>} */ (choices).map(({ id, label, display, group, detail }) => ({ id, label, display, ...(group ? { group } : {}), ...(detail ? { detail } : {}) }));
         const local = /** @type {any} */ (entry?.def.confirm)?.messages;
         const message = this.#text('choose', { keys: display, label: label ?? '', options }, local);
-        const pending = new PendingCommand({ id, strategy: 'choose', label: label ?? message, display, message, options });
+        const pending = new PendingCommand({ id, strategy: 'choose', label: label ?? message, display, message, options, footer });
         const session = this.#open(pending, entry ?? null, ctx, chord, info, event);
         session.choices = choices;
         session.ms = this.#inviteMs;
