@@ -13,6 +13,7 @@ import { CommandRegistry } from '../utils/commands.js';
 import { CommandConfirmation } from '../utils/command-confirm.svelte.js';
 import { normalizePlaceholders } from '../utils/placeholders.js';
 import { normalizeLang } from '../utils/spellcheck.js';
+import { resolveTabMode, handleTabKey, isModifierKey, DEFAULT_TAB_HINT } from '../utils/tab.js';
 import { moveBlocks } from './move.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection } from './undo-selection.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
@@ -43,6 +44,17 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 * @property {string} [lang] - Language of the content, a BCP 47 tag (`'fr'`, `'en-GB'`). Set on the root as `lang`, so the browser's
 *   spellchecker, hyphenation and screen readers use it. Unset: inherits the page language. An invalid tag is ignored (warning).
 *   Reactive: `nabu.lang`.
+* @property {'focus' | 'stay' | 'indent'} [tab] - What Tab / Shift+Tab do in a plain text block, where no block handles them
+*   structurally (list indent, code indentation and region titles keep their own meaning, whatever this says; P-41).
+*   `'focus'`: the browser default, Tab leaves the editor. `'stay'`: both keys are swallowed and the caret stays; Escape then Tab
+*   leaves (announced to screen readers, see `tabHint`). `'indent'`: Tab inserts a tab character at the caret (replacing a selection
+*   inside one block), Shift+Tab removes one right before it; several blocks selected: like `'stay'`. `'nest'` is planned, not
+*   implemented. Default: `tabDefault` (the factories of `presets.js` set it from the preset: Minimal / Text `'focus'`, Document /
+*   Full `'stay'`), else `'focus'`. An unknown value warns and uses the default. Reactive: `nabu.tab`.
+* @property {'focus' | 'stay' | 'indent'} [tabDefault] - The mode used when `tab` is unset or invalid. Meant for the preset factories.
+* @property {string | false} [tabHint] - Text announced on the editor root (`aria-description`) while `tab` traps the focus
+*   (`'stay'`, `'indent'`): default `"Press Escape then Tab to leave the editor"`; translate it here, `false` for none.
+*   Reactive: `nabu.tabHint`.
 * @property {Record<string, string[]>} [keymap] - Replaces the keyboard shortcuts of commands (ADR 017): `{ 'mark:bold': ['Mod-Alt-b'] }`;
 *   `[]` disables a command's keys. Chords: see `utils/keys.js`; the same checks as for a declared key apply (reserved chords,
 *   a key without modifier needs the command's `when`).
@@ -173,6 +185,9 @@ export class Nabu {
         this.placeholders = normalizePlaceholders(init.placeholders);
         this.spellcheck = init.spellcheck !== false;
         this.lang = init.lang;
+        this.#tabDefault = resolveTabMode(init.tabDefault, 'focus', (message) => this.warn(message));
+        this.tab = init.tab;
+        if (typeof init.tabHint === 'string' || init.tabHint === false) this.tabHint = init.tabHint;
 
         /**
          * Commands and keyboard shortcuts (ADR 017): `list()`, `get(id)`, `run(id, data)`. A plain snapshot API, the set of
@@ -395,6 +410,36 @@ export class Nabu {
         if (!valid) { this.warn(`Ignoring invalid "lang" (not a BCP 47 tag): ${String(value)}`); return; }
         this.#lang = lang;
     }
+
+    /** @type {import('../utils/tab.js').TabMode} */
+    #tabDefault = 'focus';
+
+    /** @type {import('../utils/tab.js').TabMode} */
+    #tab = $state.raw('focus');
+
+    /**
+     * Resolved `tab` option (see NabuInit): what Tab / Shift+Tab do in a plain text block. Reactive: assign to change it at runtime;
+     * an unknown value warns and gives the default of the editor (its preset).
+     * @type {import('../utils/tab.js').TabMode}
+     */
+    get tab() { return this.#tab; }
+    /** @param {unknown} value */
+    set tab(value) { this.#tab = resolveTabMode(value, this.#tabDefault, (message) => this.warn(message)); }
+
+    /**
+     * Announcement of the Escape-then-Tab way out (option `tabHint`), `false` for none. Reactive.
+     * @type {string | false}
+     */
+    tabHint = $state.raw(DEFAULT_TAB_HINT);
+
+    /** What the editor root exposes as `aria-description`: the hint, only while the mode keeps the focus in. */
+    get tabDescription() { return this.#tab !== 'focus' && this.tabHint ? this.tabHint : undefined; }
+
+    /** An Escape nobody consumed was the previous key: the next Tab / Shift+Tab leaves the editor (see `utils/tab.js`). */
+    #tabEscaped = false;
+
+    /** Close the Escape-then-Tab way out (any other key, a click, the focus leaving). */
+    rearmTab() { this.#tabEscaped = false; }
 
     /**
      * Pending inline formatting for the next typed character (active marks at a
@@ -897,6 +942,7 @@ export class Nabu {
      * @param {MouseEvent} e
      */
     handleMousedown(e) {
+        this.rearmTab();
         if (e.button !== 0 || e.defaultPrevented || e.target !== e.currentTarget) return;
         const last = this.lastVisibleBlock;
         const lastEl = /** @type {HTMLElement | null} */ (last?.element);
@@ -1084,12 +1130,19 @@ export class Nabu {
     handleKeydown(e) {
         this.selection.sync(); // no-op when the document capture listener already synced
         this.selection.normalize();
+        // The Escape-then-Tab way out of the `tab` option (utils/tab.js): any key but a lone modifier closes it, whoever handles the key.
+        const escaped = this.#tabEscaped;
+        if (!isModifierKey(e)) this.#tabEscaped = false;
         // Commands first (ADR 017): undo / redo and every declared shortcut. What no command handles falls through to the
         // legacy `onKeyDown` hooks and the block's own keydown, then to the native behavior.
         if (this.commands.handleKeydown(e)) return;
         if (this.#selectAll(e) || this.#landOnIsolated(e)) return;
 
         this.dispatchEventToSelection('keydown', e, 'onKeyDown');
+        // Tab / Shift+Tab that no command, hook or block took: the `tab` option decides (structural meanings come first).
+        if (handleTabKey(this, e, escaped)) return;
+        // An Escape that nothing consumed (slash menu, chooser, pending command, a block…) opens the way out for the next Tab.
+        if (e.key === 'Escape' && !e.defaultPrevented && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) this.#tabEscaped = true;
     }
 
     /**

@@ -188,6 +188,25 @@ nabu.lang = 'en-GB';
 - Privacy: Chrome's enhanced spell check may send the text you type to Google. If your integrators handle sensitive documents, set `spellcheck: false`.
 - Browser extensions such as Grammarly inject their own DOM into editable areas. This is not supported; the opt-out attributes above are only a hint, set when spellcheck is off.
 
+### Tab key & paragraph indent
+
+```js
+createFullEditor({ tab: 'stay' });     // 'focus' | 'stay' | 'indent'
+nabu.tab = 'indent';                    // reactive at runtime
+createFullEditor({ tabHint: 'Échap puis Tab pour sortir' });   // announcement text (or false)
+```
+
+Tab keeps its **structural** meaning wherever a block handles it (list indent / outdent, code indentation, region title promote / demote), whatever the option. In a **plain text block**, where nothing structural takes the key, `tab` decides:
+
+- `'focus'`: the browser default, Tab leaves the editor (like a `<textarea>`).
+- `'stay'`: Tab and Shift+Tab are swallowed and the caret stays. **Escape then Tab** (or Shift+Tab) leaves the editor: after an Escape that nothing consumed (a slash menu, a chooser or a pending command takes its own Escape), the next Tab is left to the browser; any other key or a click closes that way out again. The root carries an `aria-description` ("Press Escape then Tab to leave the editor", option `tabHint`, `false` for none).
+- `'indent'`: Tab inserts a tab character (`\t`) at the caret, replacing a selection inside one block; Shift+Tab removes one `\t` right before the caret, else does nothing (and does not leave). A selection spanning several blocks behaves like `'stay'`. Same Escape-then-Tab way out and announcement as `'stay'`, so the editor is never a keyboard trap.
+- `'nest'` (Notion-style nesting) is planned, not implemented: it warns and falls back to the default.
+
+Default by preset: `createMinimalEditor` / `createTextEditor` `'focus'`; `createDocumentEditor` / `createFullEditor` (and `createEditor` with its default preset) `'stay'`; a bare `new Nabu(...)` or a custom preset array `'focus'`. An explicit `tab` always wins. Structural Tab handlers run first; the option applies only to a Tab that nothing handled (`src/lib/utils/tab.js`).
+
+**Paragraph indent** (the "alinéa") is layout, not content: set the CSS variable `--nb-paragraph-indent` (default `0`, e.g. `1.5em`) on any ancestor of the editor. It becomes the `text-indent` of paragraph blocks, except (classic typographic rule) the first block of the document, of a region body or of any container, and a paragraph right after a heading or a divider.
+
 ## Extensions
 
 All block types and behaviors are provided as extensions. Pass them to the `Nabu` constructor:

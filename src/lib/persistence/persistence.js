@@ -1,5 +1,5 @@
 import { Nabu } from '../blocks/nabu.svelte.js';
-import { FullPreset } from '../presets.js';
+import { FullPreset, tabDefaultFor } from '../presets.js';
 import { Files } from '../files/files.svelte.js';
 import { loadSnapshot, saveSnapshot, deleteSnapshot } from './indexeddb.js';
 import { IndexedDBAssetStore } from './asset-store.js';
@@ -86,6 +86,7 @@ export async function createPersistedEditor({
 	/** @param {Uint8Array | null} snapshot */
 	const build = (snapshot) => {
 		const nabu = new Nabu({
+			tabDefault: tabDefaultFor(preset),
 			...init,
 			files: { ...init.files, store, outbox },
 			extensions: [...preset, ...extensions],

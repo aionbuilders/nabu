@@ -3,6 +3,14 @@
  * State-of-the-art Semantic Design Tokens for UI Modularity
  */
 
+/*
+ * Layout variables that are NOT defined here (their default lives next to the rule that reads them; set them on any ancestor
+ * of the editor):
+ *   --nb-paragraph-indent   first-line indent of paragraphs (the "alinéa"), default 0, e.g. 1.5em. Applied as `text-indent`
+ *                           to every paragraph EXCEPT the first block of the document / of a region / of a container, and
+ *                           the paragraph right after a heading or a divider (typographic rule: no indent there).
+ */
+
 :root, [data-nabu-theme="light"] {
     /* UI Backgrounds */
     --nb-bg-surface: hsla(0, 0%, 100%, 0.85); /* Light glass */

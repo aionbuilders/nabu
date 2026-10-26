@@ -34,6 +34,21 @@ export const FullPreset =     [
     ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension, ImageExtension, VideoExtension, FileExtension, ListExtension, ListItemExtension, DialogueExtension, RegionsExtension(), RichTextExtension, TypographyExtension, MarkdownShortcutsExtension, PlainTextPasteExtension, HtmlPasteExtension, MarkdownPasteExtension, NabuPasteExtension, BlockExtension,
 ];
 
+/**
+ * Default `tab` option of each preset (P-41): what Tab / Shift+Tab do in a plain text block. Small editors (comment box,
+ * description) let Tab leave like a `<textarea>`; document editors keep the caret and offer Escape then Tab to leave.
+ * An explicit `tab` option always wins; a preset that is not listed (custom array) gets `'focus'`.
+ * @type {Map<unknown, 'focus' | 'stay' | 'indent'>}
+ */
+const TAB_DEFAULTS = new Map([[MinimalPreset, 'focus'], [TextPreset, 'focus'], [DocumentPreset, 'stay'], [FullPreset, 'stay']]);
+
+/**
+ * The default `tab` mode of a preset (see `TAB_DEFAULTS`).
+ * @param {unknown} preset
+ * @returns {'focus' | 'stay' | 'indent'}
+ */
+export const tabDefaultFor = (preset) => TAB_DEFAULTS.get(preset) ?? 'focus';
+
 // ---------------------------------------------------------------------------
 // Factory — generic createEditor
 // ---------------------------------------------------------------------------
@@ -48,6 +63,8 @@ export const FullPreset =     [
  * @param {import('./utils/placeholders.js').PlaceholdersOption} [options.placeholders] - Forwarded to Nabu
  * @param {boolean} [options.spellcheck] - Forwarded to Nabu (default `true`)
  * @param {string} [options.lang] - Forwarded to Nabu (BCP 47 tag of the content)
+ * @param {'focus' | 'stay' | 'indent'} [options.tab] - What Tab does in a plain text block (forwarded to Nabu). Default by preset:
+ *   Minimal / Text `'focus'`, Document / Full `'stay'` (the default preset is Full), a custom preset array `'focus'`.
  * @returns {Nabu}
  *
  * @example
@@ -56,7 +73,7 @@ export const FullPreset =     [
 export function createEditor({ preset = FullPreset, extensions = [], ...init } = {}) {
     // Forward any remaining Nabu init options (e.g. `files`, `snapshot`) so the
     // ergonomic factories expose the full constructor surface, not just extensions.
-    return new Nabu({ ...init, extensions: [...preset, ...extensions] });
+    return new Nabu({ tabDefault: tabDefaultFor(preset), ...init, extensions: [...preset, ...extensions] });
 }
 
 // ---------------------------------------------------------------------------

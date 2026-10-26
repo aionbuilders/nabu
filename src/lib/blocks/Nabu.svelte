@@ -30,6 +30,7 @@
     class="nabu-editor"
     spellcheck={engine.spellcheck ? 'true' : 'false'}
     lang={engine.lang}
+    {...(engine.tabDescription ? { 'aria-description': engine.tabDescription } : {})}
     data-gramm={engine.spellcheck ? undefined : 'false'}
     data-gramm_editor={engine.spellcheck ? undefined : 'false'}
     data-enable-grammarly={engine.spellcheck ? undefined : 'false'}
@@ -39,6 +40,7 @@
     onbeforeinput={(e) => engine.handleBeforeinput(e)}
     onkeydown={(e) => engine.handleKeydown(e)}
     onmousedown={(e) => engine.handleMousedown(e)}
+    onfocusout={() => engine.rearmTab()}
     oncopy={(e) => engine.handleCopy(e)}
     oncut={(e) => engine.handleCut(e)}
     onpaste={(e) => engine.handlePaste(e)}
@@ -94,6 +96,19 @@
     }
     @media (prefers-reduced-motion: no-preference) {
         .nabu-editor :global([data-command-target]) { transition: outline-color 0.1s; }
+    }
+
+    /* Paragraph indent (the French "alinéa") is LAYOUT, not content: --nb-paragraph-indent (default 0, so nothing changes until a
+       host sets it, e.g. `--nb-paragraph-indent: 1.5em`) becomes the text-indent of every paragraph, EXCEPT by the classic
+       typographic rule the first one of a text: the first block of the document, of a region body, of any container (:first-child),
+       and the one right after a heading or a divider. (A region seam is not a sibling of its body: the body's first block is
+       :first-child.) Sibling selectors on the existing markup only, no class, no model. */
+    .nabu-editor :global([data-block-type='paragraph']) {
+        text-indent: var(--nb-paragraph-indent, 0);
+    }
+    .nabu-editor :global([data-block-type='paragraph']:first-child),
+    .nabu-editor :global(:is([data-block-type='heading'], [data-block-type='divider']) + [data-block-type='paragraph']) {
+        text-indent: 0;
     }
 
     /* A selection across several blocks leaves out the blocks that isolate their text (a region title, ADR 018 §3.9): the model
