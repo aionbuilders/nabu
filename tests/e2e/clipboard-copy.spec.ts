@@ -14,7 +14,7 @@
  *  C. cut (select-all, partial multi-block, nested lists)               D. collapsed caret
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, press } from './helpers/editor.js';
 import { undo, redo, selectAll } from './helpers/keyboard.js';
 import {

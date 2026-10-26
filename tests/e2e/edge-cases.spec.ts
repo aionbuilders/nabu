@@ -3,7 +3,7 @@
  * Empty document, boundary conditions, structural integrity
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, getRootBlockCount, getEditor,

@@ -4,7 +4,7 @@
  * FLAKY_RISK: clipboard APIs need explicit permissions
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, getRootBlockCount, getEditor, waitForBlockType,

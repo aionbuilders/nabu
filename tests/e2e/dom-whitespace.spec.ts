@@ -9,7 +9,8 @@
  * legitimately be made of spaces only. Empty text nodes ("") are Svelte anchors and are fine.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
+import { findPhantoms } from './helpers/dom-invariant.js';
 import { gotoEditor, clearAndReset, press, flushRender, getEditorText } from './helpers/editor.js';
 import { selectAll } from './helpers/keyboard.js';
 import { buildTree, Pp, Tog, Hr, Code, type TreeSpec } from './helpers/blocks.js';
@@ -45,29 +46,6 @@ const EVERYTHING: TreeSpec[] = [
   S1('Region two', Pp('in two')),
   Pp('The end'),
 ];
-
-/** Whitespace-only text nodes of the editor that are NOT part of a block's own text. Returns a readable path for each. */
-function findPhantoms(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const root = document.querySelector('[data-nabu-root]')!;
-    const OWN_TEXT = '.nabu-bold, .nabu-italic, .nabu-underline, .nabu-strikethrough, .nabu-code, a.nabu-link, pre, code, ' +
-      '.item-content, .nabu-region-title, .nabu-callout-body, .nabu-toggle-header, ' +
-      '[data-block-type="paragraph"], [data-block-type="heading"], [data-block-type="blockquote"], [data-block-type="dialogue"]';
-    const label = (el: Element) => el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\s+/).join('.') : '');
-    const out: string[] = [];
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const data = (n as Text).data;
-      if (data === '' || data.trim() !== '') continue;
-      const parent = n.parentElement!;
-      if (parent.closest(OWN_TEXT)) continue;
-      const path: string[] = [];
-      for (let e: Element | null = parent; e && e !== root; e = e.parentElement) path.unshift(label(e));
-      out.push(`${JSON.stringify(data)} in ${path.join(' > ')}`);
-    }
-    return out;
-  });
-}
 
 async function holdBackspace(page: Page, text: string) {
   await focusAt(page, text, 0);

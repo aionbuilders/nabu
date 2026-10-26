@@ -7,7 +7,7 @@
  * head of the start block + tail of the end block merged at the caret, one undo step that restores everything.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, press } from './helpers/editor.js';
 import { undo, redo, selectAll } from './helpers/keyboard.js';
 import {

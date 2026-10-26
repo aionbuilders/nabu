@@ -20,7 +20,7 @@
  *  Region seam  16 long titles WRAP (an editable title is never truncated), narrow viewport (375px)
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, press, flushRender } from './helpers/editor.js';
 import { undo, redo } from './helpers/keyboard.js';
 import { buildTree, Tog, Pp, tree, type TreeSpec } from './helpers/blocks.js';

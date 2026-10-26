@@ -3,7 +3,7 @@
  * Enter, adjacent-list merge, Tab, JSON round trip, and ordered-under-bullet adjacency.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, focusEditor, press, getJson } from './helpers/editor.js';
 import { pasteText, pasteHtml } from './helpers/clipboard.js';
 import { indent } from './helpers/keyboard.js';

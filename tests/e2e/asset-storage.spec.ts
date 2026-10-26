@@ -3,7 +3,7 @@
  * document. A persisted editor keeps showing its images after a reload, its snapshot stays small, the same bytes pasted
  * twice are ONE stored file, and a snapshot saved by the beta (bytes inside the Loro `assets` map) migrates on open.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { undo } from './helpers/keyboard.js';
 import { focusEmpty, collectErrors } from './helpers/model.js';
 

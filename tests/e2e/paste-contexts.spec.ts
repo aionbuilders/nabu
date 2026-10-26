@@ -19,7 +19,7 @@
  * Internal fragments are dispatched as a synthetic `paste` event; every test ends with Ctrl+Z / Ctrl+Y and no console error.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset } from './helpers/editor.js';
 import { undo, redo } from './helpers/keyboard.js';
 import { pressClip } from './helpers/clip-capture.js';

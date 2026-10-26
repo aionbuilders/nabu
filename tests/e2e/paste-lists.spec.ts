@@ -15,7 +15,7 @@
  * markdown / plain text go through the real Ctrl+V.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, getEditor } from './helpers/editor.js';
 import { pasteText } from './helpers/clipboard.js';
 import { undo, redo } from './helpers/keyboard.js';

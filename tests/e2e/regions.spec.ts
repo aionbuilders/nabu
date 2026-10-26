@@ -14,7 +14,7 @@
  * Clipboard paths: regions-clipboard.spec.ts. Drag of a seam / long titles: ui-components.spec.ts (3c, 16).
  */
 
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from './helpers/test.js';
 import { gotoEditor, clearAndReset, press, flushRender, focusEditor } from './helpers/editor.js';
 import { undo, bold } from './helpers/keyboard.js';
 import { cut, copy } from './helpers/clip-capture.js';

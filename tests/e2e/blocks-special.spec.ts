@@ -11,7 +11,7 @@
  *  A. Code (1-7)     B. Toggle (8-12d)     C. Divider (13-15)     D. Cross-block selection (16)
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, press, getMarkdown, getJson, flushRender } from './helpers/editor.js';
 import { undo, bold } from './helpers/keyboard.js';
 import { pasteText, pasteHtml } from './helpers/clipboard.js';

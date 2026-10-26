@@ -4,7 +4,7 @@
  * The copy-side escaping is covered by clipboard-copy.spec.ts (10b–10e).
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, focusEditor, getEditor } from './helpers/editor.js';
 import { pasteHtml } from './helpers/clipboard.js';
 import { buildBlocks, buildTree, Para, Pp, type TreeSpec } from './helpers/blocks.js';

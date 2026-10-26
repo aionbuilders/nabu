@@ -11,7 +11,7 @@
  *  - one undo restores the empty document; no console error.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { gotoEditor, clearAndReset, focusEditor } from './helpers/editor.js';

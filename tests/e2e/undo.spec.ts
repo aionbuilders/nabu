@@ -3,7 +3,7 @@
  * FLAKY_RISK: CRDT undo semantics may differ from linear undo
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, getRootBlockCount, getEditor,

@@ -14,7 +14,7 @@
  * an OUTCOME on the model/DOM. The one `waitForTimeout` (C4) is the UndoManager merge window.
  */
 
-import { test, expect, type Page, type FileChooser } from '@playwright/test';
+import { test, expect, type Page, type FileChooser } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor, press, flushRender, getJson, getBlocks, getRootBlockCount,
 } from './helpers/editor.js';

@@ -10,7 +10,7 @@
  * Assertions are on the MODEL (serialize('json') runs, getSelection) unless the DOM is the point.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor, getEditor, getBlock,
   typeText, press, getJson, getBlocks, getSelection, getRootBlockCount, exec,

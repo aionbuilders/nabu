@@ -10,7 +10,7 @@
  * `page.keyboard.*` calls back to back. Only the final assertions poll/read the model.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, focusEditor, getEditor, getBlock, getJson, getMarkdown } from './helpers/editor.js';
 
 type Summary = { type: string; props?: any; text: string; children?: Summary[] };

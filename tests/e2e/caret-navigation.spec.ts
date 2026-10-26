@@ -7,7 +7,7 @@
  * of travel, so every arrow press lands in a text block at once and the next keystroke is never swallowed.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, press } from './helpers/editor.js';
 import { undo } from './helpers/keyboard.js';
 import { caret, violations, focusAt, focusEnd, collectErrors } from './helpers/model.js';

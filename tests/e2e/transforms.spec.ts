@@ -3,7 +3,7 @@
  * block:transform exec action, transformTo API
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, waitForBlockType, getBlocks,

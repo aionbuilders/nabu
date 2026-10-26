@@ -4,7 +4,7 @@
  * on the same characters. Moving out of a container is NOT part of it (documented: indent / outdent for lists, drag for the rest).
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, press, flushRender } from './helpers/editor.js';
 import { undo, redo } from './helpers/keyboard.js';
 import { buildTree, Tog, Pp, tree } from './helpers/blocks.js';

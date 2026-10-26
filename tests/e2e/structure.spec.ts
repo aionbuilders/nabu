@@ -3,7 +3,7 @@
  * Arrow keys, cross-block cursor movement
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getEditor, getRootBlockCount,

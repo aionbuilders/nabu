@@ -3,7 +3,7 @@
  * Tab/Shift+Tab for indent/unindent, Enter to create items, empty item to exit
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, getRootBlockCount,

@@ -4,7 +4,7 @@
  * FLAKY_RISK: timing dependent
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, waitForEditor, getMarkdown, getEditor, getBlocks,
 } from './helpers/editor.js';

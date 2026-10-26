@@ -4,7 +4,7 @@
  * `nabu.commands.list()` gives formatted shortcuts.
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import { gotoEditor, clearAndReset, focusEditor, typeText, press, getMarkdown, getJson } from './helpers/editor.js';
 import { bold, italic, undo, selectForward, goToStart } from './helpers/keyboard.js';
 

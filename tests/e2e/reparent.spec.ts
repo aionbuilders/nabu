@@ -6,7 +6,7 @@
  * has no `oldParent` (the root is not a node), so the root list was never refreshed and kept rendering the moved block.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, flushRender } from './helpers/editor.js';
 import { buildTree, Tog, Pp, tree } from './helpers/blocks.js';
 import { violations, outline } from './helpers/model.js';

@@ -3,7 +3,7 @@
  * Tests all registered actions via the Pulse-based exec system
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, waitForBlockType,

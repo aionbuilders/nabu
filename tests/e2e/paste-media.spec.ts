@@ -7,7 +7,7 @@
  * read from the ClipboardEvent (helpers/clip-capture.ts) and replayed as a synthetic `paste` on the other page.
  * The target editor can be given an in-memory host upload hook through the dev-only `?hostFiles=1|gated` option.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset } from './helpers/editor.js';
 import { undo, redo } from './helpers/keyboard.js';
 import { selectRange, focusEmpty, collectErrors } from './helpers/model.js';

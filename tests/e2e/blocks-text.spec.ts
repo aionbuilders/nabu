@@ -11,7 +11,7 @@
  *  A. Heading     B. Blockquote     C. Callout     D. Dialogue     E. Cross-block selection     F. Undo (one step)
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, press, getMarkdown, getJson } from './helpers/editor.js';
 import { undo, bold } from './helpers/keyboard.js';
 import { caret, expectValid, violations, focusAt, focusEnd, focusEmpty, selectRange, collectErrors } from './helpers/model.js';

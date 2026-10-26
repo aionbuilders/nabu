@@ -14,7 +14,7 @@
  * with `regionClip` (the payloads of the whole regions, built from the model).
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor } from './helpers/editor.js';
 import { buildTree, Pp } from './helpers/blocks.js';
 import { outline, violations, focusAt, focusEnd, selectRange, collectErrors } from './helpers/model.js';

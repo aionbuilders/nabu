@@ -6,7 +6,7 @@
  * the two differ, so each toggle moved the selection (`brave` → the space before it…).
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, press, exec, flushRender } from './helpers/editor.js';
 import { buildTree, Pp } from './helpers/blocks.js';
 import { selectRange } from './helpers/model.js';

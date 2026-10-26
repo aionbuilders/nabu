@@ -9,7 +9,7 @@
  * own selection, and synthetic DragEvents (a DataTransfer carrying real File objects) for OS files — Playwright cannot drag files
  * in from the desktop. Every test ends by checking the model against the DOM (`violations`) and the console.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { clearAndReset } from './helpers/editor.js';

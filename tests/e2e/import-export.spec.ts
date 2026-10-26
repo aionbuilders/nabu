@@ -8,7 +8,7 @@
  * structural invariants) and no console error may appear. Formats: docs/design/import-export.md.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset } from './helpers/editor.js';
 import { pasteText } from './helpers/clipboard.js';
 import { buildDoc, P, UL, TODO, I, outline, expectValid, collectErrors, focusEmpty } from './helpers/model.js';

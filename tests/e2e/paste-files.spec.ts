@@ -6,7 +6,7 @@
  * clipboard, except an internal copy (`application/x-nabu+json`). With the dev-only `?hostFiles=1|gated` hook the bytes go
  * to a host `onBeforePersist` and the block is pending until it answers.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { clearAndReset } from './helpers/editor.js';
 import { undo, redo } from './helpers/keyboard.js';
 import { focusAt, focusEmpty, collectErrors, violations } from './helpers/model.js';

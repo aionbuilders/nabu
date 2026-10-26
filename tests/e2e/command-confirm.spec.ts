@@ -8,7 +8,7 @@
  * Every run is recorded in window.__demoLog.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, focusEditor, typeText, press } from './helpers/editor.js';
 import { goToStart } from './helpers/keyboard.js';
 

@@ -3,7 +3,7 @@
  * Bold, italic, underline, code, strikethrough via keyboard shortcuts
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, exec,

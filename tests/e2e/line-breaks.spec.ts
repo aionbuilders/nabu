@@ -9,7 +9,7 @@
  * line, and what is typed next lands on the second line.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, press } from './helpers/editor.js';
 import { caret, violations, focusEnd, collectErrors, allText, selectRange } from './helpers/model.js';
 import { buildBlocks, buildTree, flat, tree, Para, H, C, Q, Code } from './helpers/blocks.js';

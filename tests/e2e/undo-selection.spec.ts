@@ -8,7 +8,7 @@
  * Asserted against the MODEL: `caret()` (model.ts) prints the selection as `a⟦bc⟧d` / `a|bc` / `first@3 -> last@2`.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, press, typeText, getMarkdown } from './helpers/editor.js';
 import { undo, redo, bold } from './helpers/keyboard.js';
 import { buildBlocks, Para, flat } from './helpers/blocks.js';

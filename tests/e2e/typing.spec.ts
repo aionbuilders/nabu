@@ -3,7 +3,7 @@
  * P0: Core text input pipeline
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, getEditor, focusEditor,
   typeText, press, getMarkdown, getBlocks, getRootBlockCount,

@@ -6,7 +6,7 @@
  * never become a link / image, a paste is ONE undo step, and nothing is logged as an error.
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, clearAndReset, focusEditor } from './helpers/editor.js';
 import { pasteText } from './helpers/clipboard.js';
 import { undo, redo } from './helpers/keyboard.js';

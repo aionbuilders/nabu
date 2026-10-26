@@ -16,7 +16,7 @@
  *  E. Selection across lists    F. Todo                   G. Paste into lists       H. Navigation / DOM / conversion
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, press, getMarkdown, getJson, getEditor, flushRender, exec,
 } from './helpers/editor.js';

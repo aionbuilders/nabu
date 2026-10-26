@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import { gotoEditor } from './helpers/editor';
 
 const root = '[data-nabu-root]';

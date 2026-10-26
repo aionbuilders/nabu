@@ -3,7 +3,7 @@
  * Project config: retries: 2, timeout: 15000
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor, waitForEditor,
   typeText, press, getMarkdown, getRootBlockCount, getEditor,

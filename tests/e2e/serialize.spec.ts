@@ -2,7 +2,7 @@
  * E2E — Serialization (Markdown + JSON root)
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './helpers/test.js';
 import {
   gotoEditor, clearAndReset, focusEditor,
   typeText, press, getMarkdown, getJson,
