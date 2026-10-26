@@ -373,6 +373,7 @@ Reordering goes through the Loro tree (`moveBefore` / `moveAfter`) and commits a
 const engine = await createPersistedEditor({
   docId: 'note',
   maxWait: 3000,                                  // longest time a burst of edits goes unsaved (0 / Infinity: off)
+  sync: true,                                     // live sync between the tabs of the same docId (BroadcastChannel); false: off (saves still merge)
   onSaveError: (error) => toast('Not saved: ' + error.message), // an AUTOMATIC save failed (quota…); the next change retries
   onRecover: (recovery) => toast(recovery.kind === 'backup'     // the stored document was unreadable
     ? 'Your document was restored from the previous save.'
@@ -383,7 +384,10 @@ engine.persistence.lastSavedAt; // epoch ms | null
 engine.persistence.lastError;   // the last save error, or why storage is unavailable
 engine.persistence.available;   // false: IndexedDB unusable, the editor works in memory only (no rejection)
 engine.persistence.recovery;    // null, or { kind: 'backup' | 'empty', error, quarantinedKey, quarantinedKeys, at }
+engine.persistence.sync;        // true while the live sync with the other tabs runs
 ```
+
+**Several tabs on the same `docId` never overwrite each other**: every save first merges what another tab stored (one IndexedDB transaction; imported changes are not undo steps and the caret stays on its character), and with `sync` (default) the tabs exchange their edits live. With a file host (`files.onBeforePersist`), uploads still waiting when a document is opened are retried automatically with a growing delay (`files.autoRetry`).
 
 Every save keeps the snapshot it replaces as a **backup**. A stored snapshot that cannot be imported is never deleted: it is copied to the `quarantine` object store of the `nabu` database, the backup is tried, and failing that the editor starts empty. The editor always boots.
 

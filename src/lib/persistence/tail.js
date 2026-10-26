@@ -71,3 +71,33 @@ export function parkTail(docId) {
 	} catch { /* quota: the tail is dropped, it was already a best effort */ }
 	clearTail(docId);
 }
+
+// ── The revision marker ──────────────────────────────────────────────────────────────────────────
+// A page that is going away must write its snapshot BLIND (no read first: see `saveSnapshot`'s `previous`), which is only safe when no
+// other tab wrote the record since this tab read or wrote it. `localStorage` is synchronous and shared by the tabs of the origin: every
+// successful save leaves the token of the record it wrote (or found up to date) under `nabu:rev:<docId>`, and a tab compares it with
+// the token of the record it knows before writing blind. A record written by an older version of Nabu left no token (`null`): unknown,
+// treated as "nobody else" like before.
+
+/** @param {string} docId */
+export const revKey = (docId) => `nabu:rev:${docId}`;
+
+/** The token of a stored record. @param {{ snapshot: Uint8Array, savedAt?: number } | null} record @returns {string | null} */
+export const revToken = (record) => (record ? `${record.savedAt ?? 0}:${record.snapshot.length}` : null);
+
+/** Remember the token of the record that is stored now. Never throws. @param {string} docId @param {{ snapshot: Uint8Array, savedAt?: number } | null} record */
+export function writeRev(docId, record) {
+	const token = revToken(record);
+	if (token === null) return;
+	try { storage()?.setItem(revKey(docId), token); } catch { /* best effort */ }
+}
+
+/** The token left by the last save of any tab, or `null` (none, or no storage). Never throws. @param {string} docId @returns {string | null} */
+export function readRev(docId) {
+	try { return storage()?.getItem(revKey(docId)) ?? null; } catch { return null; }
+}
+
+/** Forget the token of a document. Never throws. @param {string} docId */
+export function clearRev(docId) {
+	try { storage()?.removeItem(revKey(docId)); } catch { /* nothing to do */ }
+}

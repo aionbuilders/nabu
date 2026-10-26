@@ -29,13 +29,18 @@ export class PersistenceState {
 	 * {@link Recovery}); `null` otherwise. Not reactive in practice (it is set before the editor is returned). @type {Recovery | null}
 	 */
 	recovery = $state.raw(null);
+	/**
+	 * `true` while the live sync with the other tabs of the same document is running (`sync` option, a `BroadcastChannel` is available,
+	 * IndexedDB is usable). Saving still merges what other tabs stored when it is `false`.
+	 */
+	sync = $state(false);
 
 	/** @param {string} docId */
 	constructor(docId) { this.docId = docId; }
 
 	/**
-	 * Stop the persistence of this editor: cancel the pending autosave, remove the `visibilitychange` / `pagehide` listeners and
-	 * close the IndexedDB connection. The editor keeps working in memory, nothing is saved any more. Call it when the editor is
+	 * Stop the persistence of this editor: cancel the pending autosave, remove the `visibilitychange` / `pagehide` listeners, close the
+	 * live-sync channel, stop the automatic upload retries and close the IndexedDB connection. The editor keeps working in memory, nothing is saved any more. Call it when the editor is
 	 * destroyed (e.g. in the cleanup of the component that created it). Idempotent. Replaced by `createPersistedEditor`.
 	 * @returns {void}
 	 */

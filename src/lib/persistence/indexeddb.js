@@ -225,11 +225,11 @@ export async function loadRecords(docId, conn) {
  * @param {{ snapshot: Uint8Array, savedAt?: number } | null} [options.previous] what is stored right now, to keep as the backup (`null`: nothing to keep)
  * @param {boolean} [options.rotate] default `true`. `false`: do not keep the replaced record as the backup
  * @param {boolean} [options.dropBackup] delete the backup (a compaction: the history it dropped must not survive in a backup)
- * @returns {Promise<void>}
+ * @returns {Promise<SnapshotRecord>} the record that was written
  */
 export async function saveSnapshot(docId, snapshot, { conn, previous, rotate = true, dropBackup = false } = {}) {
+	const record = { docId, snapshot, savedAt: Date.now() };
 	await transact(conn, [STORE, BACKUPS_STORE], 'readwrite', ([snapshots, backups], fail) => {
-		const record = { docId, snapshot, savedAt: Date.now() };
 		if (dropBackup) backups.delete(docId);
 		if (!rotate) { snapshots.put(record); return; }
 		if (previous !== undefined) {
@@ -249,6 +249,61 @@ export async function saveSnapshot(docId, snapshot, { conn, previous, rotate = t
 			}
 		};
 	});
+	return record;
+}
+
+/**
+ * @typedef {object} MergePlan What {@link saveMerged}'s `prepare` decides, from the record stored RIGHT NOW.
+ * @property {Uint8Array | null} snapshot the bytes to write, or `null`: the stored record already holds everything (nothing is written)
+ * @property {unknown} [unmerged] the stored record could not be merged into the document (unreadable bytes, or a shallow snapshot
+ *   that does not follow from this document): it is copied to the `quarantine` store before being replaced, never lost
+ */
+
+/**
+ * Save a snapshot while MERGING what another tab stored (ADR 010, multi-tab, P-94), atomically: ONE read-write transaction reads the
+ * stored record, hands it to `prepare` (SYNCHRONOUS: it imports whatever the document lacks, then exports), and writes the result.
+ * IndexedDB serialises read-write transactions on a store across tabs, so two tabs saving at the same time cannot overwrite each
+ * other: the second one reads what the first wrote. The record it replaces becomes the backup, as in {@link saveSnapshot}.
+ *
+ * Not for a page that is going away (the write is issued from a request callback: see `previous` in {@link saveSnapshot}).
+ * @param {string} docId
+ * @param {(stored: SnapshotRecord | null) => MergePlan} prepare
+ * @param {object} [options]
+ * @param {IDBConnection} [options.conn]
+ * @returns {Promise<{ stored: SnapshotRecord | null, written: SnapshotRecord | null, quarantinedKey: string | null }>}
+ */
+export async function saveMerged(docId, prepare, { conn } = {}) {
+	/** @type {SnapshotRecord | null} */
+	let stored = null;
+	/** @type {SnapshotRecord | null} */
+	let written = null;
+	/** @type {string | null} */
+	let quarantinedKey = null;
+	await transact(conn, [STORE, BACKUPS_STORE, QUARANTINE_STORE], 'readwrite', ([snapshots, backups, quarantined], fail) => {
+		const get = snapshots.get(docId);
+		get.onsuccess = () => {
+			try {
+				stored = get.result ?? null;
+				const plan = prepare(stored);
+				if (stored && plan.unmerged !== undefined) {
+					const at = Date.now();
+					quarantinedKey = `${docId}@${at}-unmerged`;
+					quarantined.put(/** @type {QuarantinedRecord} */ ({
+						key: quarantinedKey, docId, source: 'snapshot', snapshot: stored.snapshot, savedAt: stored.savedAt, quarantinedAt: at,
+						error: plan.unmerged instanceof Error ? `${plan.unmerged.name}: ${plan.unmerged.message}` : String(plan.unmerged),
+					}));
+				}
+				if (!plan.snapshot) return;
+				// An unreadable previous record never replaces a good backup
+				if (stored && isSnapshotBytes(stored.snapshot)) backups.put({ docId, snapshot: stored.snapshot, savedAt: stored.savedAt });
+				written = { docId, snapshot: plan.snapshot, savedAt: Date.now() };
+				snapshots.put(written);
+			} catch (error) {
+				fail(error);
+			}
+		};
+	});
+	return { stored, written, quarantinedKey };
 }
 
 /**

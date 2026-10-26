@@ -1,7 +1,7 @@
 /**
  * E2E — AUDIT 2026-10, theme 8a (PERSISTENCE): `createPersistedEditor` (ADR 010 snapshot + debounce, ADR 014 asset store /
- * outbox / history modes). Findings P-91, P-92, P-93, P-95, P-96 are fixed (ADR 010, "Implementation notes — 2026-10 (theme 8)"); only 4b
- * (two tabs, P-94) is still `fixme`.
+ * outbox / history modes). Findings P-91 … P-97 are fixed (ADR 010, "Implementation notes — 2026-10 (theme 8)" and "— lot 2"): section 4
+ * covers the two-tab behaviour (P-94: merge on save + live sync), section 9 the automatic retry of the uploads on open (P-97).
  *
  * These tests describe the EXPECTED behaviour. A scenario that fails today is marked `test.fixme('… — FINDING: …')` (body kept, so it
  * can be re-enabled once the product is fixed). Scenarios named "characterization" pin the CURRENT behaviour of something that is a
@@ -11,12 +11,12 @@
  *   1. what survives a reload (marks, links, structure, regions, image)
  *   2. unsaved edits at reload time (debounce / flush on pagehide), starvation of the debounce
  *   3. isNew / saveNow / clearPersistence
- *   4. two tabs on the same docId
+ *   4. two tabs on the same docId (merge before save, live sync, caret, undo)
  *   5. undo after a reload
  *   6. IndexedDB unavailable / failing
  *   7. corrupted stored snapshot (backup rotation, quarantine, recovery info), 7bis. page-hide listeners
  *   8. history modes (full / compact + archive hook)
- *   9. asset outbox (failing host, retried after a reload)
+ *   9. asset outbox (failing host, retried by itself on open)
  *  10. a ~500-block document (timings are printed, no thresholds)
  */
 
@@ -24,7 +24,7 @@ import { test, expect, type Page } from './helpers/test.js';
 import { gotoEditor, waitForEditor, getJson, focusEditor, typeText, exec, press } from './helpers/editor.js';
 import { bold, italic, undo, selectForward } from './helpers/keyboard.js';
 import { buildTree, type TreeSpec } from './helpers/blocks.js';
-import { focusEmpty, collectErrors } from './helpers/model.js';
+import { focusEmpty, focusAt, focusEnd, caret, collectErrors } from './helpers/model.js';
 
 const docId = () => `e2e-pa-${test.info().testId}-${Date.now()}`;
 
@@ -396,40 +396,39 @@ test.describe('3 · isNew, saveNow, clearPersistence', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('4 · two tabs on the same docId', () => {
-  async function twoTabs(context: any, id: string) {
+  /** Two pages of one browser context on the same document. `base` is the paragraph both start from (saved by A). */
+  async function twoTabs(context: any, id: string, options?: Record<string, unknown>) {
     const a: Page = await context.newPage();
     const b: Page = await context.newPage();
-    await boot(a, id);
+    await boot(a, id, options);
     await addParagraph(a, 'base');
     await saveNow(a);
-    await boot(b, id);
+    await boot(b, id, options);
     expect((await texts(b)).join('|')).toContain('base');
     return { a, b };
   }
+  const NO_SYNC = { sync: false };
+  /** The text of the document, joined, as seen by a page. */
+  const doc = async (page: Page) => (await texts(page)).join('|');
+  const has = (page: Page, text: string) => expect.poll(() => doc(page), { timeout: 2000 }).toContain(text);
+  /** The block whose text is `text`: the paragraph is edited through the model (a remote-like edit made by script in that page). */
+  const editBlock = (page: Page, text: string, edit: { at: number; insert: string }) => page.evaluate(async ([t, e]) => {
+    const n = (window as any).nabu;
+    const block = [...n.blocks.values()].find((b: any) => b.behaviors?.get('text')?.text === t) as any;
+    block.behaviors.get('text').container.insert((e as any).at, (e as any).insert);
+    await n.commit();
+  }, [text, edit] as [string, { at: number; insert: string }]);
 
-  test('4a · characterization: no live sync between tabs; the last tab to save wins (ADR 010 "pas de multi-onglets")', async ({ context }) => {
+  test('4a · sync: false — no live sync (an edit of A does not appear in B), and B reports it', async ({ context }) => {
     const id = docId();
-    const { a, b } = await twoTabs(context, id);
+    const { a, b } = await twoTabs(context, id, NO_SYNC);
+    expect(await b.evaluate(() => (window as any).nabu.persistence.sync)).toBe(false);
     await addParagraph(a, 'edit from A');
-    await saveNow(a);
-    // B does not see A's edit live
-    await b.waitForTimeout(300); // KEEP (negative check): give a would-be sync a chance
-    expect((await texts(b)).join('|')).not.toContain('edit from A');
-    await addParagraph(b, 'edit from B');
-    await saveNow(b); // B's document never saw A's edit: its snapshot replaces A's
-    await reload(a);
-    await reload(b);
-    const final = (await texts(a)).join('|');
-    console.log(`[8a·4a] after both reloads the document holds: ${final}`);
-    expect(final).toContain('edit from B');
-    expect(final).not.toContain('edit from A'); // A's saved edit was silently overwritten
-    expect(await texts(b)).toEqual(await texts(a));
+    await a.waitForTimeout(500); // KEEP (negative check): give a would-be sync a chance
+    expect(await doc(b)).not.toContain('edit from A');
   });
 
-  // FINDING (P1 data loss, KNOWN LIMITATION of ADR 010): each tab keeps its own in-memory doc and writes a full snapshot over the shared record.
-  // A's saved edit is lost, silently, with no warning in either tab. Loro could merge: the save should import the stored snapshot first (or a
-  // BroadcastChannel / storage `versionchange` should sync the tabs).
-  test.fixme('4b · edits made in two tabs are both kept after both reload (Loro merge) — FINDING: last writer wins, the other tab\'s saved edit is silently lost [persistence.js save(): export snapshot without importing the stored one]', async ({ context }) => {
+  test('4b · edits made in two tabs are both kept after both reload (Loro merge, nothing overwritten)', async ({ context }) => {
     const id = docId();
     const { a, b } = await twoTabs(context, id);
     await addParagraph(a, 'edit from A');
@@ -441,6 +440,194 @@ test.describe('4 · two tabs on the same docId', () => {
     const all = (await texts(a)).join('|');
     expect(all).toContain('edit from A');
     expect(all).toContain('edit from B');
+    expect(await texts(b)).toEqual(await texts(a));
+  });
+
+  test('4b′ · the same with sync: false — the merge BEFORE SAVE alone keeps both edits (A saved, B saved over it, both reload)', async ({ context }) => {
+    const id = docId();
+    const { a, b } = await twoTabs(context, id, NO_SYNC);
+    await addParagraph(a, 'edit from A');
+    await saveNow(a);
+    await addParagraph(b, 'edit from B');
+    await saveNow(b); // B never saw A's edit: its save imports the stored record first
+    await has(b, 'edit from A'); // ... and the DOM of B shows it
+    await expect(b.locator('[data-block-id]', { hasText: 'edit from A' })).toBeVisible();
+    await reload(a);
+    await reload(b);
+    const all = (await texts(a)).join('|');
+    expect(all).toContain('edit from A');
+    expect(all).toContain('edit from B');
+    expect(await texts(b)).toEqual(await texts(a));
+    expect(await persistenceOf(b)).toMatchObject({ status: 'saved', lastError: null });
+  });
+
+  test('4c · live sync: an edit in A shows up in B (and the other way round) within a second, without any save or reload', async ({ context }) => {
+    const id = docId();
+    const { a, b } = await twoTabs(context, id, { debounce: 60000 }); // no autosave in the way
+    expect(await a.evaluate(() => (window as any).nabu.persistence.sync)).toBe(true);
+    const savedBefore = (await stored(a, id))!.savedAt;
+    await addParagraph(a, 'live from A');
+    await has(b, 'live from A');
+    await expect(b.locator('[data-block-id]', { hasText: 'live from A' })).toBeVisible();
+    await addParagraph(b, 'live from B');
+    await has(a, 'live from B');
+    await expect(a.locator('[data-block-id]', { hasText: 'live from B' })).toBeVisible();
+    expect((await stored(a, id))!.savedAt).toBe(savedBefore); // nothing was saved: it travelled through the channel
+    expect(await texts(a)).toEqual(await texts(b));
+  });
+
+  test('4d · typing in both tabs at once: all the typed text is in both, in a sane order (two blocks, then the same block)', async ({ context }) => {
+    const id = docId();
+    const { a, b } = await twoTabs(context, id);
+    await addParagraph(a, 'shared');
+    await addParagraph(a, 'omega');
+    await has(b, 'omega');
+    // different blocks, interleaved keystrokes
+    await a.bringToFront(); await focusAt(a, 'base', 4);
+    await b.bringToFront(); await focusAt(b, 'omega', 0);
+    for (let i = 0; i < 6; i++) {
+      await a.bringToFront(); await a.keyboard.type('a');
+      await b.bringToFront(); await b.keyboard.type('b');
+    }
+    await has(a, 'bbbbbbomega'); await has(b, 'baseaaaaaa');
+    await has(b, 'bbbbbbomega'); await has(a, 'baseaaaaaa');
+    expect(await texts(a)).toEqual(await texts(b));
+    // the same block: A types at its end, B at its start
+    await a.bringToFront(); await focusAt(a, 'shared', 6);
+    await b.bringToFront(); await focusAt(b, 'shared', 0);
+    for (let i = 0; i < 5; i++) {
+      await a.bringToFront(); await a.keyboard.type('A');
+      await b.bringToFront(); await b.keyboard.type('B');
+    }
+    await has(a, 'BBBBBsharedAAAAA'); await has(b, 'BBBBBsharedAAAAA');
+    expect(await texts(a)).toEqual(await texts(b));
+    // and it all survives a reload of both
+    await saveNow(a); await saveNow(b);
+    await reload(a); await reload(b);
+    expect(await texts(a)).toEqual(await texts(b));
+    expect(await doc(a)).toContain('BBBBBsharedAAAAA');
+  });
+
+  test('4e · a tab opened AFTER the edits gets them: saved ones from the store, unsaved ones from the peer', async ({ context }) => {
+    // saved: sync off, so only the store can bring them
+    const id1 = docId();
+    const a1: Page = await context.newPage();
+    await boot(a1, id1, NO_SYNC);
+    await addParagraph(a1, 'saved before B opens');
+    await saveNow(a1);
+    const b1: Page = await context.newPage();
+    await boot(b1, id1, NO_SYNC);
+    expect(await doc(b1)).toContain('saved before B opens');
+
+    // unsaved: only A's memory has it (no autosave), B asks A when it opens
+    const id2 = docId();
+    const a2: Page = await context.newPage();
+    await boot(a2, id2, { debounce: 60000, maxWait: 0 });
+    await saveNow(a2);
+    const savedAt = (await stored(a2, id2))!.savedAt;
+    await addParagraph(a2, 'only in the memory of A');
+    const b2: Page = await context.newPage();
+    await boot(b2, id2);
+    await has(b2, 'only in the memory of A');
+    expect((await stored(a2, id2))!.savedAt).toBe(savedAt);
+  });
+
+  test('4f · the caret of B stays on its character when A changes the text around it (same block, above, below)', async ({ context }) => {
+    const id = docId();
+    const { a, b } = await twoTabs(context, id);
+    await addParagraph(a, 'hello world');
+    await saveNow(a);
+    await has(b, 'hello world');
+    await b.bringToFront();
+    await focusAt(b, 'hello world', 5);
+    expect(await caret(b)).toBe('hello| world');
+    await editBlock(a, 'hello world', { at: 0, insert: 'ZZ' }); // before the caret, same block
+    await has(b, 'ZZhello world');
+    await expect.poll(() => caret(b)).toBe('ZZhello| world');
+    await editBlock(a, 'ZZhello world', { at: 13, insert: '??' }); // after the caret
+    await has(b, 'ZZhello world??');
+    await expect.poll(() => caret(b)).toBe('ZZhello| world??');
+    await a.evaluate(async () => { const n = (window as any).nabu; n.insert('paragraph', { text: 'a new block above' }, null, 0); await n.commit(); }); // a block above
+    await has(b, 'a new block above');
+    await expect.poll(() => caret(b)).toBe('ZZhello| world??');
+    // typing goes where the caret is
+    await b.keyboard.type('!');
+    expect(await caret(b)).toBe('ZZhello!| world??');
+    await has(a, 'ZZhello! world??');
+    // a selection (a range) keeps both ends
+    await focusAt(b, 'ZZhello! world??', 2);
+    await selectForward(b, 6); // "hello!"
+    expect(await caret(b)).toBe('ZZ⟦hello!⟧ world??');
+    await editBlock(a, 'ZZhello! world??', { at: 0, insert: '>>' });
+    await has(b, '>>ZZhello! world??');
+    await expect.poll(() => caret(b)).toBe('>>ZZ⟦hello!⟧ world??');
+  });
+
+  test('4g · undo in B undoes only B\'s own edit: what came from A is neither undone nor recorded as B\'s action', async ({ context }) => {
+    const id = docId();
+    const { a, b } = await twoTabs(context, id);
+    await addParagraph(a, 'from A');
+    await has(b, 'from A');
+    await b.bringToFront();
+    await focusEnd(b, 'base');
+    await typeText(b, ' B1');
+    await has(b, 'base B1');
+    await addParagraph(a, 'second from A');
+    await has(b, 'second from A');
+    await undo(b); // B's typing goes
+    await expect.poll(() => doc(b)).not.toContain('B1');
+    expect(await doc(b)).toContain('from A');
+    expect(await doc(b)).toContain('second from A');
+    await undo(b); // nothing of B's own is left: the remote edits are not on B's undo stack
+    await b.waitForTimeout(200);
+    expect(await doc(b)).toContain('second from A');
+    expect(await doc(b)).toContain('from A');
+    // and the undo travelled to A like any other change
+    await has(a, 'base');
+    expect(await doc(a)).not.toContain('B1');
+  });
+
+  test('4h · sync: false — edits stay apart until a save, then the save merges: nothing is lost either way', async ({ context }) => {
+    const id = docId();
+    const { a, b } = await twoTabs(context, id, NO_SYNC);
+    await addParagraph(a, 'A1'); await addParagraph(b, 'B1');
+    await a.waitForTimeout(300);
+    expect(await doc(a)).not.toContain('B1');
+    expect(await doc(b)).not.toContain('A1');
+    await saveNow(a);
+    await saveNow(b); // imports A1
+    await saveNow(a); // imports B1
+    expect((await doc(a)).split('|').sort()).toEqual((await doc(b)).split('|').sort());
+    expect(await doc(a)).toContain('A1');
+    expect(await doc(a)).toContain('B1');
+    await reload(a);
+    expect(await doc(a)).toContain('A1');
+    expect(await doc(a)).toContain('B1');
+  });
+
+  test('4i · sync: false — A has UNSAVED edits, B saved others, A reloads at once: the page-hide save merges, nothing of B is overwritten', async ({ context }) => {
+    const id = docId();
+    const { a, b } = await twoTabs(context, id, NO_SYNC);
+    await addParagraph(b, 'B saved');
+    await saveNow(b);
+    await addParagraph(a, 'A unsaved'); // A has not seen 'B saved'
+    await reload(a); // pagehide: tail + merging save
+    await has(a, 'A unsaved');
+    await has(a, 'B saved');
+    await saveNow(a);
+    await reload(b);
+    expect(await doc(b)).toContain('A unsaved');
+    expect(await doc(b)).toContain('B saved');
+  });
+
+  test('4j · dispose() closes the channel: a disposed editor no longer receives (and sends) anything', async ({ context }) => {
+    const id = docId();
+    const { a, b } = await twoTabs(context, id);
+    await b.evaluate(() => (window as any).nabu.persistence.dispose());
+    expect(await b.evaluate(() => (window as any).nabu.persistence.sync)).toBe(false);
+    await addParagraph(a, 'after B was disposed');
+    await b.waitForTimeout(500); // KEEP (negative check)
+    expect(await doc(b)).not.toContain('after B was disposed');
   });
 });
 
@@ -828,7 +1015,7 @@ test.describe('9 · asset outbox', () => {
     };
   }), id);
 
-  test('9 · an image whose host upload failed is still there after a reload (local copy + outbox entry kept); with a working host, it is sent (by itself or by retry())', async ({ page }) => {
+  test('9 · an image whose host upload failed is still there after a reload; with a working host it is sent BY ITSELF when the document is opened (no retry() call)', async ({ page }) => {
     const id = docId();
     expect(await bootsWithin(page, id, 15000, '&hostFiles=fail')).toBe(true);
     await focusEmpty(page);
@@ -838,19 +1025,28 @@ test.describe('9 · asset outbox', () => {
     const [failed] = await imagesOf(page);
     expect(await outbox(page, id)).toHaveLength(1);
 
-    // reopen with a host that works
+    // reopen with a host that works: the upload is retried automatically
     expect(await bootsWithin(page, id, 15000, '&hostFiles=1')).toBe(true);
     await expect.poll(async () => (await imagesOf(page))[0]?.ref).toBe(failed.ref);
-    // wait for the resume pass to settle: either it retried by itself (ready) or it waits for an explicit retry() (error)
-    await expect.poll(async () => (await imagesOf(page))[0].status, { timeout: 5000 }).toMatch(/^(ready|error)$/);
-    const afterReopen = (await imagesOf(page))[0];
-    const uploadsOnOpen = await page.evaluate(() => (window as any).__hostUploads.length);
-    console.log(`[8a·9] reopened with a working host: status=${afterReopen.status} reason=${afterReopen.reason} uploadsOnOpen=${uploadsOnOpen}`);
-    if (afterReopen.status === 'error') {
-      expect(await page.evaluate(() => [...(window as any).nabu.blocks.values()].find((b: any) => b.type === 'image').retry())).toBe(true);
-    }
-    await expect.poll(async () => (await imagesOf(page))[0].status).toBe('ready');
+    await expect.poll(async () => (await imagesOf(page))[0].status, { timeout: 5000 }).toBe('ready');
     expect(await page.evaluate(() => (window as any).__hostUploads.length)).toBe(1);
+    await expect.poll(() => outbox(page, id)).toEqual([]);
+  });
+
+  test('9b · the host is still down when the document is reopened: the upload is retried with a growing delay and succeeds once the host is back', async ({ page }) => {
+    const id = docId();
+    expect(await bootsWithin(page, id, 15000, '&hostFiles=fail')).toBe(true);
+    await focusEmpty(page);
+    await pastePng(page);
+    await expect.poll(() => imagesOf(page).then((l) => l[0]?.status)).toBe('error');
+    await saveNow(page);
+
+    expect(await bootsWithin(page, id, 15000, '&hostFiles=fail')).toBe(true); // still failing
+    await expect.poll(() => page.evaluate(() => (window as any).__hostUploads.length), { timeout: 5000 }).toBeGreaterThanOrEqual(1);
+    expect((await imagesOf(page))[0].status).toMatch(/^(error|pending)$/);
+    await page.evaluate(() => { (window as any).__hostFailing = false; }); // the host is back; the next attempt (2 s later) works
+    await expect.poll(async () => (await imagesOf(page))[0].status, { timeout: 8000 }).toBe('ready');
+    expect(await page.evaluate(() => (window as any).__hostUploads.length)).toBeGreaterThanOrEqual(2);
     await expect.poll(() => outbox(page, id)).toEqual([]);
   });
 });

@@ -27,6 +27,7 @@ const engine = await createPersistedEditor({
   extensions,  // (optionnel) Extensions supplémentaires à ajouter au preset
   debounce,    // (optionnel) Délai d'auto-save en ms — défaut : 2000
   maxWait,     // (optionnel) Attente maximale pendant une rafale, en ms — défaut : 3000
+  sync,        // (optionnel) Synchro en direct entre onglets — défaut : true
   onSaveError, // (optionnel) (error) => void — une sauvegarde AUTOMATIQUE a échoué
   onRecover,   // (optionnel) (recovery) => void — le document stocké était illisible
 });
@@ -39,6 +40,7 @@ const engine = await createPersistedEditor({
 | `extensions` | `Extension[]` | `[]` | Extensions additionnelles |
 | `debounce` | `number` | `2000` | Délai en ms entre la dernière modif et la sauvegarde |
 | `maxWait` | `number` | `3000` | Pendant une rafale de modifications ininterrompue, une sauvegarde a lieu au moins toutes les `maxWait` ms (jamais plus court que `debounce` ; `0` ou `Infinity` : désactivé, on ne sauvegarde qu'après une pause) |
+| `sync` | `boolean` | `true` | Synchronisation **en direct** entre les onglets qui éditent le même `docId` (`BroadcastChannel`). `false` la désactive ; sans `BroadcastChannel` elle est ignorée en silence. La fusion à la sauvegarde ne dépend pas de cette option (voir « Plusieurs onglets ») |
 | `onSaveError` | `(error) => void` | — | Appelé quand une sauvegarde **automatique** échoue (quota dépassé…). `saveNow()` rejette pour celui qui l'attend, sans appeler ce hook |
 | `onRecover` | `(recovery) => void` | — | Appelé au démarrage quand le document stocké était illisible (voir « Robustesse ») |
 | `history` | `'full' \| { mode: 'compact', retain, onBeforeCompact }` | `'full'` | Mode d'historique (voir « Historique » plus bas) : par défaut **rien n'est jamais compacté** |
@@ -88,7 +90,8 @@ L'état de la persistance, **réactif** (`$state` Svelte 5 : lisible dans un tem
 | `lastError` | L'erreur de la dernière sauvegarde échouée, ou la raison pour laquelle le stockage est indisponible ; `null` après une sauvegarde réussie |
 | `available` | `false` si IndexedDB n'a pas pu être ouvert au démarrage (absent, refusé, bloqué par un autre onglet…). L'éditeur démarre alors **en mémoire** (les fichiers aussi), un avertissement est écrit dans la console, `createPersistedEditor` ne rejette pas |
 | `recovery` | `null`, ou `{ kind, error, quarantinedKey, quarantinedKeys, at }` si le document stocké était illisible (voir « Robustesse ») |
-| `dispose()` | Arrête la persistance de cet éditeur : annule l'auto-save, retire les écouteurs `visibilitychange` / `pagehide`, ferme la connexion IndexedDB. À appeler quand l'éditeur est détruit (par exemple dans le nettoyage du composant). L'éditeur continue de fonctionner en mémoire. Idempotent |
+| `sync` | `true` tant que la synchro en direct avec les autres onglets tourne (option `sync`, `BroadcastChannel` disponible) |
+| `dispose()` | Arrête la persistance de cet éditeur : annule l'auto-save, retire les écouteurs `visibilitychange` / `pagehide`, ferme le canal de synchro, arrête les relances d'envois, ferme la connexion IndexedDB. À appeler quand l'éditeur est détruit (par exemple dans le nettoyage du composant). L'éditeur continue de fonctionner en mémoire. Idempotent |
 
 Les avertissements de persistance (`console.warn`, préfixe `[Nabu]`) sont toujours affichés, même quand `nabu.debugging` est désactivé : l'utilisateur peut être en train de perdre son travail.
 
@@ -131,6 +134,23 @@ const engine = await createPersistedEditor({
 ```
 
 Si la copie de mise à l'écart échoue, l'éditeur démarre en mémoire seulement (`available === false`) pour ne rien écraser. Un compactage (`history: 'compact'`) supprime le secours, pour qu'un historique supprimé ne survive pas dans une copie ; le suivant est recréé par la sauvegarde d'après.
+
+### Plusieurs onglets sur le même document (P-94)
+
+Deux onglets qui éditent le même `docId` ne s'écrasent plus :
+
+- **Fusion avant chaque sauvegarde.** La sauvegarde lit l'enregistrement stocké et l'écrit dans **une seule transaction IndexedDB** : ce qu'un autre onglet y a enregistré et que ce document n'a pas est **importé** dans le document vivant (le DOM se met à jour comme pour tout changement distant), puis le document est exporté et écrit. Si l'enregistrement contient déjà tout, rien n'est écrit. Ces changements importés **ne sont pas des actions annulables** : Ctrl+Z n'annule que vos propres modifications. Un enregistrement qui ne peut pas être fusionné (octets illisibles, copie compactée par un autre onglet) est copié dans `quarantine` (`<docId>@<date>-unmerged`) avant d'être remplacé, avec un avertissement.
+- **Synchro en direct** (option `sync`, défaut `true`). Chaque commit local est diffusé aux autres onglets par un `BroadcastChannel` nommé `nabu:<docId>` : ce que vous tapez dans un onglet apparaît dans l'autre dans la seconde, sans sauvegarde ni rechargement. Un onglet ouvert plus tard demande aux autres ce qui lui manque (leurs changements pas encore sauvegardés) ; un onglet qui a raté un message le redemande. Le curseur de l'utilisateur reste sur le même caractère quand un changement distant arrive (même dans son bloc) ; rien n'est annulable de ce qui vient d'ailleurs ; une composition IME en cours n'est jamais interrompue (les changements attendent sa fin). Les envois de fichiers vers l'hôte restent à l'onglet qui a collé le fichier.
+- **À la fermeture**, la sauvegarde reste « aveugle » (instantanée, sans lecture) tant qu'aucun autre onglet n'a écrit depuis ; sinon elle fusionne, et le tail `localStorage` couvre le cas où la page part avant la fin.
+
+```js
+const engine = await createPersistedEditor({ docId: 'note', sync: false }); // pas de synchro en direct ; la fusion à la sauvegarde reste active
+engine.persistence.sync; // true tant que la synchro tourne
+```
+
+### Envois en attente (P-97)
+
+Avec un hôte de fichiers (`files.onBeforePersist`), les envois qui attendent dans l'outbox à l'ouverture du document (interrompus, ou qui avaient échoué) sont **relancés automatiquement** en arrière-plan : tout de suite pour un envoi en erreur, puis après 2 s, 4 s, 8 s… (60 s au plus) à chaque nouvel échec, 8 tentatives par fichier et par session ; l'événement `online` du navigateur donne une série neuve (hors ligne, aucune tentative n'est consommée). Les blocs passent `error` → `pending` → `ready` / `error` ; `block.retry()` reste disponible. Un envoi annulé par l'utilisateur n'est pas relancé. Réglage : `files: { autoRetry: false | { initialDelay, maxDelay, maxAttempts } }`.
 
 ### Sauvegarde qui échoue
 
@@ -228,11 +248,11 @@ Détails : [ADR 014](../adr/014-asset-storage.md) §3.6 et §7.
                           frappe d'une rafale — ou tout de suite à pagehide)
                                 │
                                 ▼
-                    doc.export({ mode: 'snapshot' })  →  Uint8Array
-                                │
-                                ▼
-                    saveSnapshot(docId, snapshot)  →  IndexedDB
-                    (l'ancien snapshot devient le secours, même transaction)
+                    UNE transaction IndexedDB (saveMerged) :
+                      lit l'enregistrement stocké ; ce que ce document n'a pas
+                      est importé (mergeStored) ; doc.export({ mode: 'snapshot' })
+                      → écrit (l'ancien snapshot devient le secours) —
+                      ou rien si l'enregistrement contient déjà tout
 ```
 
 Le snapshot est le **format binaire natif de Loro** : il encode l'intégralité du document, y compris l'historique CRDT (ce qui permet de conserver l'undo/redo après rechargement). Avec `history: 'full'` (défaut) c'est toujours un snapshot complet ; après un compactage, un snapshot *shallow* (voir plus haut). Les octets des fichiers n'y sont pas : ils vivent dans le stockage de fichiers (ADR 014).
@@ -278,6 +298,6 @@ await deleteSnapshot('my-document');
 
 ## Limitations connues
 
-- **Multi-onglets** : (lot suivant) deux onglets ouvrant le même `docId` sauvegardent indépendamment — le dernier à écrire l'emporte. Pas de synchronisation temps-réel entre onglets.
+- **Multi-onglets** : fusion à la sauvegarde + synchro en direct (voir « Plusieurs onglets »). Limites : deux onglets qui créent en même temps le même document **neuf** gardent chacun leur paragraphe vide initial (deux après la synchro) ; une copie compactée par un autre onglet en cours de session n'est pas fusionnable (mise en quarantaine) ; la synchro ne traverse pas les navigateurs / machines (un provider réseau serait nécessaire).
 - **Migration de schéma** : si la structure interne des blocs change de façon incompatible entre versions, les anciens snapshots peuvent échouer à l'import. Pas de stratégie de migration automatique pour l'instant.
 - **Opacité** : le format binaire Loro n'est pas lisible sans Loro. Pour exporter vers un format portable (JSON, Markdown), utiliser `nabu.serialize('json')` ou `nabu.serialize('markdown')`.

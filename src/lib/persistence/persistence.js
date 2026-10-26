@@ -2,11 +2,13 @@ import { Nabu } from '../blocks/nabu.svelte.js';
 import { FullPreset, tabDefaultFor } from '../presets.js';
 import { Files } from '../files/files.svelte.js';
 import { MemoryAssetStore } from '../files/store.js';
-import { loadSnapshot, saveSnapshot, deleteSnapshot, loadRecords, quarantineRecords, listQuarantined, IDBConnection, isSnapshotBytes } from './indexeddb.js';
+import { loadSnapshot, saveSnapshot, saveMerged, deleteSnapshot, loadRecords, quarantineRecords, listQuarantined, IDBConnection, isSnapshotBytes } from './indexeddb.js';
 import { createAutosave, resolveMaxWait } from './autosave.js';
 import { resolveLoad, describeRecovery } from './recovery.js';
 import { PersistenceState } from './state.svelte.js';
-import { readTail, writeTail, clearTail, parkTail } from './tail.js';
+import { readTail, writeTail, clearTail, parkTail, writeRev, readRev, clearRev, revToken } from './tail.js';
+import { mergeStored } from './merge.js';
+import { startSync } from './sync.js';
 import { IndexedDBAssetStore } from './asset-store.js';
 import { IndexedDBOutbox } from './outbox.js';
 import { parseHistory } from './history.js';
@@ -53,9 +55,15 @@ const warn = (message) => console.warn('[Nabu]', message);
  * starts empty — it always boots, and `nabu.persistence.recovery` / `onRecover` tell the host what happened. When IndexedDB is not
  * usable the editor boots IN MEMORY (`nabu.persistence.available === false`, status `'unavailable'`): `createPersistedEditor` does not reject.
  *
+ * Several tabs (ADR 010, P-94): two tabs on the same `docId` never overwrite each other. EVERY save first merges what is stored (read and
+ * written in one IndexedDB transaction: the changes another tab saved are imported into the live document, not as undo steps, the caret
+ * stays on its character), and, with `sync` (default), the tabs also exchange their changes LIVE through a `BroadcastChannel`
+ * (`nabu:<docId>`): an edit made in one tab appears in the others at once.
+ *
  * The instance gains extra members:
  * - `nabu.persistence` — reactive state: `status` (`'saved' | 'pending' | 'saving' | 'error' | 'unavailable'`), `lastSavedAt`,
- *   `lastError`, `available`, `recovery`, and `dispose()` (stop autosave, remove the page listeners, close the connection)
+ *   `lastError`, `available`, `recovery`, `sync`, and `dispose()` (stop autosave, remove the page listeners, close the sync channel and
+ *   the connection)
  * - `nabu.saveNow()` — force an immediate save (returns a Promise; rejects if the save fails)
  * - `nabu.compact({ retain, onBeforeCompact })` — explicit compaction (returns a `CompactResult`, never throws for a refusal)
  * - `nabu.clearPersistence()` — delete the stored snapshot and release the document's files (returns a Promise)
@@ -71,6 +79,8 @@ const warn = (message) => console.warn('[Nabu]', message);
  * @param {(error: unknown) => void} [options.onSaveError] - Called when an AUTOMATIC save fails (quota…); `nabu.persistence.status` is `'error'` and the
  *   next change retries. `saveNow()` rejects for its awaiter instead (the hook is not called for it)
  * @param {(recovery: Recovery) => void} [options.onRecover] - Called at boot when the stored document could not be read (see `nabu.persistence.recovery`)
+ * @param {boolean} [options.sync] - Live sync between the tabs that edit the same `docId` through a `BroadcastChannel` (default `true`; `false`
+ *   disables it; a browser without `BroadcastChannel` skips it silently). The merge on save does not depend on it. `nabu.persistence.sync` tells whether it runs.
  * @param {import('../files/files.svelte.js').FilesConfig} [options.files] - File handling; `files.store` replaces the default IndexedDB asset store
  * @param {'full' | { mode: 'full' } | { mode: 'compact', retain: number | string, onBeforeCompact?: CompactOptions['onBeforeCompact'] }} [options.history] - `'full'` (default): nothing is ever compacted.
  *   `{ mode: 'compact', retain, onBeforeCompact }`: compact at open (`retain`: ms, `'30d'`, `'12h'`, or `0` = keep no past history).
@@ -98,6 +108,7 @@ export async function createPersistedEditor({
 	extensions = [],
 	debounce = 2000,
 	maxWait,
+	sync = true,
 	onSaveError,
 	onRecover,
 	history,
@@ -228,6 +239,8 @@ export async function createPersistedEditor({
 		};
 
 		let disposed = false;
+		/** True while a save imports the stored record into the document (see the `doc.subscribe` below). */
+		let mergingStored = false;
 
 		/** Whether there is anything not stored yet (a save scheduled, a change since the last save, a failed save to retry). */
 		const isUnsaved = () => autosave.pending()
@@ -238,23 +251,71 @@ export async function createPersistedEditor({
 		/** Never throws away the status of a change that came while a save was running. */
 		const settle = () => { state.status = isUnsaved() ? 'pending' : 'saved'; };
 
-		const save = () => lock(async () => {
+		/** Whether a record is the one this editor wrote or loaded last (so nobody else wrote since: nothing to merge). @param {{ snapshot: Uint8Array, savedAt?: number }} record */
+		const isMine = (record) => lastStored !== null && record.savedAt === lastStored.savedAt && record.snapshot.length === lastStored.snapshot.length;
+
+		/**
+		 * Save the document. By default the save MERGES what is stored first (P-94): in one read-write transaction the stored record is read,
+		 * whatever it holds that this document lacks is imported, and the result is exported and written (nothing at all when the stored
+		 * record already holds everything). `blind` (a page that is going away, nobody else wrote since) skips the read, so that every request
+		 * is issued synchronously.
+		 * @param {{ blind?: boolean }} [options]
+		 */
+		const save = ({ blind = false } = {}) => lock(async () => {
 			if (!available) throw new Error('persistence is unavailable: IndexedDB cannot be used, the document is only in memory');
 			if (disposed) throw new Error('persistence was disposed');
-			const key = versionKey(nabu.doc);
-			requestedKey = key;
+			requestedKey = versionKey(nabu.doc);
 			state.status = 'saving';
 			try {
-				const snap = compactedAt
+				/** @type {{ snapshot: Uint8Array, savedAt: number }} */
+				let record;
+				/** The version / key of the document at the moment it was exported (a merge may have moved them). */
+				let version = nabu.doc.version();
+				let key = versionKey(nabu.doc);
+				const exportDoc = () => (compactedAt
 					? nabu.doc.export({ mode: 'shallow-snapshot', frontiers: compactedAt })
-					: nabu.doc.export({ mode: 'snapshot' });
-				const version = nabu.doc.version(); // (the export above committed any pending change: this is what `snap` contains)
-				await saveSnapshot(docId, snap, { conn, previous: lastStored });
-				lastStored = { snapshot: snap, savedAt: Date.now() };
+					: nabu.doc.export({ mode: 'snapshot' }));
+				if (blind) {
+					const snap = exportDoc();
+					version = nabu.doc.version(); // (the export above committed any pending change: this is what `snap` contains)
+					key = versionKey(nabu.doc);
+					record = /** @type {{ snapshot: Uint8Array, savedAt: number }} */ (await saveSnapshot(docId, snap, { conn, previous: lastStored }));
+				} else {
+					const { stored, written, quarantinedKey } = await saveMerged(docId, (found) => {
+						/** @type {unknown} */
+						let unmerged;
+						let covers = false;
+						if (found && !isSnapshotBytes(found.snapshot)) {
+							unmerged = new TypeError('the stored snapshot is not a non-empty byte array');
+						} else if (found && !isMine(/** @type {any} */ (found))) {
+							mergingStored = true; // (Loro may deliver the events of the import before this callback returns)
+							try {
+								const merge = mergeStored(nabu.doc, /** @type {Uint8Array} */ (found.snapshot), (bytes) => nabu.importRemote(bytes));
+								covers = merge.covers;
+								if (!merge.merged) unmerged = new Error('the stored document holds changes this one cannot merge (a compacted copy saved by another tab)');
+							} catch (error) {
+								unmerged = error ?? new Error('the stored document could not be merged');
+							} finally {
+								mergingStored = false;
+							}
+						}
+						const snapshot = covers && !compactedAt && unmerged === undefined ? null : exportDoc();
+						version = nabu.doc.version();
+						key = requestedKey = versionKey(nabu.doc);
+						return unmerged === undefined ? { snapshot } : { snapshot, unmerged };
+					}, { conn });
+					if (quarantinedKey) warn(`persistence: the stored copy of "${docId}" could not be merged with this tab and is kept in the "quarantine" store (${quarantinedKey}); it was replaced by this tab's document`);
+					const kept = written ?? stored;
+					if (!kept || !isSnapshotBytes(kept.snapshot)) throw new Error('nothing was saved');
+					record = { snapshot: kept.snapshot, savedAt: kept.savedAt ?? Date.now() };
+				}
+				lastStored = { snapshot: record.snapshot, savedAt: record.savedAt };
 				savedVersion = version;
+				writeRev(docId, lastStored);
 				clearTail(docId); // the stored snapshot holds everything the tail had
 				await saveRefs();
 				savedKey = key;
+				requestedKey = key;
 				state.lastSavedAt = Date.now();
 				state.lastError = null;
 				settle();
@@ -267,20 +328,22 @@ export async function createPersistedEditor({
 		});
 
 		/** An automatic save (timer, page hide): nobody awaits it, so a failure is reported, not thrown. */
-		const autosaveRun = async () => {
+		const autosaveRun = async (/** @type {{ blind?: boolean }} */ options = {}) => {
 			try {
-				await save();
+				await save(options);
 			} catch (error) {
 				warn(`persistence: could not save "${docId}" (the changes stay in memory; the next change retries): ${error}`);
 				try { onSaveError?.(error); } catch (hookError) { warn(`persistence: onSaveError threw: ${hookError}`); }
 			}
 		};
 
-		const autosave = createAutosave({ debounce, maxWait: maxWaitMs, run: autosaveRun });
+		const autosave = createAutosave({ debounce, maxWait: maxWaitMs, run: () => { void autosaveRun(); } });
 
 		// Auto-save: Loro fires doc.subscribe() after every committed change
 		const unsubscribe = available
-			? nabu.doc.subscribe(() => {
+			? nabu.doc.subscribe((event) => {
+				// What a save just imported from the stored record is in that record: it makes nothing unsaved (the event comes after the save)
+				if (event.by === 'import' && (mergingStored || versionKey(nabu.doc) === savedKey || versionKey(nabu.doc) === requestedKey)) return;
 				if (state.status !== 'saving') state.status = 'pending'; // a change that comes while saving is picked up by `settle()`
 				autosave.touch();
 			})
@@ -303,7 +366,11 @@ export async function createPersistedEditor({
 			if (disposed || !available || !isUnsaved()) return;
 			writeTailNow();
 			autosave.cancel();
-			void autosaveRun();
+			// BLIND (every request issued at once, which a page that is leaving needs) only while no other tab wrote the record since this one
+			// read or wrote it; otherwise the save merges first (it completes when the tab merely goes to the background; for a page that
+			// is really leaving, the tail above is what keeps the changes).
+			const rev = readRev(docId);
+			void autosaveRun({ blind: rev === null || rev === revToken(lastStored) });
 		};
 		const onVisibility = () => { if (document.visibilityState === 'hidden') flushOnHide(); };
 		const listening = available && typeof document !== 'undefined' && typeof window !== 'undefined';
@@ -312,9 +379,19 @@ export async function createPersistedEditor({
 			window.addEventListener('pagehide', flushOnHide);
 		}
 
+		// Live sync with the other tabs of this document (P-94): the channel is closed with the editor
+		const syncHandle = available && sync ? startSync({
+			nabu, docId,
+			onError: (error) => warn(`persistence: could not apply a change from another tab of "${docId}": ${error}`),
+		}) : null;
+		state.sync = syncHandle !== null;
+
 		const stop = () => {
 			autosave.cancel();
 			unsubscribe();
+			syncHandle?.close();
+			if (syncHandle) state.sync = false;
+			Files.get(nabu).dispose();
 			if (listening) {
 				document.removeEventListener('visibilitychange', onVisibility);
 				window.removeEventListener('pagehide', flushOnHide);
@@ -395,6 +472,7 @@ export async function createPersistedEditor({
 			lastStored = null; // the backup was deleted with the rest
 			savedVersion = undefined;
 			clearTail(docId);
+			clearRev(docId);
 			requestedKey = versionKey(nabu.doc); // what is in memory now is deliberately NOT stored: a page hide must not bring it back
 			if (state.status === 'pending') state.status = 'saved'; // the pending autosave was cancelled above: nothing is waiting
 		};
@@ -405,6 +483,8 @@ export async function createPersistedEditor({
 			stop();
 			conn.close();
 		};
+
+		syncHandle?.hello(); // the peers send what this tab lacks (their unsaved changes)
 
 		return { ctx, dispose: stop, touch: () => { state.status = 'pending'; autosave.touch(); } };
 	};

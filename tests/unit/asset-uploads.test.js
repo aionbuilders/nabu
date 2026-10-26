@@ -371,7 +371,7 @@ describe('outbox: resume after the document is opened again', () => {
     expect(await outbox.list()).toEqual([]);
   });
 
-  it('an upload that FAILED before the tab closed is not retried automatically on the next open', async () => {
+  it('an upload that FAILED before the tab closed is retried by itself on the next open (P-97)', async () => {
     const store = new MemoryAssetStore();
     const outbox = new MemoryOutbox();
     const host = makeHost();
@@ -379,12 +379,154 @@ describe('outbox: resume after the document is opened again', () => {
     vi.spyOn(a, 'warn').mockImplementation(() => {});
     await upload(a);
     host.calls[0].reject(); await flush();
+    expect((await outbox.list())[0]).toMatchObject({ state: 'error' });
     const second = makeHost();
     const b = new Nabu({ extensions: EXTENSIONS, snapshot: a.doc.export({ mode: 'snapshot' }), files: { onBeforePersist: second.hook, store, outbox } });
     await Files.get(b).whenResumed(); await flush();
-    expect(second.calls).toHaveLength(0);
-    expect(images(b)[0].status).toBe('error');
-    expect(images(b)[0].reason.code).toBe('upload-failed');
+    expect(second.calls).toHaveLength(1); // retried at open, nobody called retry()
+    expect(images(b)[0].status).toBe('pending');
+    second.calls[0].resolve('https://cdn.test/again.png');
+    await flush();
+    expect(images(b)[0].status).toBe('ready');
+    expect(await outbox.list()).toEqual([]);
+    Files.get(b).dispose();
+  });
+
+  describe('retry on open (P-97): backoff, attempts, online, opt-out', () => {
+    const FAST = { initialDelay: 40, maxDelay: 120, maxAttempts: 4 };
+    const until = async (fn, ms = 2000) => { const t0 = Date.now(); while (!fn()) { if (Date.now() - t0 > ms) throw new Error('timeout'); await new Promise((r) => setTimeout(r, 5)); } };
+
+    /** A document saved with a failed upload; returns what is needed to reopen it. */
+    async function failedDocument() {
+      const store = new MemoryAssetStore();
+      const outbox = new MemoryOutbox();
+      const host = makeHost();
+      const a = await makeEditor({ files: { onBeforePersist: host.hook, store, outbox } });
+      vi.spyOn(a, 'warn').mockImplementation(() => {});
+      await upload(a);
+      host.calls[0].reject(); await flush();
+      return { store, outbox, snapshot: a.doc.export({ mode: 'snapshot' }) };
+    }
+    const reopen = async ({ store, outbox, snapshot }, host, autoRetry = FAST) => {
+      const b = new Nabu({ extensions: EXTENSIONS, snapshot, files: { onBeforePersist: host.hook, store, outbox, autoRetry } });
+      vi.spyOn(b, 'warn').mockImplementation(() => {});
+      await Files.get(b).whenResumed();
+      return b;
+    };
+
+    it('a host that keeps failing is retried after 2 s, 4 s, 8 s… (here 40, 80, 120 ms), then given up; the block stays in error', async () => {
+      const doc = await failedDocument();
+      const stamps = [];
+      const host = { calls: [], hook: async () => { stamps.push(Date.now()); throw new Error('down'); } };
+      const b = await reopen(doc, host);
+      await until(() => stamps.length === 4);
+      await new Promise((r) => setTimeout(r, 300)); // no fifth attempt
+      expect(stamps).toHaveLength(4);
+      const gaps = stamps.slice(1).map((t, i) => t - stamps[i]);
+      expect(gaps[0]).toBeGreaterThanOrEqual(35); // initialDelay
+      expect(gaps[1]).toBeGreaterThanOrEqual(75); // doubled
+      expect(gaps[2]).toBeGreaterThanOrEqual(110); // capped at maxDelay (120), not 160
+      expect(gaps[2]).toBeLessThan(400);
+      expect(images(b)[0].status).toBe('error');
+      expect((await doc.outbox.list())[0]).toMatchObject({ state: 'error' });
+      Files.get(b).dispose();
+    });
+
+    it('a later attempt that succeeds ends the series: ready, outbox empty, no more calls', async () => {
+      const doc = await failedDocument();
+      let n = 0;
+      const calls = [];
+      const host = { calls, hook: async (f) => { calls.push(f); if (++n < 3) throw new Error('down'); return { ref: 'https://cdn.test/ok.png' }; } };
+      const b = await reopen(doc, host);
+      await until(() => images(b)[0].status === 'ready');
+      await new Promise((r) => setTimeout(r, 200));
+      expect(calls).toHaveLength(3);
+      expect(await doc.outbox.list()).toEqual([]);
+      Files.get(b).dispose();
+    });
+
+    it('the online event grants a fresh series to a file that used up its attempts', async () => {
+      const doc = await failedDocument();
+      let up = false;
+      const calls = [];
+      const host = { calls, hook: async (f) => { calls.push(f); if (!up) throw new Error('down'); return { ref: 'https://cdn.test/ok.png' }; } };
+      const b = await reopen(doc, host, { initialDelay: 10, maxDelay: 20, maxAttempts: 2 });
+      await until(() => calls.length === 2);
+      await new Promise((r) => setTimeout(r, 150));
+      expect(calls).toHaveLength(2);
+      up = true;
+      globalThis.dispatchEvent(new Event('online'));
+      await until(() => images(b)[0].status === 'ready');
+      expect(calls).toHaveLength(3);
+      Files.get(b).dispose();
+    });
+
+    it('offline: nothing is attempted (no attempt used) until the browser says it is online', async () => {
+      const doc = await failedDocument();
+      Object.defineProperty(globalThis.navigator, 'onLine', { value: false, configurable: true });
+      try {
+        const calls = [];
+        const host = { calls, hook: async (f) => { calls.push(f); return { ref: 'https://cdn.test/ok.png' }; } };
+        const b = await reopen(doc, host);
+        await new Promise((r) => setTimeout(r, 150));
+        expect(calls).toHaveLength(0);
+        Object.defineProperty(globalThis.navigator, 'onLine', { value: true, configurable: true });
+        globalThis.dispatchEvent(new Event('online'));
+        await until(() => images(b)[0].status === 'ready');
+        expect(calls).toHaveLength(1);
+        Files.get(b).dispose();
+      } finally { delete globalThis.navigator.onLine; }
+    });
+
+    it('an upload the user cancelled is not retried; autoRetry: false turns the whole thing off', async () => {
+      const store = new MemoryAssetStore();
+      const outbox = new MemoryOutbox();
+      const host = makeHost();
+      const a = await makeEditor({ files: { onBeforePersist: host.hook, store, outbox } });
+      await upload(a);
+      Files.get(a).cancel(images(a)[0].ref); await flush();
+      expect(images(a)[0].reason.code).toBe('cancelled');
+      const doc = { store, outbox, snapshot: a.doc.export({ mode: 'snapshot' }) };
+      const second = makeHost();
+      const b = await reopen(doc, second);
+      await new Promise((r) => setTimeout(r, 150));
+      expect(second.calls).toHaveLength(0);
+      Files.get(b).dispose();
+
+      const failed = await failedDocument();
+      const third = makeHost();
+      const c = await reopen(failed, third, false);
+      await new Promise((r) => setTimeout(r, 150));
+      expect(third.calls).toHaveLength(0);
+      expect(images(c)[0].status).toBe('error');
+    });
+
+    it('dispose() stops the pending retries', async () => {
+      const doc = await failedDocument();
+      const calls = [];
+      const host = { calls, hook: async (f) => { calls.push(f); throw new Error('down'); } };
+      const b = await reopen(doc, host);
+      await until(() => calls.length === 1);
+      Files.get(b).dispose();
+      await new Promise((r) => setTimeout(r, 250));
+      expect(calls).toHaveLength(1);
+    });
+
+    it('changes IMPORTED from another tab never start an upload here (that tab owns it)', async () => {
+      const store = new MemoryAssetStore();
+      const hostA = makeHost();
+      const a = await makeEditor({ files: { onBeforePersist: hostA.hook, store } });
+      const hostB = makeHost();
+      const b = await makeEditor({ files: { onBeforePersist: hostB.hook, store } });
+      b.doc.import(a.doc.export({ mode: 'snapshot' }));
+      await flush();
+      await upload(a); // pending in A, bytes in the shared store
+      b.doc.import(a.doc.export({ mode: 'update', from: b.doc.version() }));
+      await flush();
+      expect(images(b)[0].status).toBe('pending');
+      expect(hostA.calls).toHaveLength(1);
+      expect(hostB.calls).toHaveLength(0);
+    });
   });
 
   it('an entry still pending whose block was saved as ready (the status was not saved in time) is resumed', async () => {

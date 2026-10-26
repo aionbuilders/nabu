@@ -43,6 +43,11 @@ const EMBED_CACHE_BUDGET = 32 * 1024 * 1024;
  *   block becomes `ready`. Throw to fail (`error`, the local copy is kept, `block.retry()` runs it again). `signal` fires when
  *   the upload is cancelled (`block.cancel()`) or when the last block that shows the file is deleted — honour it. The upload
  *   is retried from the local copy after a reload (it may therefore run more than once for one file: make it idempotent).
+ * @property {false | import('./uploads.svelte.js').AutoRetryConfig} [autoRetry] Retry on open (P-97), only meaningful with a host and a persisted editor:
+ *   the uploads the outbox lists when the document is opened (interrupted, or failed earlier) are sent again by themselves, in the
+ *   background, with a growing delay (`initialDelay` 2 s, doubling, `maxDelay` 60 s, `maxAttempts` 8 per session; the browser's `online`
+ *   event grants a fresh series). A cancelled upload is never retried; failures of the current session are left to `block.retry()`.
+ *   `false` turns it off.
  * @property {number} [maxFileSize] Largest file (bytes) accepted; default none. A bigger file is REFUSED: the block that would
  *   have shown it is created with `status: 'rejected'`, no ref, and a readable `reason` (`too-large`).
  * @property {Outbox} [outbox] Where the uploads still to do are listed (ADR 014 §3.4), scoped to this document. Default: in
@@ -362,6 +367,9 @@ export class Files {
      * @param {string} id @returns {'pending' | 'ready'}
      */
     initialStatus(id) { return this.#uploads.needsUpload(id) ? 'pending' : 'ready'; }
+
+    /** Stop the automatic upload retries (timers, `online` listener): the persistence of the editor was disposed. */
+    dispose() { this.#uploads.dispose(); }
 
     /** Resolves when the first pass over the document (resuming the uploads of a reopened document) is done. @returns {Promise<void>} */
     whenResumed() { return this.#uploads.ready(); }

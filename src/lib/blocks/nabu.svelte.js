@@ -788,6 +788,23 @@ export class Nabu {
     }
 
     /**
+     * Import changes made ELSEWHERE (another tab, a peer, a stored copy of the document: ADR 010 multi-tab sync). They are the
+     * document's own history, not the user's actions: Loro's UndoManager records local commits only, so an import is never an undo
+     * step (undoing the user's own edits afterwards still works, Loro transforms them). The DOM follows through the normal Loro
+     * events. The caret of the local user stays on the same CHARACTER: it is captured as Loro cursors before the import and put
+     * back after the render (a text node rewritten by Svelte would otherwise send it to the start of the block); the page is
+     * never scrolled for it. Idempotent (importing what the document already has changes nothing).
+     * @param {Uint8Array} bytes a Loro snapshot or update
+     * @returns {import('loro-crdt').ImportStatus}
+     */
+    importRemote(bytes) {
+        const keep = !this.#composing && this.#busy === 0 && this.doc.getPendingTxnLength() === 0 ? captureSelection(this) : null;
+        const status = this.doc.import(bytes);
+        if (keep) restoreSelection(this, keep, 0, false);
+        return status;
+    }
+
+    /**
      * Undo the last operation. The selection as it was before that operation comes back (see ADR 015).
      */
     undo() {

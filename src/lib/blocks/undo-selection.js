@@ -266,15 +266,16 @@ function resolveEndpoint(nabu, ep) {
  * @param {Nabu} nabu
  * @param {UndoSelection} snap
  * @param {number} [attempt]
+ * @param {boolean} [reveal]  scroll the focus end into view (default); `false` for a change the user did not make (a remote import)
  */
-export function restoreSelection(nabu, snap, attempt = 0) {
+export function restoreSelection(nabu, snap, attempt = 0, reveal = true) {
     tick().then(() => {
         const a = resolveEndpoint(nabu, snap.anchor);
         const f = resolveEndpoint(nabu, snap.focus);
         if (!a && !f) return;
         const anchor = /** @type {NonNullable<typeof a>} */ (a ?? f);
         const focus = /** @type {NonNullable<typeof f>} */ (f ?? a);
-        if ((!anchor.block.element || !focus.block.element) && attempt < 3) return restoreSelection(nabu, snap, attempt + 1);
+        if ((!anchor.block.element || !focus.block.element) && attempt < 3) return restoreSelection(nabu, snap, attempt + 1, reveal);
 
         if (anchor.block === focus.block && anchor.offset === focus.offset) {
             nabu.selection.setCursor(anchor.block, anchor.offset);
@@ -284,7 +285,7 @@ export function restoreSelection(nabu, snap, attempt = 0) {
             if (from && to) nabu.selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
             else nabu.selection.setCursor(focus.block, focus.offset);
         }
-        revealFocus(focus.block);
+        if (reveal) revealFocus(focus.block);
     });
 }
 

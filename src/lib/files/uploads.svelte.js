@@ -7,6 +7,29 @@ import { reasonOf } from './status.js';
 /** @import { FileReason } from './status.js' */
 
 /**
+ * @typedef {Object} AutoRetryConfig How a persisted editor retries, by itself, the uploads it finds waiting when it is opened (P-97).
+ * @property {number} [initialDelay] ms before the second attempt (default 2000); each next one waits twice as long
+ * @property {number} [maxDelay] longest wait between two attempts (default 60000)
+ * @property {number} [maxAttempts] attempts per file and per session, the one at open included (default 8); the `online` event grants a new series
+ */
+export const DEFAULT_AUTO_RETRY = Object.freeze({ initialDelay: 2000, maxDelay: 60000, maxAttempts: 8 });
+
+/**
+ * The resolved `files.autoRetry` option: `false` disables the automatic retries, an object tunes them, anything else is the default.
+ * @param {unknown} option @returns {Required<AutoRetryConfig> | null}
+ */
+export function resolveAutoRetry(option) {
+    if (option === false) return null;
+    const o = option && typeof option === 'object' ? /** @type {AutoRetryConfig} */ (option) : {};
+    const positive = (/** @type {unknown} */ v, /** @type {number} */ fallback) => (typeof v === 'number' && v >= 0 && Number.isFinite(v) ? v : fallback);
+    return {
+        initialDelay: positive(o.initialDelay, DEFAULT_AUTO_RETRY.initialDelay),
+        maxDelay: positive(o.maxDelay, DEFAULT_AUTO_RETRY.maxDelay),
+        maxAttempts: Math.max(1, Math.floor(positive(o.maxAttempts, DEFAULT_AUTO_RETRY.maxAttempts))),
+    };
+}
+
+/**
  * What the upload queue needs from {@link import('./files.svelte.js').Files} (kept as an interface so this module does not
  * reach into it).
  * @typedef {Object} UploadHost
@@ -44,6 +67,11 @@ import { reasonOf } from './status.js';
  *
  * The outbox ({@link Outbox}) remembers what is waiting (and how many attempts were made) next to the local store, so it
  * survives a closed tab; it is a record, the document statuses plus the local bytes are what the queue acts on.
+ *
+ * Retry on open (P-97): the files the outbox lists when the document is opened (an upload interrupted, or one that had failed) are
+ * sent again BY THEMSELVES, in the background: a failed `error` file at once, then, whenever an attempt fails, after 2 s, 4 s, 8 s…
+ * (at most 60 s), `maxAttempts` times per session; the browser's `online` event starts a fresh series. A cancelled upload (the user's
+ * choice) is not retried, nor are the failures of the current session (the block's `retry()` is for those). See {@link AutoRetryConfig}.
  */
 export class Uploads {
     /** @type {UploadHost} */
@@ -63,12 +91,36 @@ export class Uploads {
     #booted = false;
     /** @type {Promise<void>} */
     #boot;
+    /** `files.autoRetry`, resolved (`null`: off). */
+    #auto;
+    /** Files the outbox listed at open: the ones retried by themselves. @type {Set<string>} */
+    #autoSet = new Set();
+    /** Attempts started this session, per file of {@link Uploads#autoSet}. @type {Map<string, number>} */
+    #attempts = new Map();
+    /** @type {Map<string, ReturnType<typeof setTimeout>>} */
+    #timers = new Map();
+    /** Files that used their attempts or waited for the network: the next `online` event retries them. @type {Set<string>} */
+    #parked = new Set();
+    #disposed = false;
+    /** @type {(() => void) | null} */
+    #onOnline = null;
 
     /** @param {UploadHost} host */
     constructor(host) {
         this.#host = host;
         this.outbox = /** @type {Outbox} */ (host.config().outbox ?? new MemoryOutbox());
+        this.#auto = resolveAutoRetry(/** @type {any} */ (host.config()).autoRetry);
         this.#boot = host.track(this.#start0());
+    }
+
+    /** Stop the automatic retries (timers, `online` listener). The queue itself keeps working. */
+    dispose() {
+        this.#disposed = true;
+        for (const timer of this.#timers.values()) clearTimeout(timer);
+        this.#timers.clear();
+        this.#parked.clear();
+        if (this.#onOnline) globalThis.removeEventListener?.('online', this.#onOnline);
+        this.#onOnline = null;
     }
 
     /** Resolves once the outbox was read and the first pass (resume) ran. @returns {Promise<void>} */
@@ -109,6 +161,9 @@ export class Uploads {
         for (const e of event?.events ?? []) {
             const diff = e.diff;
             if (e.path?.[0] === 'assetIndex') this.#host.forgetMissing();
+            // Changes IMPORTED from another tab (multi-tab sync) are that tab's uploads: they never start one here (two tabs would send
+            // the same file twice). They arrive with their final status; if that tab goes away first, the next open resumes the upload.
+            if (event?.by === 'import') continue;
             if (diff?.type === 'map') {
                 const updated = diff.updated;
                 if (updated && ('ref' in updated || 'status' in updated)) relevant = true;
@@ -163,6 +218,59 @@ export class Uploads {
         }
         this.#booted = true;
         if (this.#again) await this.reconcile();
+        this.#startAutoRetry();
+    }
+
+    // ── Retry on open (P-97) ─────────────────────────────────────────────────────────────────────
+
+    /** After the first pass: the files still waiting in the outbox are the ones to retry by themselves. */
+    #startAutoRetry() {
+        if (!this.#auto || !this.#hook || this.#disposed) return;
+        for (const [hash, entry] of this.#entries) {
+            this.#autoSet.add(hash);
+            if (entry.state === 'error' && !this.#jobs.has(hash)) this.#arm(hash);
+        }
+        if (this.#autoSet.size === 0 || this.#onOnline || typeof globalThis.addEventListener !== 'function') return;
+        this.#onOnline = () => this.#networkBack();
+        globalThis.addEventListener('online', this.#onOnline);
+    }
+
+    /** The network is back: every file that gave up or waited gets a fresh series, at once. */
+    #networkBack() {
+        if (this.#disposed) return;
+        for (const hash of [...this.#autoSet]) {
+            if (!this.#parked.has(hash) && !this.#timers.has(hash)) continue;
+            clearTimeout(this.#timers.get(hash));
+            this.#timers.delete(hash);
+            this.#parked.delete(hash);
+            this.#attempts.set(hash, 0);
+            this.#arm(hash);
+        }
+    }
+
+    /** Whether some live block of `hash` failed for a reason a retry can cure (not a cancellation, which is the user's choice). @param {string} hash */
+    #retriable(hash) {
+        return this.#nodesOf(hash).some((n) => n.data.get('status') === 'error' && n.data.get('reason')?.code !== 'cancelled');
+    }
+
+    /** Schedule the next automatic attempt of `hash` (backoff), unless it is not one to retry, or used its attempts. @param {string} hash */
+    #arm(hash) {
+        const auto = this.#auto;
+        if (!auto || this.#disposed || !this.#autoSet.has(hash) || this.#timers.has(hash) || this.#jobs.has(hash) || !this.#hook) return;
+        if (this.hostedUrl(hash) || !this.#retriable(hash)) return;
+        const done = this.#attempts.get(hash) ?? 0;
+        if (done >= auto.maxAttempts) { this.#parked.add(hash); return; }
+        const delay = done === 0 ? 0 : Math.min(auto.maxDelay, auto.initialDelay * 2 ** (done - 1));
+        this.#timers.set(hash, setTimeout(() => { this.#timers.delete(hash); void this.#attempt(hash); }, delay));
+    }
+
+    /** @param {string} hash */
+    async #attempt(hash) {
+        if (this.#disposed || this.#jobs.has(hash)) return;
+        if (globalThis.navigator?.onLine === false) { this.#parked.add(hash); return; } // offline: wait for the `online` event, no attempt used
+        if (this.hostedUrl(hash) || !this.#retriable(hash)) return;
+        const ok = await this.retry(hash);
+        if (!ok) this.#arm(hash); // (a failed job armed it already; this covers a retry that could not start)
     }
 
     /**
@@ -303,6 +411,8 @@ export class Uploads {
         const { hash, controller } = job;
         const { signal } = controller;
         const attempts = (this.#entries.get(hash)?.attempts ?? 0) + 1;
+        let rearm = false;
+        if (this.#autoSet.has(hash)) this.#attempts.set(hash, (this.#attempts.get(hash) ?? 0) + 1);
         try {
             await this.#remember(hash, 'pending', attempts);
             const blob = await this.#host.store.get(hash);
@@ -336,6 +446,9 @@ export class Uploads {
             });
             this.#host.forgetMissing();
             await this.#forget(hash);
+            this.#autoSet.delete(hash);
+            this.#attempts.delete(hash);
+            this.#parked.delete(hash);
             return true;
         } catch (error) {
             if (signal.aborted) {
@@ -350,11 +463,13 @@ export class Uploads {
             this.#host.nabu.warn(`files: upload of ${hash} failed: ${detail}`);
             await this.#mark(hash, 'error', reasonOf('upload-failed', `The upload failed: ${detail}`.slice(0, 300)), ['pending']);
             await this.#remember(hash, 'error', attempts);
+            rearm = true;
             return false;
         } finally {
             if (this.#jobs.get(hash) === job) this.#jobs.delete(hash);
             this.#progress.delete(hash);
             this.schedule();
+            if (rearm) this.#arm(hash); // (after the job left the table: a failed upload of a file retried on open is tried again, later)
         }
     }
 
