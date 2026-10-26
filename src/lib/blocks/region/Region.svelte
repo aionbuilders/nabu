@@ -59,6 +59,7 @@
     margin of the seam, so showing it shifts nothing; it needs `--nb-region-margin` to leave about one line above the seam
     (the default does).
 -->
+<!-- No whitespace between tags below: the editor preserves whitespace, so any whitespace text node would render as a selectable line. -->
 <div
     class="nabu-region"
     data-region-type={block.regionType}
@@ -70,16 +71,7 @@
     data-region-caret={hasCaret ? '' : undefined}
     data-region-pending={pending ? 'hold' : undefined}
     style:--nb-region-progress={pending ? pending.progress : undefined}
->
-    <div class="nabu-region-seam" role="heading" aria-level={level}>
-        {#if pending}
-            <!-- Not read as part of the heading (the live region announces the prompt): decorative here. -->
-            <span class="nabu-region-hint" data-region-hint data-nabu-ui contenteditable="false" aria-hidden="true">{pending.message}</span>
-        {/if}
-        {#if prefix}
-            <span class="nabu-region-label" data-nabu-ui contenteditable="false" title={prefix}>{prefix}</span>
-        {/if}
-        <div
+><div class="nabu-region-seam" role="heading" aria-level={level}>{#if pending}<!-- Not read as part of the heading (the live region announces the prompt): decorative here. --><span class="nabu-region-hint" data-region-hint data-nabu-ui contenteditable="false" aria-hidden="true">{pending.message}</span>{/if}{#if prefix}<span class="nabu-region-label" data-nabu-ui contenteditable="false" title={prefix}>{prefix}</span>{/if}<div
             bind:this={block.element}
             class="nabu-region-title"
             class:empty={!block.text}
@@ -87,22 +79,7 @@
             data-block-type="region"
             data-nabu-isolated
             data-placeholder={block.placeholder}
-        ><RichText delta={block.delta} /></div>
-        <span class="nabu-region-rule" data-nabu-ui contenteditable="false" aria-hidden="true">
-            {#if pending}<span class="nabu-region-drain"></span>{/if}
-        </span>
-    </div>
-    <div class="nabu-region-body">
-        {#each block.children as child (child.id)}<Block block={child} />{/each}
-    </div>
-    {#if endText}
-        <!-- Never a caret stop (not editable, not selectable) and not read as text: a separator named by the same sentence. -->
-        <div class="nabu-region-end" data-region-end data-nabu-ui contenteditable="false" role="separator" aria-label={endText}>
-            <span class="nabu-region-end-rule" aria-hidden="true"></span>
-            <span class="nabu-region-end-text" aria-hidden="true">{endText}</span>
-        </div>
-    {/if}
-</div>
+        ><RichText delta={block.delta} /></div><span class="nabu-region-rule" data-nabu-ui contenteditable="false" aria-hidden="true">{#if pending}<span class="nabu-region-drain"></span>{/if}</span></div><div class="nabu-region-body">{#each block.children as child (child.id)}<Block block={child} />{/each}</div>{#if endText}<!-- Never a caret stop (not editable, not selectable) and not read as text: a separator named by the same sentence. --><div class="nabu-region-end" data-region-end data-nabu-ui contenteditable="false" role="separator" aria-label={endText}><span class="nabu-region-end-rule" aria-hidden="true"></span><span class="nabu-region-end-text" aria-hidden="true">{endText}</span></div>{/if}</div>
 
 <style>
     /* ── Margin rail: the region that holds the caret (data-region-caret), from its seam to the end of its body ── */

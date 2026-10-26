@@ -20,25 +20,19 @@
     <div class="nabu-file-chip nabu-file-chip--error">⚠️ Upload failed</div>
   {:else if block.isMissing}
     <div class="nabu-file-chip nabu-file-chip--error nabu-file-chip--missing" data-nabu-missing>
-      <span>📎</span>
-      <span>{block.name || 'file'}</span>
-      <span class="nabu-file-chip-status">Missing file</span>
+      <span>📎</span><span>{block.name || 'file'}</span><span class="nabu-file-chip-status">Missing file</span>
     </div>
   {:else if block.status === 'pending'}
     <div class="nabu-file-chip nabu-file-chip--pending">
-      <span>📎</span>
-      <span>{block.name || 'file'}</span>
-      <span class="nabu-file-chip-status">Uploading…</span>
+      <span>📎</span><span>{block.name || 'file'}</span><span class="nabu-file-chip-status">Uploading…</span>
     </div>
   {:else if block.displaySrc}
     <a href={block.displaySrc} download={block.name} class="nabu-file-chip">
-      <span>📎</span>
-      <span>{block.name || 'file'}</span>
+      <span>📎</span><span>{block.name || 'file'}</span>
     </a>
   {:else}
     <div class="nabu-file-chip">
-      <span>📎</span>
-      <span>{block.name || 'file'}</span>
+      <span>📎</span><span>{block.name || 'file'}</span>
     </div>
   {/if}
 </div>

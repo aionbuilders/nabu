@@ -23,8 +23,7 @@
     <div class="nabu-video-error nabu-video-missing" data-nabu-missing>Missing file{block.alt ? ' — ' + block.alt : ''}</div>
   {:else if src}
     <!-- svelte-ignore a11y_media_has_caption -->
-    <video src={src} controls draggable="false"></video>
-    {#if block.status === 'pending'}<div class="nabu-video-spinner">Uploading…</div>{/if}
+    <video src={src} controls draggable="false"></video>{#if block.status === 'pending'}<div class="nabu-video-spinner">Uploading…</div>{/if}
   {:else}
     <div class="nabu-video-empty">No video</div>
   {/if}

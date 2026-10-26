@@ -6,24 +6,21 @@
     const ICONS = { note: 'ℹ️', tip: '💡', important: '❗', warning: '⚠️', caution: '🛑' };
 </script>
 
-<aside class="nabu-callout callout-{block.variant}" data-callout={block.variant}>
-    <button
+<aside class="nabu-callout callout-{block.variant}" data-callout={block.variant}><button
         class="nabu-callout-icon"
         data-nabu-ui
         contenteditable="false"
         type="button"
         title="Change callout type ({block.variant})"
         onmousedown={(e) => { e.preventDefault(); block.cycleVariant(); }}
-    >{ICONS[block.variant] ?? ICONS.note}</button>
-    <div
+    >{ICONS[block.variant] ?? ICONS.note}</button><div
         class="nabu-callout-body"
         bind:this={block.element}
         data-block-id={block.id}
         data-block-type="callout"
         data-placeholder={block.placeholder}
         class:selected={block.selected}
-    ><RichText delta={block.delta} /></div>
-</aside>
+    ><RichText delta={block.delta} /></div></aside>
 
 <style>
     .nabu-callout {

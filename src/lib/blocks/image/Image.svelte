@@ -22,8 +22,7 @@
   {:else if block.isMissing}
     <div class="nabu-image-error nabu-image-missing" data-nabu-missing>Missing file{block.alt ? ' — ' + block.alt : ''}</div>
   {:else if src}
-    <img src={src} alt={block.alt} draggable="false" />
-    {#if block.status === 'pending'}<div class="nabu-image-spinner">Uploading…</div>{/if}
+    <img src={src} alt={block.alt} draggable="false" />{#if block.status === 'pending'}<div class="nabu-image-spinner">Uploading…</div>{/if}
   {:else}
     <div class="nabu-image-empty">No image</div>
   {/if}

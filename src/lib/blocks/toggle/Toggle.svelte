@@ -5,30 +5,20 @@
     let { block } = $props();
 </script>
 
-<div class="nabu-toggle" class:collapsed={block.collapsed}>
-    <div class="nabu-toggle-head">
-        <button
+<div class="nabu-toggle" class:collapsed={block.collapsed}><div class="nabu-toggle-head"><button
             class="nabu-toggle-arrow"
             data-nabu-ui
             contenteditable="false"
             type="button"
             aria-expanded={!block.collapsed}
             onmousedown={(e) => { e.preventDefault(); block.toggleCollapsed(); }}
-        >{block.collapsed ? '▸' : '▾'}</button>
-        <div
+        >{block.collapsed ? '▸' : '▾'}</button><div
             bind:this={block.element}
             class="nabu-toggle-header"
             data-block-id={block.id}
             data-block-type="toggle"
             data-placeholder={block.placeholder}
-        ><RichText delta={block.delta} /></div>
-    </div>
-    {#if !block.collapsed}
-    <div class="nabu-toggle-body">
-        {#each block.children as child (child.id)}<Block block={child} />{/each}
-    </div>
-    {/if}
-</div>
+        ><RichText delta={block.delta} /></div></div>{#if !block.collapsed}<div class="nabu-toggle-body">{#each block.children as child (child.id)}<Block block={child} />{/each}</div>{/if}</div>
 
 <style>
     .nabu-toggle {

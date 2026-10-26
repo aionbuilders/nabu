@@ -4,8 +4,7 @@
     const LANGS = ['plaintext', 'javascript', 'typescript', 'html', 'css', 'json', 'python', 'rust', 'bash', 'markdown', 'sql', 'go'];
 </script>
 
-<div class="nabu-code-wrapper">
-    <select
+<div class="nabu-code-wrapper"><select
         class="nabu-code-lang"
         data-nabu-ui
         contenteditable="false"
@@ -13,8 +12,7 @@
         onchange={(e) => block.setLanguage(e.currentTarget.value === 'plaintext' ? null : e.currentTarget.value)}
     >
         {#each LANGS as lang}<option value={lang}>{lang}</option>{/each}
-    </select>
-    <pre
+    </select><pre
         bind:this={block.element}
         data-block-id={block.id}
         data-block-type="code"
@@ -23,8 +21,7 @@
         class="nabu-code"
         class:debug={block.nabu.debugging}
         class:selected={block.selected}
-    ><code>{block.text || '\n'}{#if block.text.endsWith('\n')}<br data-nabu-filler>{/if}</code></pre>
-</div>
+    ><code>{block.text || '\n'}{#if block.text.endsWith('\n')}<br data-nabu-filler>{/if}</code></pre></div>
 
 <style>
     .nabu-code-wrapper {

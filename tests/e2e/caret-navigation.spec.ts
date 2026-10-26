@@ -80,6 +80,8 @@ test.describe('P-34 · expanded Toggle', () => {
     expect(await inBlock(page)).toBe('after');
     await press(page, 'ArrowUp');
     expect(await inBlock(page)).toBe('Head');
+    // ArrowUp lands by COLUMN (mid-"Head": its text starts after the arrow button), so go to the end before stepping right
+    await focusEnd(page, 'Head');
     await press(page, 'ArrowRight');
     await expectCaret(page, '|after');
     await press(page, 'ArrowLeft');
