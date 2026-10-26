@@ -9,6 +9,9 @@ import { SvelteSelection } from "../utils/selection.svelte.js";
 */
 
 export class NabuSelection extends SvelteSelection {
+    /** How many times the editor itself placed the selection: lets a deferred fix-up tell that someone else already did. */
+    placements = 0;
+
     /** @param {Nabu} nabu */
     constructor(nabu) {
         super();
@@ -19,6 +22,7 @@ export class NabuSelection extends SvelteSelection {
         const placeSelection = this.setBaseAndExtent;
         /** @param {Node} anchorNode @param {number} anchorOffset @param {Node} focusNode @param {number} focusOffset */
         this.setBaseAndExtent = (anchorNode, anchorOffset, focusNode, focusOffset) => {
+            this.placements++;
             const done = placeSelection(anchorNode, anchorOffset, focusNode, focusOffset);
             this.nabu.captureUndoSelection?.('settle');
             return done;
@@ -57,6 +61,21 @@ export class NabuSelection extends SvelteSelection {
                     this.normalize();
                     this.#arrowStart = null;
                     this.#shiftAnchor = null;
+                    this.#homeFocus = null;
+                    this.#vertical = null;
+                    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                        // A plain vertical move: the browser steps over a text block with no text (see `#stepIntoEmpty`).
+                        const live = window.getSelection();
+                        const block = live?.isCollapsed ? this.#blockOf(live.anchorNode) : null;
+                        if (live?.anchorNode && block) this.#vertical = { key: e.key, block, node: live.anchorNode, offset: live.anchorOffset, at: Date.now() };
+                    }
+                    if (e.key === 'Home' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                        // Shift+Home extends the focus to the start of its line: where it was, to put it back there if the browser
+                        // answers with the "equivalent" position at the end of the PREVIOUS block (see `#canonicalHome`).
+                        const live = window.getSelection();
+                        const block = this.#blockOf(live?.focusNode ?? null);
+                        if (live?.focusNode && block) this.#homeFocus = { block, node: live.focusNode, offset: live.focusOffset, at: Date.now() };
+                    }
                     if (e.shiftKey && !e.altKey && ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
                         // The anchor of a selection being extended: a browser that cannot extend onto a non-editable
                         // sibling (a block's label…) may drop it; `normalize()` puts it back.
@@ -85,12 +104,14 @@ export class NabuSelection extends SvelteSelection {
                 const onKeyup = (/** @type {KeyboardEvent} */ e) => {
                     this.sync();
                     if (e.isComposing || e.keyCode === 229) return;
+                    this.#keyReleased = true; // the browser has moved the caret by now: "it did not move" means something
                     this.normalize();
+                    this.#keyReleased = false;
                     const start = this.#arrowStart;
                     this.#arrowStart = null;
                     if (start && start.key === e.key) this.#openTrailingIfStuck(start);
                 };
-                const onMousedown = () => { this.nabu.storedMarks = null; this.#pendingDirection = null; this.#shiftAnchor = null; this.nabu.sealUndoEnd?.(); };
+                const onMousedown = () => { this.nabu.storedMarks = null; this.#pendingDirection = null; this.#shiftAnchor = null; this.#vertical = null; this.#homeFocus = null; this.nabu.sealUndoEnd?.(); };
                 // Fires after every selection move, the user's and the editor's: the freshest "selection before the next change".
                 const onSelectionChange = () => this.nabu.captureUndoSelection?.();
                 document.addEventListener('selectionchange', onSelectionChange);
@@ -175,7 +196,11 @@ export class NabuSelection extends SvelteSelection {
         const anchorInvalid = this.#isDead(anchor);
         const focusInvalid = !!focus && this.#isDead(focus);
 
-        if (!anchorInvalid && !focusInvalid) return this.#confine(live, anchor, anchorOffset, focus, focusOffset);
+        if (!anchorInvalid && !focusInvalid) {
+            if (this.#canonicalHome(anchor, anchorOffset, focus, focusOffset)) return true;
+            if (this.#stepIntoEmpty(live, anchor, anchorOffset)) return true;
+            return this.#confine(live, anchor, anchorOffset, focus, focusOffset);
+        }
 
         /** @type {NodeFilter} */
         const filter = { acceptNode: (node) => this.#isValidTextNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT };
@@ -209,20 +234,143 @@ export class NabuSelection extends SvelteSelection {
                 if (explicit === 'forward') this.nabu.openTrailingCaret();
                 return false;
             }
-            const offset = dir === 'forward' ? 0 : (target.textContent?.length ?? 0);
-            this.setBaseAndExtent(target, offset, target, offset);
+            const point = this.#landingPoint(target, dir);
+            this.setBaseAndExtent(point.node, point.offset, point.node, point.offset);
             return true;
         }
         if (focusInvalid && focus) {
             const dir = explicit ?? offsetHeuristic(focus, focusOffset);
             const target = findNearestTextNode(focus, focusOffset, dir, filter);
             if (!target) return false;
-            const offset = dir === 'forward' ? 0 : (target.textContent?.length ?? 0);
-            this.setBaseAndExtent(anchor, anchorOffset, target, offset);
+            const point = this.#landingPoint(target, dir);
+            this.setBaseAndExtent(anchor, anchorOffset, point.node, point.offset);
             return true;
         }
         return false;
     }
+
+    /**
+     * The DOM point to land on in `target`, the text node found by a search in direction `dir`: its start (forward) or its end
+     * (backward). In a block whose MODEL text is empty, that is the start of the render placeholder (the lone "\n" text node):
+     * the last text node of such a block is Svelte's empty node AFTER the "\n", whose end is model offset 1 in a text of length
+     * 0 (P-108: Loro panics on an insert there).
+     * @param {Text} target @param {'forward' | 'backward'} dir @returns {{ node: Node, offset: number }}
+     */
+    #landingPoint(target, dir) {
+        const block = this.#blockOf(target);
+        const text = block?.behaviors?.get('text');
+        if (block && text && !text.text.length) {
+            const point = /** @type {any} */ (block).getDOMPoint?.(0);
+            if (point) return point;
+        }
+        return { node: target, offset: dir === 'forward' ? 0 : (target.textContent?.length ?? 0) };
+    }
+
+    /** Pending {@link repairAfterRemoval}. @type {ReturnType<typeof setTimeout> | null} */
+    #repairTimer = null;
+
+    /**
+     * Blocks were removed from the document (a programmatic change, a collaborator, an import, an undo): once the dust has
+     * settled, a DOM selection left on a DEAD position (the editor root or a container, where the removed block was) is brought
+     * onto the nearest text, so that the next click, key or paste starts from a real model position (P-108): the browser fires
+     * no `selectionchange` when a click re-selects the very position the selection already has. Deferred to a task of its own, so
+     * that whoever removed the block, and the editor's own handlers (which place their caret right after the render), win.
+     * Debounced: one check per burst. A selection that is not dead (or not in an editor) is left alone.
+     */
+    scheduleRepair() {
+        if (typeof window === 'undefined' || this.#repairTimer !== null) return;
+        this.#repairTimer = setTimeout(() => { this.#repairTimer = null; this.repairAfterRemoval(); }, 0);
+    }
+
+    /** @returns {boolean} Whether the selection was moved */
+    repairAfterRemoval() {
+        if (typeof window === 'undefined' || !window.getSelection || this.nabu.composing) return false;
+        const live = window.getSelection();
+        const node = live?.anchorNode;
+        if (!live || live.rangeCount === 0 || !node || !node.isConnected) return false;
+        const activeEl = document.activeElement;
+        if (activeEl && activeEl.closest?.('[data-nabu-ui], input, textarea, select, button')) return false;
+        // Only a selection that is dead for lack of a block under it: an inert block (an image…) selected on purpose stays.
+        const stray = (/** @type {Node | null} */ n) => !!n && !isInInert(n) && this.#isDead(n);
+        if (!stray(live.anchorNode) && !stray(live.focusNode)) return false;
+        this.sync();
+        /** @type {NodeFilter} */
+        const filter = { acceptNode: (n) => this.#isValidTextNode(n) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT };
+        /** @type {'forward' | 'backward'} */
+        let dir = 'backward';
+        let target = findNearestTextNode(node, live.anchorOffset, 'backward', filter);
+        if (!target) { dir = 'forward'; target = findNearestTextNode(node, live.anchorOffset, 'forward', filter); }
+        if (!target) return false;
+        const point = this.#landingPoint(target, dir);
+        this.setBaseAndExtent(point.node, point.offset, point.node, point.offset);
+        return true;
+    }
+
+    /**
+     * Shift+Home that left the focus at the END of another block (P-110). Chrome expresses "the start of the line" of a block's
+     * first line as the equivalent position at the end of the previous block's text, so a range extended with Shift+Home stopped
+     * one block short (the model focus was the end of the block above, a following Backspace left the last block unmerged).
+     * Home never leaves its block: that focus is the start of the block the key was pressed in. Anything else is left alone
+     * (the focus is still in the block, or not at the end of the block it landed in).
+     * @param {Node} anchor @param {number} anchorOffset @param {Node | null} focus @param {number} focusOffset
+     * @returns {boolean} Whether the selection was moved
+     */
+    #canonicalHome(anchor, anchorOffset, focus, focusOffset) {
+        const from = this.#homeFocus;
+        if (!from || !focus || Date.now() - from.at > KEY_WINDOW) return false;
+        if (focus === from.node && focusOffset === from.offset) return false; // the browser has not moved it (yet)
+        this.#homeFocus = null; // one move per key
+        const landed = this.#blockOf(focus);
+        if (!landed || landed === from.block || !from.block.element?.isConnected) return false;
+        const text = landed.behaviors?.get('text');
+        if (!text || !landed.element || text.calculateOffset(focus, focusOffset, landed.element) < text.text.length) return false;
+        const point = /** @type {any} */ (from.block).getDOMPoint?.(0);
+        if (!point) return false;
+        this.setBaseAndExtent(anchor, anchorOffset, point.node, point.offset);
+        return true;
+    }
+
+    /**
+     * ArrowUp / ArrowDown that stepped OVER an empty text block (P-87). An empty block renders a lone "\n" (one line, no filler:
+     * a trailing break is not a line of its own), which the browser does not take for a line to stop on when it moves the caret
+     * vertically: it goes straight to the next line of text. Every block is a caret stop, so the caret is put in the empty block
+     * the key walked past (the previous / next text block of the one the key was pressed in), at its only position. A caret that
+     * did not move at all is the same case at the edge of the document (nothing above / below the empty block to go to).
+     * @param {Selection} live @param {Node} anchor @param {number} anchorOffset
+     * @returns {boolean} Whether the selection was moved
+     */
+    #stepIntoEmpty(live, anchor, anchorOffset) {
+        const from = this.#vertical;
+        if (!from || !live.isCollapsed || Date.now() - from.at > KEY_WINDOW) return false;
+        const moved = anchor !== from.node || anchorOffset !== from.offset;
+        if (!moved && !this.#keyReleased) return false; // the browser has not moved it (yet)
+        this.#vertical = null; // one move per key
+        const landed = this.#blockOf(anchor);
+        if (!landed) return false;
+        const up = from.key === 'ArrowUp';
+        const hasText = (/** @type {Block} */ b) => !!b.behaviors?.has('text');
+        const next = up ? from.block.findBackward(hasText) : from.block.findForward(hasText);
+        const text = next?.behaviors?.get('text');
+        if (!next || !text || text.text.length || next === landed || !next.element?.isConnected || !landed.element) return false;
+        if (landed === from.block) {
+            // Still in its own block: it moved inside it (a multi-line block) — or, once the key is released, did not move at all.
+            if (moved) return false;
+        } else {
+            const order = next.element.compareDocumentPosition(landed.element);
+            if (!(order & (up ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING))) return false; // not past it
+        }
+        this.setCursor(next, 0);
+        return true;
+    }
+
+    /** The caret an unmodified ArrowUp / ArrowDown was pressed from (see the keydown listener). @type {{ key: string, block: Block, node: Node, offset: number, at: number } | null} */
+    #vertical = null;
+
+    /** Inside the keyup handler (see `#stepIntoEmpty`). */
+    #keyReleased = false;
+
+    /** The focus Shift+Home was pressed from (see the keydown listener). @type {{ block: Block, node: Node, offset: number, at: number } | null} */
+    #homeFocus = null;
 
     /** The block whose element holds `node` (null outside any block). @param {Node | null} node @returns {Block | null} */
     #blockOf(node) {
@@ -444,14 +592,25 @@ export class NabuSelection extends SvelteSelection {
     /**
      * The blocks the selection covers (flagged `selected`: highlighted, marked, …). A selection that does not lie entirely in
      * one block leaves out the blocks that isolate their text (`Block#isolatesSelection`): a title is not part of a range.
+     * Nor does it hold the HIDDEN content of a block that hides its children (the body of a collapsed toggle, `hidesChildren`):
+     * a mark or a highlight never reaches text nobody sees (P-112). Deleting a range still removes such a body with its owner:
+     * the deletion walks the tree itself (`container.utils.js`), it does not read this set.
      * @type {Set<Block>}
      */
     blocks = $derived.by(() => {
         const range = this.startBlock !== this.endBlock;
         return new Set(/** @type {Block[]} */ (getNodesBetween(this.nabu.tree, this.startBlock?.node.id.toString() || "", this.endBlock?.node.id.toString() || "").map(node => {
             return this.nabu.blocks.get(node.id.toString());
-        }).filter(b => !!b && !(range && b.isolatesSelection))));
+        }).filter(b => !!b && !(range && b.isolatesSelection) && !(range && this.#isHidden(b)))));
     });
+
+    /** True when an ancestor of `block` hides its children (the block is not rendered). @param {Block} block */
+    #isHidden(block) {
+        for (let n = block.node.parent(); n; n = n.parent()) {
+            if (this.nabu.blocks.get(n.id.toString())?.hidesChildren) return true;
+        }
+        return false;
+    }
 
     /**
      * True while the selection is a non-collapsed range across several blocks. The editor mirrors it as `data-nabu-range` on its
@@ -462,6 +621,12 @@ export class NabuSelection extends SvelteSelection {
 }
 
 
+
+/**
+ * How long (ms) after a Shift+Home / ArrowUp / ArrowDown keydown the caret the browser lands on may still be put right (`#canonicalHome`,
+ * `#stepIntoEmpty`): the move is applied after the keydown, and reported by `selectionchange` later still. The first move consumes it.
+ */
+const KEY_WINDOW = 600;
 
 /** @param {Node | null} node */
 function isInInert(node) {

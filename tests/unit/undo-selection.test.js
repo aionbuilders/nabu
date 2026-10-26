@@ -87,6 +87,31 @@ describe('selection captured before a change comes back after undo', () => {
     expect(lastRange()).toEqual([14, 14]);
   });
 
+  it('P-111 typing over a multi-block range (the typed character AND the merged tail are new characters): redo puts the caret right after the typed character', () => {
+    const { doc, text, um, pending, ep, lastRange } = setup('alpha gamma');
+    pending.pre = sel(ep(2, 'start'), ep(9, 'end'));
+    text.delete(2, 9); // the range, ...
+    text.insert(2, 'Xma'); // ... the typed character, and the tail of the last block re-inserted by the merge: all new characters
+    doc.commit();
+    pending.post = sel(ep(3)); // "alX|ma", captured once the action is rendered
+    um.undo();
+    expect(text.toString()).toBe('alpha gamma');
+    um.redo();
+    expect(text.toString()).toBe('alXma');
+    expect(lastRange()).toEqual([3, 3]); // both cursors are dead: the stored offset, as the text has the length it had
+  });
+
+  it('the stored offset is only trusted when the text kept its length (both cursors dead after a REMOTE deletion: the tombstones)', () => {
+    const { doc, text, ep } = setup('hello important world');
+    const e = ep(8); // inside "important"
+    text.delete(3, 15); // everything around it is gone, whatever the length
+    doc.commit();
+    const at = resolveOffset(doc, e, text.length);
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(at).toBeLessThanOrEqual(text.length);
+    expect(resolveOffset(doc, { ...e, length: text.length }, text.length)).toBe(Math.min(8, text.length)); // same length: the stored offset
+  });
+
   it('Backspace and Delete: the caret returns to where it was, whichever neighbour the key deleted', () => {
     const back = setup('abcdef');
     back.pending.pre = sel(back.ep(3));

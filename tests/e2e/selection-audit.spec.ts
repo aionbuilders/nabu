@@ -163,12 +163,10 @@ test.describe('1 · Shift+Arrow & co across block types', () => {
     await expectSel(page, 'alpha one@3', 'Beta head@9');
   });
 
-  // Observed: focus on "delta four@3" (after Shift+Down x3 from "alpha one@3"), Shift+Home -> the DOM focus is an empty text node at the END of
-  // the block above (Chrome's equivalent position for "start of line"), so the MODEL focus is "gamma three@11" instead of "delta four@0": the
-  // range stops one block short — a following Backspace leaves "delta four" unmerged. Same with a 2-block range (Shift+Home -> "alpha one@9"),
-  // whether the focus was in the middle or at the end of its block. A BACKWARD range (anchor below) is fine, and so is the single-block
-  // Shift+Home. Shift+End is fine everywhere.
-  test.fixme('1.2c · Shift+Home from the END of the last block of a range puts the focus at the start of THAT block — FINDING: the focus lands at the end of the previous block (model focus one block short)', async ({ page }) => {
+  // P-110 (fixed): Chrome expresses the "start of line" of a block's first line as an empty text node at the END of the block above, so the
+  // model focus was "gamma three@11" instead of "delta four@0" (the range stopped one block short, a following Backspace left "delta four"
+  // unmerged); `NabuSelection#canonicalHome` puts the focus back at the start of the block the key was pressed in.
+  test('1.2c · Shift+Home from the END of the last block of a range puts the focus at the start of THAT block (P-110)', async ({ page }) => {
     await buildTree(page, [Pp('alpha one'), Pp('Beta head'), Pp('gamma three'), Pp('delta four')]);
     await focusAt(page, 'alpha one', 3);
     await keys(page, 'Shift+ArrowDown', 3);
@@ -177,6 +175,21 @@ test.describe('1 · Shift+Arrow & co across block types', () => {
     await expectSel(page, 'alpha one@3', 'delta four@0');
     await press(page, 'Backspace');
     await expectOutline(page, 'p(alpdelta four)');
+  });
+
+  test('1.2d · Shift+Home on a 2-block range puts the focus at the start of the second block; the range then extends and retracts as usual (P-110)', async ({ page }) => {
+    await buildTree(page, [Pp('alpha one'), Pp('beta head')]);
+    await focusAt(page, 'alpha one', 3);
+    await press(page, 'Shift+ArrowDown');
+    await expectFocusBlock(page, 'beta head');
+    await press(page, 'Shift+Home');
+    await expectSel(page, 'alpha one@3', 'beta head@0');
+    await press(page, 'Shift+ArrowUp'); // still extends / retracts normally afterwards
+    await expectFocusBlock(page, 'alpha one');
+    await press(page, 'Shift+ArrowDown');
+    await expectFocusBlock(page, 'beta head');
+    await press(page, 'Shift+End');
+    await expectSel(page, 'alpha one@3', 'beta head@9');
   });
 
   test('1.3 · Ctrl+Shift+Arrow (word): extends by words inside a block, then crosses into the next block; backward too', async ({ page }) => {
@@ -249,14 +262,27 @@ test.describe('1 · Shift+Arrow & co across block types', () => {
     await expectValid(page);
   });
 
-  // Observed: `selection.blocks` (and so `block.selected`, the target of marks / the highlight) of a range that spans a COLLAPSED toggle holds
-  // the hidden body block too: ['before', 'Head', 'inner', 'after'] — formatting would reach invisible text.
-  test.fixme('1.5b · the HIDDEN body of a collapsed toggle is not part of the covered blocks — FINDING: selection.blocks includes it', async ({ page }) => {
+  // P-112 (fixed): `selection.blocks` (and so `block.selected`, the target of marks / the highlight) of a range that spans a COLLAPSED toggle
+  // held the hidden body block too: ['before', 'Head', 'inner', 'after'] — formatting would reach invisible text.
+  test('1.5b · the HIDDEN body of a collapsed toggle is not part of the covered blocks (P-112)', async ({ page }) => {
     await buildTree(page, [Pp('before'), Tog('Head', [Pp('inner')], true), Pp('after')]);
     await focusAt(page, 'before', 3);
     await keys(page, 'Shift+ArrowDown', 2);
     await expectFocusBlock(page, 'after');
     expect((await sel(page)).covered).not.toContain('inner');
+  });
+
+  test('1.5c · bold over a range that spans a collapsed toggle marks the visible text only, never the hidden body (P-112)', async ({ page }) => {
+    await buildTree(page, [Pp('before'), Tog('Head', [Pp('inner')], true), Pp('after')]);
+    await focusAt(page, 'before', 3);
+    await keys(page, 'Shift+ArrowDown', 2);
+    await expectFocusBlock(page, 'after');
+    await page.keyboard.press(`${MOD}+b`);
+    await expect.poll(() => getMarkdown(page)).toContain('**Head**');
+    const md = await getMarkdown(page);
+    expect(md).toContain('inner');
+    expect(md).not.toContain('**inner**');
+    expect(md.split('\n').filter((line) => line.includes('inner')).every((line) => !line.includes('**'))).toBe(true); // no mark on the hidden line
   });
 
   test('1.6 · a code block: Shift+Down moves line by line INSIDE it (multi-line), then leaves it; backward too', async ({ page }) => {
@@ -380,7 +406,6 @@ test.describe('2 · actions on a multi-block range, forward and backward', () =>
         if (key === `${MOD}+b`) await expect.poll(() => getMarkdown(page)).toContain('**beta**');
         else {
           await expectOutline(page, outcome);
-          if (key !== 'X') // typing: see 2.2b
           await check(`${label}: redo puts the caret at the junction`, async () => { await expect.poll(() => caret(page), { timeout: 1500 }).toBe(where); });
         }
       }
@@ -388,9 +413,10 @@ test.describe('2 · actions on a multi-block range, forward and backward', () =>
     expect(problems).toEqual([]);
   });
 
-  // Observed: ctrl+Z restores the range, then redo re-applies the typing but puts the caret at the END of the block ("alXma|") instead of right
-  // after the typed character ("alX|ma"), where the action ended (ADR 015). Backspace / Delete / Enter redo are fine.
-  test.fixme('2.2b · redo of typing over a range puts the caret right AFTER the typed character — FINDING: the caret goes to the end of the block', async ({ page }) => {
+  // P-111 (fixed): redo re-applied the typing but put the caret at the END of the block ("alXma|") instead of right after the typed
+  // character ("alX|ma"), where the action ended (ADR 015): both Loro cursors of the stored endpoint were dead (the typed character and the
+  // merged tail are re-created by the redo), see `resolveOffset` in undo-selection.js.
+  test('2.2b · redo of typing over a range puts the caret right AFTER the typed character (P-111)', async ({ page }) => {
     await selectAbg(page, 'backward');
     await page.keyboard.press('X');
     await expectOutline(page, 'p(alXma)');
@@ -622,9 +648,10 @@ test.describe('4 · selection stability', () => {
     await expectValid(page);
   });
 
-  // Observed: the anchor (alpha@2) becomes 'REMOTE alpha@0': Svelte rewrites the text node's data, the DOM range end falls back to offset 0 of the
-  // text node, nothing restores it. (Not checked: a collapsed caret, and a real peer / other-tab edit, which takes another path.)
-  test.fixme('4.2 · a programmatic insertion BEFORE the anchor in the anchor block keeps the range on the same characters — FINDING: the end falls back to offset 0 of the block', async ({ page }) => {
+  // P-109 (fixed): the anchor (alpha@2) became 'REMOTE alpha@0': Svelte rewrites the text node's data, the DOM range end falls back to offset 0
+  // of the text node, nothing restored it. `Nabu#noteTextChange` now puts the selection back on its characters (Loro cursors) after the render.
+  // 4.2b / 4.2c / 4.2d: a collapsed caret, a range inside one block, and a real `importRemote` of a forked document.
+  test('4.2 · a programmatic insertion BEFORE the anchor in the anchor block keeps the range on the same characters (P-109)', async ({ page }) => {
     await buildTree(page, DOC4);
     await focusAt(page, 'alpha', 2);
     await keys(page, 'Shift+ArrowDown', 2);
@@ -634,6 +661,62 @@ test.describe('4 · selection stability', () => {
     const s = await sel(page);
     expect(s.a).toBe('REMOTE alpha@9'); // anchored between "al" and "pha", as before the remote edit
     expect(s.range).toBe(true);
+  });
+
+  test('4.2b · a COLLAPSED caret follows a programmatic insertion before it (same block), and one after it stays put (P-109)', async ({ page }) => {
+    await buildTree(page, DOC4);
+    await focusAt(page, 'beta', 2);
+    await page.evaluate(async () => { const n = (window as any).nabu; n.children[1].behaviors.get('text').insert(0, 'REMOTE '); await n.commit(); });
+    await flushRender(page);
+    await expectSel(page, 'REMOTE beta@9', 'REMOTE beta@9');
+    expect(await caret(page)).toBe('REMOTE be|ta');
+    await page.evaluate(async () => { const n = (window as any).nabu; n.children[1].behaviors.get('text').insert(11, '!'); await n.commit(); }); // after the caret
+    await flushRender(page);
+    expect(await caret(page)).toBe('REMOTE be|ta!');
+    // the user types at the followed caret: the text lands where the caret really is
+    await page.keyboard.type('X');
+    await expectOutline(page, 'p(alpha) ; p(REMOTE beXta!) ; p(gamma) ; p(delta)');
+  });
+
+  test('4.2c · a RANGE inside one block follows a programmatic insertion before it; a following Backspace deletes exactly the selected characters (P-109)', async ({ page }) => {
+    await buildTree(page, DOC4);
+    await focusAt(page, 'gamma', 1);
+    await keys(page, 'Shift+ArrowRight', 3); // "amm"
+    await expectSel(page, 'gamma@1', 'gamma@4');
+    await page.evaluate(async () => { const n = (window as any).nabu; n.children[2].behaviors.get('text').insert(0, 'REMOTE '); await n.commit(); });
+    await flushRender(page);
+    await expectSel(page, 'REMOTE gamma@8', 'REMOTE gamma@11');
+    await press(page, 'Backspace');
+    await expectOutline(page, 'p(alpha) ; p(beta) ; p(REMOTE ga) ; p(delta)');
+  });
+
+  test('4.2d · an IMPORT from another replica (importRemote of a forked document) before the caret / the range keeps them on the same characters (P-109)', async ({ page }) => {
+    await buildTree(page, DOC4);
+    const peerInsert = (index: number, at: number, what: string) => page.evaluate(([i, a, w]) => {
+      const n = (window as any).nabu;
+      const fork = n.doc.fork();
+      const container = fork.getContainerById(n.children[i as number].behaviors.get('text').container.id);
+      const before = n.doc.version();
+      container.insert(a as number, w as string);
+      fork.commit();
+      n.importRemote(fork.export({ mode: 'update', from: before }));
+    }, [index, at, what] as [number, number, string]);
+    // collapsed
+    await focusAt(page, 'alpha', 3);
+    await peerInsert(0, 0, 'PEER ');
+    await flushRender(page);
+    expect(await caret(page)).toBe('PEER alp|ha');
+    // range from alpha into gamma
+    await focusAt(page, 'beta', 1);
+    await keys(page, 'Shift+ArrowDown', 1);
+    await expectFocusBlock(page, 'gamma');
+    const before = await sel(page);
+    await peerInsert(1, 0, 'PEER ');
+    await flushRender(page);
+    const after = await sel(page);
+    expect(after.a).toBe('PEER beta@' + (offsetOf(before.a) + 5));
+    expect(after.f).toBe(before.f);
+    expect(after.range).toBe(true);
   });
 
   test('4.3 · SCROLLING (scroll container): Shift+PageDown extends a page at a time, the range survives wheel scrolling, then deletes cleanly in one undo step', async ({ page }) => {
@@ -716,19 +799,53 @@ test.describe('5 · T-11 · click after the block holding the caret was deleted 
     await expect.poll(() => allText(page)).toEqual(['again']);
   });
 
-  // FINDING T-11 (P2, product): the empty paragraph that replaces the one holding the caret is clicked, but the click is a no-op
-  // (Chrome re-selects the very position the DOM selection already has: the editor root, offset 5, left there by the removal of the
-  // old block -> no `selectionchange`, no normalisation). The model selection (`selection.anchorBlock`) still points at the DELETED
-  // block. The next keystroke / paste runs `normalize()`, which lands BACKWARD on the last text node of the empty paragraph — Svelte's
-  // empty text node AFTER the lone "\n" placeholder — i.e. DOM position #text@0 = MODEL offset 1 in a text of length 0 ->
-  // `tb.selection.from === 1`, the insertion goes to Loro at index 1 of an empty text, throws (loro-internal handler.rs:2229, uncaught
-  // page error) and the keystroke / paste is lost. `focus()` or a fresh selection is fine (offset 0).
-  test.fixme('5.2 · click on the replaced empty paragraph places a model caret: paste / typing works — FINDING T-11: normalize() lands after the "\\n" placeholder (model offset 1 > length 0), Loro panics', async ({ page }) => {
+  // T-11 = P-108 (fixed): the empty paragraph that replaces the one holding the caret is clicked, but the click was a no-op (Chrome
+  // re-selects the very position the DOM selection already has: the editor root, offset 5, left there by the removal of the old block -> no
+  // `selectionchange`, no normalisation). The model selection still pointed at the DELETED block. The next keystroke / paste ran
+  // `normalize()`, which landed BACKWARD on Svelte's empty text node AFTER the lone "\n" placeholder, i.e. MODEL offset 1 in a text of
+  // length 0: the insertion went to Loro at index 1 of an empty text, threw (loro-internal handler.rs:2229) and the input was lost.
+  // Fixed three ways: the landing on an empty block is its placeholder start (`#landingPoint`), the model offset is bounded by the text
+  // (`TextBehavior#modelOffset`, `insert`), and a selection left dead by a removal is re-resolved at once (`NabuSelection#repairAfterRemoval`).
+  test('5.2 · click on the replaced empty paragraph places a model caret: paste / typing works (T-11 / P-108)', async ({ page }) => {
     await typeThenReset(page);
     await getEditor(page).click();
     await pasteText(page, 'hello');
     await expect.poll(() => allText(page)).toEqual(['hello']);
     await page.keyboard.type('!');
     await expect.poll(() => allText(page)).toEqual(['hello!']);
+  });
+
+  test('5.3 · a landing on an EMPTY paragraph is model offset 0 (never 1): the normalisation of a dead caret just before it is safe to type from', async ({ page }) => {
+    await buildTree(page, [Pp('x'), Pp(''), Pp('y')]);
+    // The caret sits on a dead position (an element, right before the block "y"): normalize() lands BACKWARD on the empty paragraph.
+    const landed = await page.evaluate(() => {
+      const n = (window as any).nabu;
+      const y = [...n.blocks.values()].find((b: any) => b.behaviors?.get('text')?.text === 'y') as any;
+      const el = document.querySelector(`[data-block-id="${y.id}"]`)!;
+      window.getSelection()!.setBaseAndExtent(el.parentNode!, [...el.parentNode!.childNodes].indexOf(el as ChildNode), el.parentNode!, [...el.parentNode!.childNodes].indexOf(el as ChildNode));
+      n.selection.sync();
+      n.selection.normalize();
+      n.selection.sync();
+      const b = n.selection.anchorBlock;
+      const g = window.getSelection()!;
+      return { text: b?.behaviors?.get('text')?.text, from: b?.behaviors?.get('text')?.calculateOffset(g.anchorNode, g.anchorOffset, b.element) };
+    });
+    expect(landed).toEqual({ text: '', from: 0 });
+    await pasteText(page, 'hello');
+    await expect.poll(() => allText(page)).toEqual(['x', 'hello', 'y']);
+  });
+
+  test('5.4 · the block holding the caret is deleted programmatically: the selection is re-resolved to a real position at once (no click needed)', async ({ page }) => {
+    await buildTree(page, [Pp('keep'), Pp('doomed'), Pp('tail')]);
+    await focusAt(page, 'doomed', 3);
+    await page.evaluate(async () => {
+      const n = (window as any).nabu;
+      n.delete(n.children[1]);
+      await n.commit();
+    });
+    await expect.poll(() => caret(page), { timeout: 3000 }).toMatch(/^(keep\||\|tail)$/);
+    await page.keyboard.type('Z');
+    await expect.poll(() => allText(page)).toHaveLength(2);
+    expect((await allText(page)).join('|')).toMatch(/keepZ\|tail|keep\|Ztail/);
   });
 });

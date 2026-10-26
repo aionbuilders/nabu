@@ -26,6 +26,7 @@ import { Cursor } from 'loro-crdt';
  * @property {string} blockId
  * @property {number[]} path  child index at each level, root first (see {@link blockPath})
  * @property {number} offset  model offset when captured: the fallback when no cursor can be used
+ * @property {number} [length]  length of the block's text when captured (see {@link resolveOffset}: both cursors dead)
  * @property {string | null} container  id of the block's text container the cursors belong to
  * @property {'start' | 'end'} role  the first end of a range sticks to the character before it, every other end to the one after
  * @property {Uint8Array | null} next  encoded Loro cursor (the UndoManager serializes what it stores: a live Cursor would not survive)
@@ -71,7 +72,8 @@ export function makeEndpoint(block, offset, role, withCursors = true) {
             prev = offset > 0 ? container.getCursor(offset - 1, 0)?.encode() ?? null : null;
         } catch { /* a container without cursor support: the plain offset remains */ }
     }
-    return { blockId: block.id, path: blockPath(block), offset, container: container?.id ?? null, role, next, prev };
+    const length = container ? container.length : undefined;
+    return { blockId: block.id, path: blockPath(block), offset, length, container: container?.id ?? null, role, next, prev };
 }
 
 /**
@@ -193,6 +195,9 @@ export function legacySelection(nabu) {
 /**
  * Offset an endpoint stands at NOW. A cursor whose character was deleted (`update` set) is the one to distrust; of the
  * two cursors, the live one wins — for two live ones the role decides (a range start sticks to the character before it).
+ * Both dead: the position of the tombstones, unless the text has the very length it had when the endpoint was captured — the
+ * characters around it were then deleted and re-created by an undo / redo of the action (typing over a range: the caret between
+ * the typed character and the merged tail, and both are new characters after the redo), and the stored offset is the right one.
  * @param {LoroDoc} doc
  * @param {Endpoint} ep
  * @param {number} length  current length of the text
@@ -214,6 +219,7 @@ export function resolveOffset(doc, ep, length) {
     let chosen;
     if (next && prev) {
         if (next.deleted !== prev.deleted) chosen = next.deleted ? prev : next;
+        else if (next.deleted && prev.deleted && ep.length === length) chosen = { offset: ep.offset, deleted: true };
         else chosen = ep.role === 'start' && !prev.deleted ? prev : next;
     } else chosen = next ?? prev;
     return chosen ? Math.max(0, Math.min(chosen.offset, length)) : null;
@@ -226,9 +232,10 @@ export function resolveOffset(doc, ep, length) {
  * the stored one clamped to the text.
  * @param {Nabu} nabu
  * @param {Endpoint} ep
+ * @param {boolean} [strict]  only the block of that very id, still alive (no fallback by tree path): null otherwise
  * @returns {{ block: Block, offset: number } | null}
  */
-function resolveEndpoint(nabu, ep) {
+function resolveEndpoint(nabu, ep, strict = false) {
     /** @param {Block | undefined | null} b */
     const alive = (b) => !!b && !b.node.isDeleted?.() && nabu.tree.has(b.node.id);
     /** @param {Block} b */
@@ -244,6 +251,7 @@ function resolveEndpoint(nabu, ep) {
 
     const byId = nabu.blocks.get(ep.blockId);
     if (byId && alive(byId) && withText(byId)) return resolve(byId);
+    if (strict) return null;
 
     /** @type {Block | null} */
     let found = null;
@@ -287,6 +295,26 @@ export function restoreSelection(nabu, snap, attempt = 0, reveal = true) {
         }
         if (reveal) revealFocus(focus.block);
     });
+}
+
+/**
+ * Keep the live selection on the characters it was on: after a change the user did not make in a block holding one of its ends
+ * (a programmatic edit, a collaborator's), the DOM selection is put back where the stored endpoints (Loro cursors) now stand,
+ * if it is anywhere else. Svelte rewrites the text node of an edited block, which sends the end of a DOM range to offset 0 of it
+ * (P-109). Does nothing when there is no live selection in the editor, when a block of the snapshot is gone, or when the
+ * selection is already right. Never scrolls.
+ * @param {Nabu} nabu
+ * @param {UndoSelection} snap  the selection BEFORE the change
+ * @returns {boolean} whether the selection was moved
+ */
+export function keepSelection(nabu, snap) {
+    const live = livePoints(nabu);
+    if (!live) return false;
+    const a = resolveEndpoint(nabu, snap.anchor, true);
+    const f = resolveEndpoint(nabu, snap.focus, true);
+    if (!a || !f) return false;
+    if (a.block === live.anchor.block && a.offset === live.anchor.offset && f.block === live.focus.block && f.offset === live.focus.offset) return false;
+    return placePoints(nabu, { anchor: a, focus: f });
 }
 
 /**

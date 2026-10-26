@@ -15,7 +15,7 @@ import { normalizePlaceholders } from '../utils/placeholders.js';
 import { normalizeLang } from '../utils/spellcheck.js';
 import { resolveTabMode, handleTabKey, isModifierKey, DEFAULT_TAB_HINT } from '../utils/tab.js';
 import { moveBlocks } from './move.js';
-import { captureSelection, explicitSelection, legacySelection, restoreSelection, makeEndpoint, resolveOffset } from './undo-selection.js';
+import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset } from './undo-selection.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
 
@@ -146,6 +146,12 @@ export class Nabu {
      * @type {import('./undo-selection.js').UndoSelection | null}
      */
     #undoSel = null;
+    /** Undo / redo whose render is still pending: they put the selection back themselves. */
+    #undoing = 0;
+    /** Value of `selection.placements` when `#undoSel` was captured: tells whether the editor placed the selection since. */
+    #undoSelPlacements = 0;
+    /** A selection fix-up after a text change is already scheduled. */
+    #keepPending = false;
     /** Commits and undo / redo whose render is still pending: the DOM lags the model, so the selection must not be captured. */
     #busy = 0;
     /** Counter end of the undo step just pushed: the next settled selection is where that action ENDED (what redo restores). */
@@ -304,9 +310,11 @@ export class Nabu {
             /** @type {Set<string>} */
             const retyped = new Set();
 
+            let removed = false;
             event.events.forEach(e => {
                 if (e.diff.type === "tree") {
                     e.diff.diff.forEach(action => {
+                        if (action.action === 'delete') removed = true;
                         if (action.action === 'create' || action.action === 'move' || action.action === 'delete') {
                             if (action.parent) parents.add(action.parent.toString());
                             else rootsDirty = true;
@@ -333,6 +341,7 @@ export class Nabu {
                 }
             })
 
+            if (removed) this.selection.scheduleRepair?.(); // the caret may have been in the removed blocks (P-108)
             if (rootsDirty) this.updateRoots(retyped);
             for (const parentId of parents) {
                 // A block retyped into a leaf (no children) in the same transaction has no updateChildren().
@@ -850,7 +859,34 @@ export class Nabu {
      */
     #whileRendering(fn) {
         this.#busy++;
-        try { fn(); } finally { tick().then(() => { this.#busy--; }); }
+        this.#undoing++;
+        try { fn(); } finally { tick().then(() => { this.#busy--; this.#undoing--; }); }
+    }
+
+
+    /**
+     * The text of `block` just changed (a Loro event of its text container: local, programmatic or imported). When a selection end
+     * is in that block and the change is NOT the user's own typing (the handlers place their caret themselves), the selection is
+     * put back on the characters it was on once the render is done: Svelte rewrites the edited text node, which would send the end
+     * of the DOM range to offset 0 of it (P-109). The ends are the Loro cursors of the last selection captured while the model and
+     * the DOM agreed (`#undoSel`), so an insertion before them shifts them. O(1) when the block holds no selection end. Skipped
+     * during a composition and an undo / redo (which restore the selection themselves), and when the editor has placed the selection
+     * since that capture (an input handler puts its own caret after the render: it is the one that knows where the caret goes, and
+     * what it placed is captured again, `captureUndoSelection('settle')`).
+     * @param {Block} block
+     */
+    noteTextChange(block) {
+        const snap = this.#undoSel;
+        if (!snap || this.#keepPending || this.#composing || this.#undoing > 0) return;
+        if (snap.anchor.blockId !== block.id && snap.focus.blockId !== block.id) return;
+        const placed = this.#undoSelPlacements;
+        if (this.selection.placements !== placed) return;
+        this.#keepPending = true;
+        tick().then(() => {
+            this.#keepPending = false;
+            if (this.#composing || this.#undoing > 0 || this.selection.placements !== placed) return;
+            keepSelection(this, snap);
+        });
     }
 
     /**
@@ -866,6 +902,7 @@ export class Nabu {
         const snap = captureSelection(this);
         if (!snap) return;
         this.#undoSel = snap;
+        this.#undoSelPlacements = this.selection.placements ?? 0;
         if (source === 'settle' && this.#endKey !== null) {
             this.#actionEnds.set(this.#endKey, snap);
             if (this.#actionEnds.size > 200) this.#actionEnds.delete(/** @type {number} */ (this.#actionEnds.keys().next().value));

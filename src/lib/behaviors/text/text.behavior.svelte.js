@@ -191,6 +191,7 @@ export class TextBehavior {
         this.container.subscribe(() => {
             this.text = this.container.toString();
             this.delta = this.container.toDelta();
+            this.nabu.noteTextChange?.(this.block); // a selection end in this block must follow the edit (P-109)
         });
     }
     
@@ -223,11 +224,11 @@ export class TextBehavior {
         let to = this.text.length;
         
         if (containsStart) {
-            from = this.calculateOffset(globalRange.startContainer, globalRange.startOffset);
+            from = this.modelOffset(globalRange.startContainer, globalRange.startOffset);
         }
         
         if (containsEnd) {
-            to = this.calculateOffset(globalRange.endContainer, globalRange.endOffset);
+            to = this.modelOffset(globalRange.endContainer, globalRange.endOffset);
         }
         
         return {
@@ -250,6 +251,16 @@ export class TextBehavior {
         range.setStart(element, 0);
         range.setEnd(node, offset);
         return range.toString().length;
+    }
+
+    /**
+     * {@link TextBehavior#calculateOffset} bounded by the MODEL text: an empty text renders a lone "\n" placeholder, and a caret
+     * after it is still offset 0, not 1 (P-108). (Not during an IME composition: the browser's text is ahead of the model then.)
+     * @param {Node} node @param {number} offset @param {HTMLElement?} [element]
+     */
+    modelOffset(node, offset, element = this.block.element) {
+        const at = this.calculateOffset(node, offset, element);
+        return this.nabu.composing ? at : Math.min(at, this.text.length);
     }
 
     /** The render of an EMPTY block when an IME composition started (Svelte's own child nodes and their text), to put back if it is canceled. @type {{ nodes: Node[], data: string[] } | null} */
@@ -815,7 +826,8 @@ export class TextBehavior {
     
     /** @param {number} index @param {string} text */
     insert(index, text) {
-        this.container.insert(index, text);
+        // Never past the end of the text, whatever the caller computed (a stale DOM offset would panic Loro).
+        this.container.insert(Math.max(0, Math.min(index, this.container.length)), text);
     }
     
     /** @param {Parameters<Block["delete"]>[0]} [deletion] @param {ReturnType<TextBehavior["getSelection"]>} [selection] */

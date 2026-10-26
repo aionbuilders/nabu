@@ -165,3 +165,75 @@ test.describe('P-34 · typing never lands on a dead caret', () => {
     await expectTree(page, 'p(above) ; p(∅) ; hr ; p(below)');
   });
 });
+
+// ── P-87 · empty paragraphs are caret stops ─────────────────────────────────
+
+/** Position (among the root children) of the block holding the caret, with its text — "1:" for the second child, empty. */
+const caretBlock = (page: Page) => page.evaluate(() => {
+  const n = (window as any).nabu;
+  const b = n.selection.anchorBlock;
+  return b ? `${n.children.indexOf(b)}:${b.behaviors?.get('text')?.text ?? ''}` : null;
+});
+const expectCaretBlock = (page: Page, expected: string) =>
+  expect.poll(() => caretBlock(page), { timeout: 3000, message: 'caret block' }).toBe(expected);
+
+test.describe('P-87 · ArrowUp / ArrowDown stop on an empty paragraph', () => {
+  test('one empty paragraph between two texts: Up/Down enter it, stay one press each, and typing lands in it', async ({ page }) => {
+    await buildTree(page, [Pp('above'), Pp(''), Pp('below')]);
+    await focusAt(page, 'below', 0);
+    await press(page, 'ArrowUp');
+    await expectCaretBlock(page, '1:');
+    await press(page, 'ArrowUp');
+    expect((await caretBlock(page))?.startsWith('0:above')).toBe(true);
+    await press(page, 'ArrowDown');
+    await expectCaretBlock(page, '1:');
+    await press(page, 'ArrowDown');
+    expect((await caretBlock(page))?.startsWith('2:below')).toBe(true);
+    await press(page, 'ArrowUp');
+    await expectCaretBlock(page, '1:');
+    await page.keyboard.type('Q');
+    await expectTree(page, 'p(above) ; p(Q) ; p(below)');
+    await expectValid(page);
+  });
+
+  test('ArrowUp from the START of a text paragraph (caret at offset 0, not just anywhere) lands on the empty paragraph above', async ({ page }) => {
+    await buildTree(page, [Pp('above'), Pp(''), Pp('below text')]);
+    await focusAt(page, 'below text', 0);
+    await press(page, 'ArrowUp');
+    await expectCaretBlock(page, '1:');
+    await focusAt(page, 'below text', 4);
+    await press(page, 'ArrowUp');
+    await expectCaretBlock(page, '1:');
+  });
+
+  test('two empty paragraphs in a row: every one is a stop, going up and going down', async ({ page }) => {
+    await buildTree(page, [Pp('above'), Pp(''), Pp(''), Pp('below')]);
+    await focusAt(page, 'below', 0);
+    await press(page, 'ArrowUp');
+    await expectCaretBlock(page, '2:');
+    await press(page, 'ArrowUp');
+    await expectCaretBlock(page, '1:');
+    await press(page, 'ArrowUp');
+    expect((await caretBlock(page))?.startsWith('0:above')).toBe(true);
+    await focusAt(page, 'above', 5);
+    await press(page, 'ArrowDown');
+    await expectCaretBlock(page, '1:');
+    await press(page, 'ArrowDown');
+    await expectCaretBlock(page, '2:');
+    await press(page, 'ArrowDown');
+    expect((await caretBlock(page))?.startsWith('3:below')).toBe(true);
+    await expectValid(page);
+  });
+
+  test('an empty paragraph at the very start / end of the document is reachable too', async ({ page }) => {
+    await buildTree(page, [Pp(''), Pp('mid'), Pp('')]);
+    await focusAt(page, 'mid', 0);
+    await press(page, 'ArrowUp');
+    await expectCaretBlock(page, '0:');
+    await press(page, 'ArrowDown');
+    expect((await caretBlock(page))?.startsWith('1:mid')).toBe(true);
+    await focusEnd(page, 'mid');
+    await press(page, 'ArrowDown');
+    await expectCaretBlock(page, '2:');
+  });
+});
