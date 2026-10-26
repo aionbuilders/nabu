@@ -35,20 +35,23 @@ export class MegaBlock extends Block {
         return last ? last.resolveOffset(Math.max(0, (last.positions ?? 1) - 1)) : null;
     }
 
-    updateChildren() {
+    /** @param {Set<string>} [retyped]  ids whose `type` just changed; without it, the type of every child is checked */
+    updateChildren(retyped) {
         const childrenNodes = this.node.children();
         if (!childrenNodes) return;
         this.children = childrenNodes.map((childNode, i) => {
             const id = childNode.id.toString();
             let block = this.nabu.blocks.get(id);
-            const currentType = childNode.data.get("type");
 
-            if (!block || block.type !== currentType) {
-                if (block) {
-                    this.nabu.blocks.delete(id);
-                    this.nabu.blocksByType.get(block.type)?.delete(block);
+            if (!block || !retyped || retyped.has(id)) {
+                const currentType = childNode.data.get("type");
+                if (!block || block.type !== currentType) {
+                    if (block) {
+                        this.nabu.blocks.delete(id);
+                        this.nabu.blocksByType.get(block.type)?.delete(block);
+                    }
+                    block = Block.load(this.nabu, childNode);
                 }
-                block = Block.load(this.nabu, childNode);
             }
             block.parent = this;
             block.index = i;

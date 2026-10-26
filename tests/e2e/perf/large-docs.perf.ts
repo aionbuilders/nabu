@@ -14,14 +14,14 @@
  *   NABU_PERF_IMPORT_MAX   largest block count of the importJSON growth curve (default: all of 500 / 1000 / 2000 / 4000 / 5000)
  *   NABU_PERF_IMPORT_10K=1 also attempt `importJSON` of 10 000 blocks (capped; skipped by default: the 4 000 / 5 000 curve is enough)
  *   NABU_PERF_PROFILE=1    print the V8 sampling-profiler top functions of the typing / Enter / Backspace runs at the middle of the
- *                          document (names are minified in the production build: profile an unminified build, see harness.ts)
+ *                          document, and of the Select all + Backspace of the bulk spec (names are minified in the production build: profile an unminified build, see harness.ts)
  *
  * Output: a table on the console and `test-results/perf.json` (rewritten at the end of the run, so `-g` runs overwrite it).
  * Thresholds are FLAGGED, never failed: typing median > 16 ms or p95 > 50 ms, a long task > 200 ms while typing, import + render > 2 s at
  * 1 000 blocks.
  *
- * How a big document is built: `importJSON` of 1 000 blocks already takes seconds and is O(N^2) (the tree subscription calls `updateRoots()`
- * once per created root), so a 5 000 / 10 000-block document is seeded straight into IndexedDB as a snapshot (harness.ts `seedSnapshot`:
+ * How a big document is built: `importJSON` was O(N^2) (the tree subscription called `updateRoots()` once per created root: 163 s for
+ * 5 000 blocks; fixed 2026-10-26, now ~4 s), and a 5 000 / 10 000-block document is still seeded straight into IndexedDB as a snapshot (harness.ts `seedSnapshot`:
  * the real block factories write into a Loro doc nobody listens to) and OPENED with `?persist=` (the O(N) path of a saved document). The
  * `importJSON` / insert-loop curves are measured separately, at sizes where they come back.
  *
@@ -547,10 +547,15 @@ test.describe('perf', () => {
         console.log(`[perf] ${label} Select all`, JSON.stringify(out.bulk.selectAll), 'wall', Date.now() - t0);
 
         const t1 = Date.now();
-        const del = await hang(label, 'Select all + Backspace', (async () => {
+        const deleteAll = () => hang(label, 'Select all + Backspace', (async () => {
           await page.keyboard.press('Backspace');
           return page.evaluate(async (cap) => (window as any).__perf.until(() => document.querySelectorAll('[data-block-id]').length <= 3, cap), CAP_MS);
         })());
+        let del: Awaited<ReturnType<typeof deleteAll>>;
+        if (PROFILE) {
+          const prof = await profileTop(page, async () => { del = await deleteAll(); }, 22);
+          console.log(`[perf] PROFILE ${label} Select all + Backspace:\n${prof}`);
+        } else del = await deleteAll();
         if (!del || del.ms < 0) {
           out.bulk.delete = { capped: true, wallMs: Date.now() - t1 };
           out.bulk.undo = { capped: true, skipped: 'the deletion did not finish' };

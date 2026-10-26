@@ -280,6 +280,7 @@ export class Nabu {
         if (roots?.length) {
             for (const root of roots) {
                 const block = Block.load(this, root);
+                block.index = this.children.length;
                 this.children.push(block);
             }
         }
@@ -293,46 +294,50 @@ export class Nabu {
         //     console.log("Rapport de la transaction :", event.events);
         // });
 
+        // One event batch = one refresh. The affected containers are COLLECTED while the batch is read, then each is refreshed
+        // once (the root list at most once, every parent at most once): refreshing per action made an import / a mass undo / a
+        // big paste quadratic (P-104). The doc already holds the final state of the batch, so the order of the actions is moot.
         this.tree.subscribe((event) => {
+            let rootsDirty = false;
+            /** @type {Set<string>} */
+            const parents = new Set();
+            /** @type {Set<string>} */
+            const retyped = new Set();
+
             event.events.forEach(e => {
                 if (e.diff.type === "tree") {
                     e.diff.diff.forEach(action => {
                         if (action.action === 'create' || action.action === 'move' || action.action === 'delete') {
-                            if (action.parent) {
-                                const parentId = action.parent.toString();
-                                const parentBlock = this.blocks.get(parentId);
-                                // A block retyped into a leaf (no children) in the same transaction has no updateChildren().
-                                if (parentBlock) parentBlock.updateChildren?.();
-                            } else {
-                                this.updateRoots();
-                            }
+                            if (action.parent) parents.add(action.parent.toString());
+                            else rootsDirty = true;
 
-                            if (action.oldParent) {
-                                const oldParentId = action.oldParent.toString();
-                                const oldParentBlock = this.blocks.get(oldParentId);
-                                if (oldParentBlock) oldParentBlock.updateChildren?.();
-                            } else if (action.action === 'move' && action.parent) {
-                                // A node that LEAVES the root for a container has no `oldParent` (the root is no node): the
-                                // root list must be refreshed too, else the old element stays rendered next to the new one.
-                                this.updateRoots();
-                            }
+                            if (action.oldParent) parents.add(action.oldParent.toString());
+                            // A node that LEAVES the root for a container has no `oldParent` (the root is no node): the
+                            // root list must be refreshed too, else the old element stays rendered next to the new one.
+                            else if (action.action === 'move' && action.parent) rootsDirty = true;
                         }
                     })
                 }
 
                 if (e.diff.type === "map") {
-                    
                     const newType = e.diff.updated["type"];
                     if (newType !== undefined) {
                         const nodeId = e.path[1].toString();
                         const block = this.blocks.get(nodeId);
                         if (block && block.type !== newType) {
-                            if (block.parent) block.parent.updateChildren();
-                            else this.updateRoots();
+                            retyped.add(nodeId);
+                            if (block.parent) parents.add(block.parent.id);
+                            else rootsDirty = true;
                         }
                     }
                 }
             })
+
+            if (rootsDirty) this.updateRoots(retyped);
+            for (const parentId of parents) {
+                // A block retyped into a leaf (no children) in the same transaction has no updateChildren().
+                this.blocks.get(parentId)?.updateChildren?.(retyped);
+            }
         });
         
         this.init();
@@ -504,21 +509,27 @@ export class Nabu {
         this.hooks.get("onInit")?.forEach(hook => hook(this));
     }
 
-    /** Rafraîchit les blocs racines de l'éditeur */
-    updateRoots() {
+    /**
+     * Rafraîchit les blocs racines de l'éditeur. Les blocs déjà connus sont réutilisés tels quels : seul le type des nœuds
+     * listés dans `retyped` (ids dont le `type` vient de changer) est relu.
+     * @param {Set<string>} [retyped]  without it, the type of every root is checked
+     */
+    updateRoots(retyped) {
         const roots = /** @type {NabuNode[]} */ (this.tree.roots());
         this.children = roots.map((root, i) => {
             const id = root.id.toString();
             let block = this.blocks.get(id);
-            const currentType = root.data.get("type");
-            
-            if (!block || block.type !== currentType) {
-                if (block) {
-                    this.blocks.delete(id);
-                    this.blocksByType.get(block.type)?.delete(block);
-                }
 
-                block = Block.load(this, root);
+            if (!block || !retyped || retyped.has(id)) {
+                const currentType = root.data.get("type");
+                if (!block || block.type !== currentType) {
+                    if (block) {
+                        this.blocks.delete(id);
+                        this.blocksByType.get(block.type)?.delete(block);
+                    }
+
+                    block = Block.load(this, root);
+                }
             }
             block.index = i;
             block.parent = null;

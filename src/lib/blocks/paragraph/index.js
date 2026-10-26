@@ -6,6 +6,25 @@ import ParagraphComponent from "./Paragraph.svelte";
  * @import { Nabu } from "../nabu.svelte.js";
  */
 
+/**
+ * Whether the pending (uncommitted) transaction holds a tree `delete` or `move`: the only ops that can leave the root without a node.
+ * @param {Nabu} nabu
+ * @returns {boolean}
+ */
+function mayEmptyRoot(nabu) {
+    const pending = nabu.doc.getUncommittedOpsAsJson();
+    if (!pending) return false;
+    const treeId = nabu.tree.id;
+    for (const change of pending.changes) {
+        for (const op of change.ops) {
+            if (op.container !== treeId) continue;
+            const type = /** @type {any} */ (op.content).type;
+            if (type === "delete" || type === "move") return true;
+        }
+    }
+    return false;
+}
+
 const ParagraphExtension = extension("paragraph", {
     block: Paragraph,
     defaultBlock: true,
@@ -30,18 +49,14 @@ const ParagraphExtension = extension("paragraph", {
 
             }
         },
-        /** @param {Nabu} nabu */
+        /**
+         * "The document is never empty". Only a transaction that DELETES or MOVES a node can have emptied the root, so the
+         * check (`tree.roots()`, O(roots)) is skipped for everything else: a keystroke commits text ops only, and pays nothing.
+         * @param {Nabu} nabu
+         */
         onBeforeTransaction: (nabu) => {
-            const roots = nabu.tree.roots();
-            roots.forEach(root => {
-                const type = root.data.get("type");
-                root.children()?.forEach(child => {
-                    const childType = child.data.get("type");
-                });
-            })
-            if (roots.length === 0) {
-                nabu.insert("paragraph", { text: "" });
-            }
+            if (!mayEmptyRoot(nabu)) return;
+            if (nabu.tree.roots().length === 0) nabu.insert("paragraph", { text: "" });
         },
         /** @param {Nabu} nabu @param {Paragraph} block @param {Event} event @param {{offset: number, delta: import('loro-crdt').Delta<string>}} data */
         onSplit: (nabu, block, event, data) => {

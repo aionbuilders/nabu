@@ -2,9 +2,9 @@
  * Cheap REGRESSION GUARDS on a 1 000-block document (AUDIT 2026-10, theme 8c). The full measurements (1k / 5k / 10k, scroll, bulk
  * operations, profiling) live in tests/e2e/perf/large-docs.perf.ts and run on demand: `bunx playwright test --project=perf`.
  *
- * The bounds are ~3x the values measured on a production build (see the audit), generous on purpose so that they do not flake under
- * the parallel workers. They pin TODAY's behaviour, which is known to be slow in places (importJSON is O(N^2): ~6 s for 1 000 blocks;
- * Enter / Backspace pay a normalizer pass): a failure means "got markedly worse"; once the product is fixed, TIGHTEN the bounds.
+ * The bounds are ~3x the values measured on a production build after the P-104..P-106 fixes (2026-10-26: importJSON of 1 000 blocks
+ * ~1 s, was ~6 s; Enter ~10 ms, was ~45 ms; typing ~2.5 ms, was ~6 ms), generous on purpose so that they do not flake under the
+ * parallel workers: a failure means "got markedly worse" (a quadratic path is back).
  */
 
 import { test, expect } from './helpers/test.js';
@@ -34,7 +34,7 @@ async function latencies(page: import('@playwright/test').Page, keys: string[], 
 const median = (xs: number[]) => xs[Math.floor(xs.length / 2)];
 
 test.describe('large document (1 000 blocks)', () => {
-  test('importJSON + render of 1 000 blocks stays under 20 s (measured ~6 s; target < 2 s)', async ({ page }) => {
+  test('importJSON + render of 1 000 blocks stays under 3 s (measured ~1 s; was ~6 s when the tree subscription was quadratic)', async ({ page }) => {
     test.setTimeout(90000);
     const g = doc();
     await gotoEditor(page, {});
@@ -48,10 +48,10 @@ test.describe('large document (1 000 blocks)', () => {
       return performance.now() - t0;
     }, [json, g.nodes] as [string, number]);
     console.log(`[large-docs] importJSON + render of ${g.nodes} blocks: ${Math.round(ms)} ms`);
-    expect(ms).toBeLessThan(20000);
+    expect(ms).toBeLessThan(3000);
   });
 
-  test('opening a saved 1 000-block document shows every block under 4 s (measured ~0.6 s)', async ({ page }) => {
+  test('opening a saved 1 000-block document shows every block under 2 s (measured ~0.6 s)', async ({ page }) => {
     test.setTimeout(60000);
     const g = doc();
     const id = docId();
@@ -62,10 +62,10 @@ test.describe('large document (1 000 blocks)', () => {
     await page.waitForFunction((n) => document.querySelectorAll('[data-block-id]').length >= n, g.nodes, { timeout: 30000 });
     const ms = Date.now() - t0;
     console.log(`[large-docs] reload of ${g.nodes} blocks, all in the DOM: ${ms} ms`);
-    expect(ms).toBeLessThan(4000);
+    expect(ms).toBeLessThan(2000);
   });
 
-  test('typing in the middle of 1 000 blocks: median key->DOM under 30 ms (measured ~6 ms)', async ({ page }) => {
+  test('typing in the middle of 1 000 blocks: median key->DOM under 8 ms (measured ~2.5 ms)', async ({ page }) => {
     test.setTimeout(60000);
     const g = doc();
     await openSeeded(page, docId(), JSON.stringify(g.doc), g.nodes);
@@ -75,11 +75,11 @@ test.describe('large document (1 000 blocks)', () => {
     await latencies(page, keys.slice(0, 4)); // warm-up
     const xs = await latencies(page, keys);
     console.log(`[large-docs] typing mid-document: median ${median(xs).toFixed(1)} ms, max ${xs[xs.length - 1].toFixed(1)} ms`);
-    expect(median(xs)).toBeLessThan(30);
-    expect(xs[xs.length - 1]).toBeLessThan(400);
+    expect(median(xs)).toBeLessThan(8);
+    expect(xs[xs.length - 1]).toBeLessThan(100);
   });
 
-  test('Enter (split) in the middle of 1 000 blocks: median key->DOM under 150 ms (measured ~45 ms; target < 16 ms)', async ({ page }) => {
+  test('Enter (split) in the middle of 1 000 blocks: median key->DOM under 35 ms (measured ~11 ms; was ~45 ms)', async ({ page }) => {
     test.setTimeout(60000);
     const g = doc();
     await openSeeded(page, docId(), JSON.stringify(g.doc), g.nodes);
@@ -87,6 +87,6 @@ test.describe('large document (1 000 blocks)', () => {
     await page.evaluate(() => (window as any).__perf.place(0.5, 8));
     const xs = await latencies(page, Array(10).fill('Enter'), () => page.evaluate(() => (window as any).__perf.placeInCurrent(5)));
     console.log(`[large-docs] Enter mid-document: median ${median(xs).toFixed(1)} ms, max ${xs[xs.length - 1].toFixed(1)} ms`);
-    expect(median(xs)).toBeLessThan(150);
+    expect(median(xs)).toBeLessThan(35);
   });
 });
