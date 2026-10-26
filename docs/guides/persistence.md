@@ -14,7 +14,7 @@ const engine = await createPersistedEditor({ docId: 'my-document' });
 
 `createPersistedEditor` est une factory **asynchrone** : elle charge d'abord le snapshot existant avant de créer l'instance. Si aucun snapshot n'existe, le document commence vide.
 
-L'auto-save est actif dès la création — chaque modification est sauvegardée automatiquement 2 secondes après la dernière frappe.
+L'auto-save est actif dès la création — chaque modification est sauvegardée automatiquement 2 secondes après la dernière frappe (et au plus tard 3 secondes après le début d'une longue rafale de frappe, voir `maxWait`), **et immédiatement quand la page est masquée ou fermée**.
 
 ---
 
@@ -26,6 +26,9 @@ const engine = await createPersistedEditor({
   preset,      // (optionnel) Tableau d'extensions — défaut : FullPreset
   extensions,  // (optionnel) Extensions supplémentaires à ajouter au preset
   debounce,    // (optionnel) Délai d'auto-save en ms — défaut : 2000
+  maxWait,     // (optionnel) Attente maximale pendant une rafale, en ms — défaut : 3000
+  onSaveError, // (optionnel) (error) => void — une sauvegarde AUTOMATIQUE a échoué
+  onRecover,   // (optionnel) (recovery) => void — le document stocké était illisible
 });
 ```
 
@@ -35,13 +38,16 @@ const engine = await createPersistedEditor({
 | `preset` | `Extension[]` | `FullPreset` | Preset de base |
 | `extensions` | `Extension[]` | `[]` | Extensions additionnelles |
 | `debounce` | `number` | `2000` | Délai en ms entre la dernière modif et la sauvegarde |
+| `maxWait` | `number` | `3000` | Pendant une rafale de modifications ininterrompue, une sauvegarde a lieu au moins toutes les `maxWait` ms (jamais plus court que `debounce` ; `0` ou `Infinity` : désactivé, on ne sauvegarde qu'après une pause) |
+| `onSaveError` | `(error) => void` | — | Appelé quand une sauvegarde **automatique** échoue (quota dépassé…). `saveNow()` rejette pour celui qui l'attend, sans appeler ce hook |
+| `onRecover` | `(recovery) => void` | — | Appelé au démarrage quand le document stocké était illisible (voir « Robustesse ») |
 | `history` | `'full' \| { mode: 'compact', retain, onBeforeCompact }` | `'full'` | Mode d'historique (voir « Historique » plus bas) : par défaut **rien n'est jamais compacté** |
 
 ---
 
 ## Méthodes ajoutées à l'instance
 
-`createPersistedEditor` enrichit l'instance `Nabu` retournée avec quatre membres supplémentaires (`isNew`, `saveNow()`, `compact()`, `clearPersistence()`).
+`createPersistedEditor` enrichit l'instance `Nabu` retournée avec cinq membres supplémentaires (`isNew`, `persistence`, `saveNow()`, `compact()`, `clearPersistence()`).
 
 ### `nabu.isNew`
 
@@ -51,7 +57,7 @@ if (engine.isNew) {
 }
 ```
 
-`boolean` — `true` si aucun snapshot n'existait au moment de la création (document frais), `false` si le contenu a été restauré depuis IndexedDB.
+`boolean` — `true` si aucun snapshot n'existait au moment de la création (document frais), `false` si le contenu a été restauré depuis IndexedDB. Si le document stocké était illisible et qu'il n'y avait pas de secours, l'éditeur repart vide et `isNew` vaut `true` (`persistence.recovery.kind === 'empty'` dit pourquoi).
 
 ---
 
@@ -63,12 +69,28 @@ await engine.saveNow();
 
 Force une sauvegarde **immédiate** sans attendre le debounce. Utile avant de naviguer vers une autre page, ou avant de fermer un dialogue critique.
 
-```js
-// Exemple : sauvegarder avant navigation
-window.addEventListener('beforeunload', () => engine.saveNow());
+Retourne une `Promise<void>` qui se résout quand l'écriture IndexedDB est terminée, et **rejette** si elle échoue (quota…) ou si la persistance est indisponible ou arrêtée. Il n'est plus nécessaire de l'appeler avant de quitter la page : Nabu sauvegarde de lui-même à `visibilitychange` (masquée) et `pagehide`.
+
+---
+
+### `nabu.persistence`
+
+L'état de la persistance, **réactif** (`$state` Svelte 5 : lisible dans un template ou un `$effect`, par exemple pour un indicateur « Enregistré / Enregistrement… »).
+
+```svelte
+<span class="save-status" data-status={engine.persistence.status}>{engine.persistence.status}</span>
 ```
 
-Retourne une `Promise<void>` qui se résout quand l'écriture IndexedDB est terminée.
+| Membre | Description |
+|---|---|
+| `status` | `'saved'` tout est stocké · `'pending'` des modifications attendent la sauvegarde · `'saving'` une sauvegarde est en cours · `'error'` la dernière sauvegarde a échoué (les modifications restent en mémoire ; **la modification suivante réessaie**) · `'unavailable'` IndexedDB inutilisable, l'éditeur travaille en mémoire seulement |
+| `lastSavedAt` | `number \| null` — date (ms) de la dernière sauvegarde réussie de cette session |
+| `lastError` | L'erreur de la dernière sauvegarde échouée, ou la raison pour laquelle le stockage est indisponible ; `null` après une sauvegarde réussie |
+| `available` | `false` si IndexedDB n'a pas pu être ouvert au démarrage (absent, refusé, bloqué par un autre onglet…). L'éditeur démarre alors **en mémoire** (les fichiers aussi), un avertissement est écrit dans la console, `createPersistedEditor` ne rejette pas |
+| `recovery` | `null`, ou `{ kind, error, quarantinedKey, quarantinedKeys, at }` si le document stocké était illisible (voir « Robustesse ») |
+| `dispose()` | Arrête la persistance de cet éditeur : annule l'auto-save, retire les écouteurs `visibilitychange` / `pagehide`, ferme la connexion IndexedDB. À appeler quand l'éditeur est détruit (par exemple dans le nettoyage du composant). L'éditeur continue de fonctionner en mémoire. Idempotent |
+
+Les avertissements de persistance (`console.warn`, préfixe `[Nabu]`) sont toujours affichés, même quand `nabu.debugging` est désactivé : l'utilisateur peut être en train de perdre son travail.
 
 ---
 
@@ -78,9 +100,41 @@ Retourne une `Promise<void>` qui se résout quand l'écriture IndexedDB est term
 await engine.clearPersistence();
 ```
 
-Supprime le snapshot stocké pour ce `docId` **et libère ses fichiers** : un fichier n'est supprimé du stockage partagé que si aucun autre document ne le référence ; en mode hôte, `files.onAssetReleased(url)` est appelé pour chaque fichier hébergé (Nabu ne supprime rien chez l'hôte). La prochaine instanciation avec le même `docId` repartira sur un document vide (`isNew === true`).
+Supprime le snapshot stocké pour ce `docId`, son secours et les enregistrements mis de côté, **et libère ses fichiers** : un fichier n'est supprimé du stockage partagé que si aucun autre document ne le référence ; en mode hôte, `files.onAssetReleased(url)` est appelé pour chaque fichier hébergé (Nabu ne supprime rien chez l'hôte). La prochaine instanciation avec le même `docId` repartira sur un document vide (`isNew === true`).
 
-Utile pour implémenter un bouton "Réinitialiser le document".
+Utile pour implémenter un bouton "Réinitialiser le document". Le contenu encore en mémoire n'est volontairement pas resauvegardé à la fermeture de la page (seule la modification suivante relance l'auto-save).
+
+---
+
+## Robustesse (ADR 010, thème 8)
+
+### Sauvegarde à la fermeture de la page
+
+À `visibilitychange` (→ `hidden`) et à `pagehide`, s'il reste des modifications non stockées, Nabu sauvegarde **tout de suite** (sans attendre le debounce). Une écriture IndexedDB lancée pendant le déchargement d'une page est asynchrone : le navigateur peut finir de décharger avant qu'elle n'aboutisse (Chromium l'abandonne lors d'un rechargement). Nabu écrit donc en plus, de façon **synchrone**, les modifications depuis la dernière sauvegarde dans `localStorage` (clé `nabu:tail:<docId>`, Loro « update » en base64, jusqu'à 256 Ko) ; au démarrage suivant elles sont fusionnées dans le document (sans doublon si l'écriture IndexedDB a finalement abouti) et la première sauvegarde réussie supprime cette trace. Un tail qui ne se fusionne pas est gardé sous `nabu:tail:<docId>:unapplied`. Reste un effort raisonnable, pas une garantie : un plantage, un processus tué ou un navigateur mobile qui n'envoie jamais ces événements perdent les dernières secondes.
+
+### Un document stocké illisible
+
+Chaque sauvegarde réussie garde le snapshot qu'elle remplace comme **secours** (object store `backups`). Au chargement, si le snapshot ne s'importe pas (octets invalides, tronqué, valeur qui n'est pas du binaire…) :
+
+1. l'enregistrement illisible n'est **jamais supprimé** : il est copié dans l'object store `quarantine` (clé `<docId>@<horodatage>`, avec la valeur d'origine, la date et l'erreur) ;
+2. le secours est essayé (`recovery.kind === 'backup'` : le document revient à l'avant-dernière sauvegarde) ;
+3. sinon l'éditeur démarre **vide** (`recovery.kind === 'empty'`, `isNew === true`) ;
+4. un avertissement est écrit, `nabu.persistence.recovery` est renseigné et `onRecover(recovery)` est appelé : c'est à l'hôte de prévenir l'utilisateur. L'éditeur démarre dans tous les cas.
+
+```js
+const engine = await createPersistedEditor({
+  docId,
+  onRecover: ({ kind, error, quarantinedKey }) => showBanner(
+    kind === 'backup' ? 'Document restauré depuis la sauvegarde précédente.' : 'Le document était illisible ; il a été conservé à part.',
+  ),
+});
+```
+
+Si la copie de mise à l'écart échoue, l'éditeur démarre en mémoire seulement (`available === false`) pour ne rien écraser. Un compactage (`history: 'compact'`) supprime le secours, pour qu'un historique supprimé ne survive pas dans une copie ; le suivant est recréé par la sauvegarde d'après.
+
+### Sauvegarde qui échoue
+
+Une sauvegarde automatique qui échoue (quota…) passe `persistence.status` à `'error'`, écrit un avertissement et appelle `onSaveError(error)`. Aucune exception non rattrapée ; l'éditeur continue ; la modification suivante (ou la fermeture de la page) réessaie.
 
 ---
 
@@ -167,16 +221,18 @@ Détails : [ADR 014](../adr/014-asset-storage.md) §3.6 et §7.
 [nabu.commit()]  ──►  [doc.subscribe() déclenché par Loro]
                                 │
                                 ▼
-                       clearTimeout(saveTimer)
-                       saveTimer = setTimeout(save, debounce)
+                       persistence.status = 'pending'
+                       minuterie = min(debounce, maxWait restant)
                                 │
-                         (2 secondes plus tard, si pas de nouvelle frappe)
+                         (2 s sans frappe, ou 3 s après la première
+                          frappe d'une rafale — ou tout de suite à pagehide)
                                 │
                                 ▼
                     doc.export({ mode: 'snapshot' })  →  Uint8Array
                                 │
                                 ▼
                     saveSnapshot(docId, snapshot)  →  IndexedDB
+                    (l'ancien snapshot devient le secours, même transaction)
 ```
 
 Le snapshot est le **format binaire natif de Loro** : il encode l'intégralité du document, y compris l'historique CRDT (ce qui permet de conserver l'undo/redo après rechargement). Avec `history: 'full'` (défaut) c'est toujours un snapshot complet ; après un compactage, un snapshot *shallow* (voir plus haut). Les octets des fichiers n'y sont pas : ils vivent dans le stockage de fichiers (ADR 014).
@@ -216,12 +272,12 @@ await saveSnapshot('my-document', snapshot);
 await deleteSnapshot('my-document');
 ```
 
-> **Note :** Ces fonctions opèrent sur la base `nabu` v1, object store `snapshots`. Le record stocké a la forme `{ docId: string, snapshot: Uint8Array, savedAt: number }`.
+> **Note :** Ces fonctions opèrent sur la base `nabu` (version 4), object store `snapshots`. Le record stocké a la forme `{ docId: string, snapshot: Uint8Array, savedAt: number }`. `saveSnapshot` fait aussi tourner le secours (object store `backups`, même forme). `loadRecords(docId)` renvoie `{ current, backup }` bruts, `listQuarantined(docId)` les enregistrements mis de côté. La version 4 de la base AJOUTE les object stores `backups` et `quarantine` ; une base plus ancienne se charge comme avant (sans secours).
 
 ---
 
 ## Limitations connues
 
-- **Multi-onglets** : deux onglets ouvrant le même `docId` sauvegardent indépendamment — le dernier à écrire l'emporte. Pas de synchronisation temps-réel entre onglets.
+- **Multi-onglets** : (lot suivant) deux onglets ouvrant le même `docId` sauvegardent indépendamment — le dernier à écrire l'emporte. Pas de synchronisation temps-réel entre onglets.
 - **Migration de schéma** : si la structure interne des blocs change de façon incompatible entre versions, les anciens snapshots peuvent échouer à l'import. Pas de stratégie de migration automatique pour l'instant.
 - **Opacité** : le format binaire Loro n'est pas lisible sans Loro. Pour exporter vers un format portable (JSON, Markdown), utiliser `nabu.serialize('json')` ou `nabu.serialize('markdown')`.

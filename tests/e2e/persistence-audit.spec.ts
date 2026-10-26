@@ -1,6 +1,7 @@
 /**
  * E2E — AUDIT 2026-10, theme 8a (PERSISTENCE): `createPersistedEditor` (ADR 010 snapshot + debounce, ADR 014 asset store /
- * outbox / history modes).
+ * outbox / history modes). Findings P-91, P-92, P-93, P-95, P-96 are fixed (ADR 010, "Implementation notes — 2026-10 (theme 8)"); only 4b
+ * (two tabs, P-94) is still `fixme`.
  *
  * These tests describe the EXPECTED behaviour. A scenario that fails today is marked `test.fixme('… — FINDING: …')` (body kept, so it
  * can be re-enabled once the product is fixed). Scenarios named "characterization" pin the CURRENT behaviour of something that is a
@@ -13,7 +14,7 @@
  *   4. two tabs on the same docId
  *   5. undo after a reload
  *   6. IndexedDB unavailable / failing
- *   7. corrupted stored snapshot
+ *   7. corrupted stored snapshot (backup rotation, quarantine, recovery info), 7bis. page-hide listeners
  *   8. history modes (full / compact + archive hook)
  *   9. asset outbox (failing host, retried after a reload)
  *  10. a ~500-block document (timings are printed, no thresholds)
@@ -87,6 +88,47 @@ const putRaw = (page: Page, id: string, snapshot: number[] | string) => page.eva
     tx.onerror = () => { db.close(); reject(tx.error); };
   };
 }), [id, snapshot] as [string, number[] | string]);
+
+/** The records moved aside for a document (the `quarantine` object store): source, bytes (or the raw value). */
+const quarantined = (page: Page, id: string) => page.evaluate((docId) => new Promise<{ key: string; source: string; value: any }[]>((resolve, reject) => {
+  const open = indexedDB.open('nabu');
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const db = open.result;
+    if (!db.objectStoreNames.contains('quarantine')) { db.close(); return resolve([]); }
+    const get = db.transaction('quarantine', 'readonly').objectStore('quarantine').index('docId').getAll(docId);
+    get.onsuccess = () => { db.close(); resolve(get.result.map((r: any) => ({ key: r.key, source: r.source, value: r.snapshot instanceof Uint8Array ? Array.from(r.snapshot) : r.snapshot }))); };
+    get.onerror = () => { db.close(); reject(get.error); };
+  };
+}), id);
+
+/** The previous good snapshot of a document (the `backups` object store), as bytes. */
+const backupOf = (page: Page, id: string) => page.evaluate((docId) => new Promise<number[] | null>((resolve, reject) => {
+  const open = indexedDB.open('nabu');
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const db = open.result;
+    const get = db.transaction('backups', 'readonly').objectStore('backups').get(docId);
+    get.onsuccess = () => { db.close(); resolve(get.result ? Array.from(get.result.snapshot) : null); };
+    get.onerror = () => { db.close(); reject(get.error); };
+  };
+}), id);
+
+/** `nabu.persistence` in a serialisable form. */
+const persistenceOf = (page: Page) => page.evaluate(() => {
+  const p = (window as any).nabu.persistence;
+  const r = p.recovery;
+  return {
+    status: p.status as string, available: p.available as boolean, lastSavedAt: p.lastSavedAt as number | null, lastError: p.lastError ? String(p.lastError.message ?? p.lastError) : null,
+    recovery: r ? { kind: r.kind as string, quarantinedKey: r.quarantinedKey as string | null, at: r.at as number, error: String(r.error?.message ?? r.error) } : null,
+  };
+});
+
+/** Pretend the page is going away (hidden tab). */
+const hidePage = (page: Page) => page.evaluate(() => {
+  Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+});
 
 /** Select `len` characters of the focused block starting at `start`. */
 async function selectRange(page: Page, start: number, len: number) {
@@ -242,9 +284,8 @@ test.describe('2 · autosave timing', () => {
     expect((await texts(page)).join('|')).toContain('typed by keyboard');
   });
 
-  // FINDING (P1, data loss): nothing flushes on pagehide / visibilitychange / beforeunload (no such listener in src/lib). Everything typed in the
-  // last <= 2 s before a reload / tab close / navigation is lost. ADR 010 listed `beforeunload` as an option and never wired it.
-  test.fixme('2b · typing then reloading IMMEDIATELY (before the 2 s debounce) loses nothing — FINDING: edits made < 2 s before a reload are lost (no flush on pagehide) [persistence.js: save only from the debounce timer]', async ({ page }) => {
+  // P-91 (fixed, ADR 010 theme 8): the persisted editor saves at once on `visibilitychange` -> hidden and on `pagehide` (bypassing the debounce).
+  test('2b · typing then reloading IMMEDIATELY (before the 2 s debounce) loses nothing — flush on pagehide', async ({ page }) => {
     const id = docId();
     await boot(page, id);
     await focusEditor(page);
@@ -256,15 +297,44 @@ test.describe('2 · autosave timing', () => {
     expect((await texts(page)).join('|')).toContain('baseline and the last words');
   });
 
-  // FINDING (P2): the debounce is re-armed by every change and has no maximum wait: as long as changes come less than `debounce` ms
-  // apart, NOTHING is saved (a crash during a long writing burst loses the whole burst).
-  test.fixme('2c · a continuous burst of edits is saved while it goes on (max wait) — FINDING: debounce is trailing-only, no save until the user pauses [persistence.js: clearTimeout+setTimeout in doc.subscribe]', async ({ page }) => {
+  // The IndexedDB write started at pagehide does not survive a RELOAD in Chromium, so the changes since the last save are also written
+  // synchronously to localStorage (the "tail", src/lib/persistence/tail.js) and merged at the next boot. Here nothing was ever saved.
+  test('2b″ · a document that was never saved: typing then reloading at once restores it from the tail, and the next save removes the tail', async ({ page }) => {
     const id = docId();
-    await boot(page, id, { debounce: 400 });
+    await boot(page, id);
+    await focusEditor(page);
+    await typeText(page, 'never saved before the reload');
+    expect(await stored(page, id)).toBeNull();
+    await page.reload();
+    await waitForEditor(page, 15000);
+    expect((await texts(page)).join('|')).toContain('never saved before the reload');
+    expect(await page.evaluate(() => (window as any).nabu.isNew)).toBe(false);
+    expect((await texts(page)).filter((t) => t === '').length).toBeLessThanOrEqual(0); // no leftover empty paragraph from the merge
+    await saveNow(page);
+    expect(await page.evaluate((docId) => localStorage.getItem('nabu:tail:' + docId), id)).toBeNull();
+    await reload(page);
+    expect((await texts(page)).join('|')).toContain('never saved before the reload');
+  });
+
+  test('2b′ · the tab being hidden saves at once (visibilitychange), without waiting for the debounce', async ({ page }) => {
+    const id = docId();
+    await boot(page, id);
+    await focusEditor(page);
+    await typeText(page, 'typed just before hiding');
+    expect(await stored(page, id)).toBeNull(); // the debounce (2 s) has not elapsed
+    await hidePage(page);
+    await expect.poll(async () => (await stored(page, id))?.size ?? 0).toBeGreaterThan(0);
+    await expect.poll(() => persistenceOf(page).then((p) => p.status)).toBe('saved');
+  });
+
+  // P-96 (fixed): the debounce has a maximum wait (`maxWait`, default 3000 ms): during a continuous burst a save happens at least that often.
+  test('2c · a continuous burst of edits is saved while it goes on (maxWait)', async ({ page }) => {
+    const id = docId();
+    await boot(page, id, { debounce: 400, maxWait: 1000 });
     await focusEditor(page);
     const t0 = Date.now();
-    // 4 s of typing with 150 ms between keystrokes (always < debounce)
-    for (let i = 0; i < 27; i++) { await page.keyboard.type('x'); await page.waitForTimeout(150); }
+    // 2.7 s of typing with 150 ms between keystrokes (always < debounce)
+    for (let i = 0; i < 18; i++) { await page.keyboard.type('x'); await page.waitForTimeout(150); }
     const rec = await stored(page, id);
     expect(rec?.savedAt ?? 0).toBeGreaterThanOrEqual(t0); // still typing, yet something was saved
   });
@@ -415,9 +485,9 @@ test.describe('5 · undo after a reload', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('6 · IndexedDB unavailable or failing', () => {
-  // FINDING (P1): createPersistedEditor() awaits loadSnapshot() with no fallback: when IndexedDB is missing / blocked (locked-down WebViews,
-  // enterprise policy, some private modes) it rejects and the host gets NO editor at all (the e2e route never sets __nabu_ready).
-  test.fixme('6a · `indexedDB` undefined: the editor still boots in memory and is usable, with a warning — FINDING: createPersistedEditor() rejects, no editor [persistence.js: await loadSnapshot(docId) unguarded]', async ({ page }) => {
+  // P-93 (fixed): when IndexedDB is missing / blocked (locked-down WebViews, enterprise policy, some private modes) the editor boots IN MEMORY:
+  // `nabu.persistence.available === false`, status `'unavailable'`, a warning; `createPersistedEditor` does not reject.
+  test('6a · `indexedDB` undefined: the editor still boots in memory and is usable, with a warning', async ({ page }) => {
     await page.addInitScript(() => { Object.defineProperty(window, 'indexedDB', { value: undefined, configurable: true }); });
     const warnings: string[] = [];
     page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
@@ -427,9 +497,14 @@ test.describe('6 · IndexedDB unavailable or failing', () => {
     await typeText(page, 'still usable');
     expect((await texts(page)).join('|')).toContain('still usable');
     expect(warnings.join('\n')).toMatch(/indexeddb|persist|storage/i);
+    const p = await persistenceOf(page);
+    expect(p).toMatchObject({ available: false, status: 'unavailable', recovery: null });
+    expect(p.lastError).toBeTruthy();
+    expect(await page.evaluate(() => (window as any).nabu.isNew)).toBe(true);
+    expect(await page.evaluate(() => (window as any).nabu.saveNow().then(() => 'resolved', (e: Error) => e.message))).toMatch(/unavailable/);
   });
 
-  test.fixme('6b · `indexedDB.open()` fails (SecurityError): the editor still boots in memory and is usable — FINDING: same, no editor [persistence.js loadSnapshot / indexeddb.js openDB reject]', async ({ page }) => {
+  test('6b · `indexedDB.open()` fails (SecurityError): the editor still boots in memory and is usable', async ({ page }) => {
     await page.addInitScript(() => {
       (IDBFactory.prototype as any).open = function () {
         const req: any = {};
@@ -442,12 +517,12 @@ test.describe('6 · IndexedDB unavailable or failing', () => {
     await focusEditor(page);
     await typeText(page, 'still usable');
     expect((await texts(page)).join('|')).toContain('still usable');
+    expect(await persistenceOf(page)).toMatchObject({ available: false, status: 'unavailable' });
   });
 
-  // FINDING (P1/P2): a write that fails after boot (quota exceeded, DB closed by the browser) is swallowed SILENTLY: `save()` rejects inside the
-  // lock chain (whose tail catches it) and the autosave timer drops the promise; nothing goes through nabu.warn() or any callback, so the host
-  // cannot tell that its user's work is no longer being saved (and `saveNow()` only rejects for whoever awaits it). No uncaught error: that part is fine.
-  test.fixme('6c · a save that fails after boot (quota) is reported (warn) and does not throw uncaught; the editor keeps working — FINDING: the failure is swallowed silently, no warn / callback [persistence.js: setTimeout(save, debounce), lock() chain]', async ({ page }) => {
+  // P-95 (fixed): a write that fails after boot (quota exceeded, DB closed by the browser) sets `persistence.status = 'error'`, warns, calls
+  // `onSaveError`; no uncaught error, the editor keeps working, and the next change retries.
+  test('6c · a save that fails after boot (quota) is reported (status, warn) and does not throw uncaught; the next change retries', async ({ page }) => {
     await page.addInitScript(() => {
       const put = IDBObjectStore.prototype.put;
       IDBObjectStore.prototype.put = function (...args: any[]) {
@@ -463,10 +538,51 @@ test.describe('6 · IndexedDB unavailable or failing', () => {
     await page.evaluate(() => { (window as any).__failPut = true; });
     await focusEditor(page);
     await typeText(page, 'cannot be saved');
-    await expect.poll(() => warnings.join('\n'), { timeout: 4000 }).toMatch(/save|persist|quota/i); // the failure must be reported somewhere
+    await expect.poll(() => persistenceOf(page).then((p) => p.status), { timeout: 4000 }).toBe('error');
+    expect((await persistenceOf(page)).lastError).toMatch(/quota/i);
+    expect(warnings.join('\n')).toMatch(/save|persist|quota/i); // the failure must be reported somewhere
     expect(uncaught, 'no uncaught error').toEqual([]);
     await typeText(page, ' and more');
     expect((await texts(page)).join('|')).toContain('and more');
+    // the quota is back: the next change retries and the status recovers
+    await page.evaluate(() => { (window as any).__failPut = false; });
+    await typeText(page, ' retry');
+    await expect.poll(() => persistenceOf(page).then((p) => p.status), { timeout: 4000 }).toBe('saved');
+    expect((await persistenceOf(page)).lastError).toBeNull();
+    await reload(page);
+    expect((await texts(page)).join('|')).toContain('cannot be saved and more retry');
+  });
+
+  test('6d · the `onSaveError` hook is called for an autosave failure, not for saveNow (which rejects for its awaiter)', async ({ page }) => {
+    await page.addInitScript(() => {
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (...args: any[]) {
+        if ((window as any).__failPut) throw new DOMException('quota', 'QuotaExceededError');
+        return (put as any).apply(this, args);
+      };
+    });
+    await boot(page, docId(), { debounce: 200 }); // the e2e route installs onSaveError / onRecover and records them in window.__saveErrors / __recoveries
+    await page.evaluate(() => { (window as any).__failPut = true; });
+    await focusEditor(page);
+    await typeText(page, 'x');
+    await expect.poll(() => page.evaluate(() => (window as any).__saveErrors)).toEqual(['QuotaExceededError']);
+    expect(await page.evaluate(() => (window as any).nabu.saveNow().then(() => 'resolved', (e: Error) => e.name))).toBe('QuotaExceededError');
+    expect(await page.evaluate(() => (window as any).__saveErrors)).toEqual(['QuotaExceededError']);
+  });
+
+  test('6e · the save status is reactive: a component sees saved -> pending -> saving -> saved', async ({ page }) => {
+    const id = docId();
+    await boot(page, id, { debounce: 300, maxWait: 0 });
+    await focusEditor(page);
+    await typeText(page, 'status');
+    await expect.poll(() => persistenceOf(page).then((p) => p.status), { timeout: 4000 }).toBe('saved');
+    expect((await persistenceOf(page)).lastSavedAt).toBeGreaterThan(0);
+    const log = await page.evaluate(() => (window as any).__statusLog as string[]);
+    expect(log[0]).toBe('saved');
+    expect(log).toContain('pending');
+    expect(log).toContain('saving');
+    expect(log.at(-1)).toBe('saved');
+    expect(log.indexOf('pending')).toBeLessThan(log.indexOf('saving'));
   });
 });
 
@@ -483,37 +599,148 @@ test.describe('7 · corrupted stored snapshot', () => {
     return (await stored(page, id))!.bytes;
   }
 
-  // FINDING (P1): a snapshot that Loro cannot import makes `new Nabu({ snapshot })` throw inside createPersistedEditor: no editor at all, on every
-  // load, for this docId — the user can never open the document again, and the host has no hook to offer a reset / recovery (the only fix is
-  // clearing IndexedDB by hand). No quarantine / backup of the bad record, no fallback to an empty document.
-  test.fixme('7a · garbage bytes in the store: the editor boots (empty document) with a warning, and the bad record is kept — FINDING: boot fails, document permanently unopenable [persistence.js build(snapshot) unguarded]', async ({ page }) => {
+  // P-92 (fixed): a snapshot that Loro cannot import no longer makes the document unopenable. The unreadable record is moved to the
+  // `quarantine` object store (never deleted), the previous save (backup) is tried, else the editor starts empty; the host is told.
+  test('7a · garbage bytes in the store (no backup): the editor boots empty with a warning, and the bad record is kept in quarantine', async ({ page }) => {
     const id = docId();
     await seedValid(page, id);
     const garbage = Array.from({ length: 64 }, (_, i) => (i * 37 + 11) % 256);
     await putRaw(page, id, garbage);
+    const warnings: string[] = [];
+    page.on('console', (m) => { if (m.type() === 'warning') warnings.push(m.text()); });
     const ready = await bootsWithin(page, id);
     expect(ready, 'the editor must boot with a corrupted snapshot').toBe(true);
+    const p = await persistenceOf(page);
+    expect(p.recovery).toMatchObject({ kind: 'empty' });
+    expect(p.recovery!.quarantinedKey).toMatch(new RegExp('^' + id));
+    expect(warnings.join('\n')).toMatch(/could not be read/);
     await focusEditor(page);
     await typeText(page, 'fresh start');
     expect((await texts(page)).join('|')).toContain('fresh start');
-    expect((await stored(page, id))?.bytes, 'corrupted record must not be destroyed before recovery').toEqual(garbage);
+    const kept = await quarantined(page, id);
+    expect(kept.map((q) => q.value), 'corrupted record must not be destroyed').toEqual([garbage]);
+    expect(kept[0].key).toBe(p.recovery!.quarantinedKey);
   });
 
-  test.fixme('7b · a TRUNCATED valid snapshot: the editor boots and the recoverable part is not destroyed — FINDING: boot fails (or silently loses data) [persistence.js build(snapshot) unguarded]', async ({ page }) => {
+  test('7b · a TRUNCATED valid snapshot: the editor boots and the unreadable record is not destroyed', async ({ page }) => {
     const id = docId();
     const good = await seedValid(page, id);
     const truncated = good.slice(0, Math.floor(good.length * 0.7));
     await putRaw(page, id, truncated);
     const ready = await bootsWithin(page, id);
     expect(ready, 'the editor must boot with a truncated snapshot').toBe(true);
-    expect((await stored(page, id))?.bytes, 'truncated record kept as is').toEqual(truncated);
+    expect((await persistenceOf(page)).recovery).toMatchObject({ kind: 'empty' });
+    expect((await quarantined(page, id)).map((q) => q.value), 'truncated record kept as is').toEqual([truncated]);
   });
 
-  test.fixme('7c · a record whose `snapshot` is not bytes (string): the editor boots — FINDING: boot fails [persistence.js build(snapshot) unguarded]', async ({ page }) => {
+  test('7c · a record whose `snapshot` is not bytes (string): the editor boots', async ({ page }) => {
     const id = docId();
     await seedValid(page, id);
     await putRaw(page, id, 'not a snapshot');
     expect(await bootsWithin(page, id)).toBe(true);
+    expect((await persistenceOf(page)).recovery).toMatchObject({ kind: 'empty' });
+    expect((await quarantined(page, id)).map((q) => q.value)).toEqual(['not a snapshot']);
+  });
+
+  test('7d · backup rotation: two saves, the latest corrupted -> the PREVIOUS content comes back, with recovery info', async ({ page }) => {
+    const id = docId();
+    await boot(page, id);
+    await addParagraph(page, 'first version');
+    await saveNow(page);
+    expect(await backupOf(page, id)).toBeNull(); // the first save replaced nothing
+    const first = (await stored(page, id))!.bytes;
+    await addParagraph(page, 'second version');
+    await saveNow(page);
+    expect(await backupOf(page, id)).toEqual(first); // the previous snapshot became the backup
+    const garbage = Array.from({ length: 48 }, (_, i) => (i * 13 + 5) % 256);
+    await putRaw(page, id, garbage);
+
+    const ready = await bootsWithin(page, id);
+    expect(ready).toBe(true);
+    const joined = (await texts(page)).join('|');
+    expect(joined).toContain('first version');
+    expect(joined).not.toContain('second version');
+    const p = await persistenceOf(page);
+    expect(p.recovery).toMatchObject({ kind: 'backup' });
+    expect(p.recovery!.error).toBeTruthy();
+    expect(p.recovery!.at).toBeGreaterThan(Date.now() - 60_000);
+    expect(await page.evaluate(() => (window as any).__recoveries)).toEqual(['backup']); // the onRecover hook
+    expect(await page.evaluate(() => (window as any).nabu.isNew)).toBe(false);
+    // the unreadable record is kept, and the document is clean again: the next load has nothing to recover
+    expect((await quarantined(page, id)).map((q) => q.value)).toEqual([garbage]);
+    expect((await stored(page, id))!.bytes).toEqual(first);
+    await reload(page);
+    expect((await persistenceOf(page)).recovery).toBeNull();
+    expect((await texts(page)).join('|')).toContain('first version');
+  });
+
+  test('7e · both the latest snapshot and the backup unreadable: starts empty, both kept in quarantine', async ({ page }) => {
+    const id = docId();
+    await boot(page, id);
+    await addParagraph(page, 'one');
+    await saveNow(page);
+    await addParagraph(page, 'two');
+    await saveNow(page);
+    await putRaw(page, id, [1, 2, 3, 4]);
+    await page.evaluate((docId) => new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open('nabu');
+      open.onsuccess = () => {
+        const db = open.result;
+        const tx = db.transaction('backups', 'readwrite');
+        tx.objectStore('backups').put({ docId, snapshot: new Uint8Array([9, 9]), savedAt: 1 });
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+    }), id);
+    expect(await bootsWithin(page, id)).toBe(true);
+    expect((await persistenceOf(page)).recovery).toMatchObject({ kind: 'empty' });
+    const kept = await quarantined(page, id);
+    expect(kept.map((q) => q.source).sort()).toEqual(['backup', 'snapshot']);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7bis. Page listeners
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe('7bis · page-hide listeners', () => {
+  test('the listeners are added by the persisted editor and removed by persistence.dispose()', async ({ page }) => {
+    // track the live listeners for the two events
+    await page.addInitScript(() => {
+      const live = new Set<string>();
+      const track = (target: EventTarget, name: string) => {
+        const add = target.addEventListener.bind(target);
+        const remove = target.removeEventListener.bind(target);
+        const ids = new Map<any, string>();
+        let n = 0;
+        (target as any).addEventListener = (type: string, fn: any, opts: any) => {
+          if (type === 'visibilitychange' || type === 'pagehide') { const key = `${name}:${type}:${ids.get(fn) ?? (ids.set(fn, String(n++)), ids.get(fn))}`; live.add(key); }
+          return add(type, fn, opts);
+        };
+        (target as any).removeEventListener = (type: string, fn: any, opts: any) => {
+          if (ids.has(fn)) live.delete(`${name}:${type}:${ids.get(fn)}`);
+          return remove(type, fn, opts);
+        };
+      };
+      track(document, 'document');
+      track(window, 'window');
+      (window as any).__liveListeners = () => [...live].map((k) => k.split(':').slice(0, 2).join(':')).sort();
+    });
+    const id = docId();
+    await boot(page, id);
+    const before: string[] = await page.evaluate(() => (window as any).__liveListeners()); // (the framework has listeners of its own)
+    expect(before).toContain('document:visibilitychange');
+    expect(before).toContain('window:pagehide');
+    await focusEditor(page);
+    await typeText(page, 'will not be flushed');
+    await page.evaluate(() => (window as any).nabu.persistence.dispose());
+    const after: string[] = await page.evaluate(() => (window as any).__liveListeners());
+    const without = (list: string[], name: string) => { const i = list.indexOf(name); return i < 0 ? list : [...list.slice(0, i), ...list.slice(i + 1)]; };
+    expect(after).toEqual(without(without(before, 'document:visibilitychange'), 'window:pagehide')); // exactly the two of the editor are gone
+    await hidePage(page);
+    // KEEP (negative check): nothing may be written after the editor was released; give a hidden-tab flush ample time to (wrongly) happen.
+    await page.waitForTimeout(600);
+    expect(await stored(page, id)).toBeNull();
   });
 });
 

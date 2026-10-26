@@ -10,6 +10,14 @@
   /** @type {import('$lib/blocks/nabu.svelte.js').Nabu | null} */
   let engine = $state(null);
 
+  // Test-only: the reactive save status of a persisted editor, as a component sees it (`$effect`), in `window.__statusLog`.
+  $effect(() => {
+    const persistence = /** @type {any} */ (engine)?.persistence;
+    if (!persistence) return;
+    const w = /** @type {any} */ (window);
+    (w.__statusLog ??= []).push(persistence.status);
+  });
+
   const layout = page.url.searchParams.get('layout');
   const theme = page.url.searchParams.get('theme');
   const vars = page.url.searchParams.get('vars');
@@ -115,12 +123,21 @@
     // Test-only: `?commands=demo` installs the demo commands of the confirmation strategies (./demo-commands.js).
     if (page.url.searchParams.get('commands') === 'demo') options.extensions = [...(options.extensions ?? []), DemoConfirmExtension];
 
+    // Test-only: record the persistence hooks in `window.__saveErrors` (names of the errors of failed autosaves) and `window.__recoveries`.
+    if (docId) {
+      const w = /** @type {any} */ (window);
+      w.__saveErrors = [];
+      w.__recoveries = [];
+      options.onSaveError ??= (/** @type {any} */ error) => { w.__saveErrors.push(error?.name ?? String(error)); };
+      options.onRecover ??= (/** @type {any} */ recovery) => { w.__recoveries.push(recovery.kind); };
+    }
+
     (async () => {
       // No `persist` param: fresh in-memory editor. Otherwise: persisted under that docId (no seeding).
       const eng = docId
         ? await createPersistedEditor({ docId, preset: FullPreset, ...options })
         : createFullEditor(options);
-      if (cancelled) return;
+      if (cancelled) { /** @type {any} */ (eng).persistence?.dispose(); return; }
       if (seed === 'regions' && !docId && eng.registry.has('region')) await seedRegions(eng);
       if (seed === 'long' && !docId) await seedLong(eng);
       engine = eng;
@@ -132,6 +149,7 @@
 
     return () => {
       cancelled = true;
+      /** @type {any} */ (window).nabu?.persistence?.dispose();
     };
   });
 </script>

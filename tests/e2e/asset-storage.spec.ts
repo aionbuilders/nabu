@@ -124,7 +124,7 @@ test.describe('asset storage (persisted editor)', () => {
     await page.evaluate(() => (window as any).nabu.saveNow());
     const [img] = await images(page);
     const state = await idb(page, id);
-    expect(state.version).toBe(3);
+    expect(state.version).toBe(4);
     expect(state.snapshotBytes).toBeLessThan(10 * 1024);
     expect(state.assets).toHaveLength(1);
     expect(state.assets[0]).toMatchObject({ hash: img.ref.slice('nabu-asset:'.length), size: big.length, mime: 'image/png', name: 'big.png' });
@@ -198,7 +198,7 @@ test.describe('migration of a beta document', () => {
     await expect.poll(() => displayed(page)).toEqual([1]);
   });
 
-  test('6 · a version 1 IndexedDB (snapshots only) upgrades to 3 without losing the saved documents', async ({ page }) => {
+  test('6 · a version 1 IndexedDB (snapshots only) upgrades to the current version (4) without losing the saved documents', async ({ page }) => {
     const id = docId();
     // an in-memory editor writes a snapshot the way the beta did: base `nabu` created at version 1 with only `snapshots`
     await page.goto('/e2e');
@@ -232,7 +232,7 @@ test.describe('migration of a beta document', () => {
     await uploadImage(page); // the new stores work on the upgraded database
     await page.evaluate(() => (window as any).nabu.saveNow());
     const state = await idb(page, id);
-    expect(state.version).toBe(3);
+    expect(state.version).toBe(4);
     expect(state.assets).toHaveLength(1);
   });
 });

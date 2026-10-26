@@ -1,20 +1,29 @@
 import { Nabu } from '../blocks/nabu.svelte.js';
 import { FullPreset, tabDefaultFor } from '../presets.js';
 import { Files } from '../files/files.svelte.js';
-import { loadSnapshot, saveSnapshot, deleteSnapshot } from './indexeddb.js';
+import { MemoryAssetStore } from '../files/store.js';
+import { loadSnapshot, saveSnapshot, deleteSnapshot, loadRecords, quarantineRecords, listQuarantined, IDBConnection, isSnapshotBytes } from './indexeddb.js';
+import { createAutosave, resolveMaxWait } from './autosave.js';
+import { resolveLoad, describeRecovery } from './recovery.js';
+import { PersistenceState } from './state.svelte.js';
+import { readTail, writeTail, clearTail, parkTail } from './tail.js';
 import { IndexedDBAssetStore } from './asset-store.js';
 import { IndexedDBOutbox } from './outbox.js';
 import { parseHistory } from './history.js';
 import { runCompaction } from './compact.js';
 import { releaseFiles } from './release.js';
 
-export { loadSnapshot, saveSnapshot, deleteSnapshot, IndexedDBAssetStore, IndexedDBOutbox };
+export { loadSnapshot, saveSnapshot, deleteSnapshot, loadRecords, listQuarantined, IndexedDBAssetStore, IndexedDBOutbox, PersistenceState };
 
 /**
  * @import { Extension } from '../utils/extensions.js';
  * @import { CompactOptions } from './history.js';
  * @import { CompactResult } from './compact.js';
+ * @import { Recovery } from './recovery.js';
  */
+
+/** Persistence problems are shown even when `nabu.debugging` is off (`nabu.warn` is silent then): the host's user may be losing work. @param {string} message */
+const warn = (message) => console.warn('[Nabu]', message);
 
 /**
  * Create a Nabu editor instance with automatic IndexedDB persistence.
@@ -38,17 +47,30 @@ export { loadSnapshot, saveSnapshot, deleteSnapshot, IndexedDBAssetStore, Indexe
  *
  * Timestamps of the changes are recorded (`doc.setRecordTimestamp(true)`) so a retention window can be honoured.
  *
+ * Robustness (ADR 010, theme 8): the autosave also happens at most every `maxWait` ms during a continuous burst, and immediately when
+ * the page is hidden (`visibilitychange` → `hidden`, `pagehide`). Every save keeps the snapshot it replaces as a BACKUP. A stored
+ * snapshot that cannot be read is moved aside (never deleted: the `quarantine` object store), the backup is tried, else the editor
+ * starts empty — it always boots, and `nabu.persistence.recovery` / `onRecover` tell the host what happened. When IndexedDB is not
+ * usable the editor boots IN MEMORY (`nabu.persistence.available === false`, status `'unavailable'`): `createPersistedEditor` does not reject.
+ *
  * The instance gains extra members:
- * - `nabu.saveNow()` — force an immediate save (returns a Promise)
+ * - `nabu.persistence` — reactive state: `status` (`'saved' | 'pending' | 'saving' | 'error' | 'unavailable'`), `lastSavedAt`,
+ *   `lastError`, `available`, `recovery`, and `dispose()` (stop autosave, remove the page listeners, close the connection)
+ * - `nabu.saveNow()` — force an immediate save (returns a Promise; rejects if the save fails)
  * - `nabu.compact({ retain, onBeforeCompact })` — explicit compaction (returns a `CompactResult`, never throws for a refusal)
  * - `nabu.clearPersistence()` — delete the stored snapshot and release the document's files (returns a Promise)
- * - `nabu.isNew` — `true` if no previous snapshot was found (fresh document)
+ * - `nabu.isNew` — `true` if no previous snapshot was found (fresh document, or nothing readable was left: `persistence.recovery.kind === 'empty'`)
  *
  * @param {object} options
  * @param {string} options.docId - Unique identifier for this document in IndexedDB
  * @param {Extension[]} [options.preset] - Extension preset (default: FullPreset)
  * @param {Extension[]} [options.extensions] - Additional extensions to append
  * @param {number} [options.debounce] - Auto-save debounce delay in ms (default: 2000)
+ * @param {number} [options.maxWait] - Longest time (ms) a continuous burst of edits goes without a save (default: 3000, never shorter than
+ *   `debounce`; `0` / `Infinity`: no maximum, the autosave only happens after a pause)
+ * @param {(error: unknown) => void} [options.onSaveError] - Called when an AUTOMATIC save fails (quota…); `nabu.persistence.status` is `'error'` and the
+ *   next change retries. `saveNow()` rejects for its awaiter instead (the hook is not called for it)
+ * @param {(recovery: Recovery) => void} [options.onRecover] - Called at boot when the stored document could not be read (see `nabu.persistence.recovery`)
  * @param {import('../files/files.svelte.js').FilesConfig} [options.files] - File handling; `files.store` replaces the default IndexedDB asset store
  * @param {'full' | { mode: 'full' } | { mode: 'compact', retain: number | string, onBeforeCompact?: CompactOptions['onBeforeCompact'] }} [options.history] - `'full'` (default): nothing is ever compacted.
  *   `{ mode: 'compact', retain, onBeforeCompact }`: compact at open (`retain`: ms, `'30d'`, `'12h'`, or `0` = keep no past history).
@@ -75,20 +97,36 @@ export async function createPersistedEditor({
 	preset = FullPreset,
 	extensions = [],
 	debounce = 2000,
+	maxWait,
+	onSaveError,
+	onRecover,
 	history,
 	...init
 } = {}) {
 	const historyConfig = parseHistory(history); // a typo in `history` must fail loudly, before anything is read
-	const initialSnapshot = await loadSnapshot(docId);
-	const store = init.files?.store ?? new IndexedDBAssetStore();
-	const outbox = init.files?.outbox ?? new IndexedDBOutbox(docId);
+	const maxWaitMs = resolveMaxWait(maxWait, debounce);
+	const conn = new IDBConnection();
+
+	// ── 1. read what is stored. IndexedDB missing / refusing / blocked: boot in memory, never reject ──
+	/** @type {{ current: any, backup: any } | null} */
+	let records = null;
+	/** @type {unknown} */
+	let unavailableError = null;
+	try {
+		records = await loadRecords(docId, conn);
+	} catch (error) {
+		unavailableError = error ?? new Error('IndexedDB is not available');
+	}
+	let available = !unavailableError;
+	const store = init.files?.store ?? (available ? new IndexedDBAssetStore() : new MemoryAssetStore());
+	const outbox = init.files?.outbox ?? (available ? new IndexedDBOutbox(docId) : undefined);
 
 	/** @param {Uint8Array | null} snapshot */
 	const build = (snapshot) => {
 		const nabu = new Nabu({
 			tabDefault: tabDefaultFor(preset),
 			...init,
-			files: { ...init.files, store, outbox },
+			files: { ...init.files, store, ...(outbox ? { outbox } : {}) },
 			extensions: [...preset, ...extensions],
 			...(snapshot ? { snapshot } : {})
 		});
@@ -97,17 +135,62 @@ export async function createPersistedEditor({
 		return nabu;
 	};
 
+	// ── 2. open the document: the current snapshot, else the backup, else empty. A record that cannot be read is moved aside, never deleted ──
+	const decision = available
+		? resolveLoad(/** @type {NonNullable<typeof records>} */ (records), (snapshot) => {
+			if (!isSnapshotBytes(snapshot)) throw new TypeError('the stored snapshot is not a non-empty byte array');
+			return build(snapshot);
+		})
+		: /** @type {any} */ ({ outcome: 'new', value: null, used: null, failed: [] });
+	/** @type {Recovery | null} */
+	let recovery = null;
+	/** @type {unknown} */
+	let quarantineError = null;
+	if (decision.outcome === 'backup' || decision.outcome === 'empty') {
+		const at = Date.now();
+		try {
+			const keys = await quarantineRecords(docId, decision.failed, decision.outcome === 'backup' ? decision.used : null, at, conn);
+			recovery = describeRecovery(decision, keys, at);
+		} catch (error) {
+			// The unreadable record could not be copied aside: touching the stored data is not safe, so nothing will be written (memory only).
+			quarantineError = error;
+			recovery = describeRecovery(decision, [], at);
+			available = false;
+		}
+	}
+	const initialSnapshot = decision.used ? /** @type {Uint8Array} */ (decision.used.snapshot) : null;
+
+	/** The reactive state exposed as `nabu.persistence`. */
+	const state = new PersistenceState(docId);
+	state.available = available;
+	state.recovery = recovery;
+	if (!available) { state.status = 'unavailable'; state.lastError = quarantineError ?? unavailableError; }
+
 	/** The version of a document, to tell whether something changed since the last save. @param {import('loro-crdt').LoroDoc} doc */
 	const versionKey = (doc) => JSON.stringify(doc.oplogFrontiers());
 
 	/**
 	 * Wire autosave and the extra methods onto `nabu`. Returns `dispose()` (stops this wiring: used for the instance that is
 	 * replaced after a compaction at open, which nobody has seen).
-	 * @param {Nabu} nabu @param {boolean} loaded whether `nabu` holds exactly what is saved
+	 * @param {Nabu} nabu @param {{ snapshot: Uint8Array, savedAt: number } | null} stored the record `nabu` was loaded from and that is
+	 *   stored now (`null`: a document with nothing stored)
+	 * @param {import('loro-crdt').VersionVector | undefined} storedVersion what that record contains (`undefined`: nothing, or unknown)
+	 * @param {boolean} [unsaved] `nabu` holds changes that are not in the stored record (a tail was merged): a save is due
 	 */
-	const attach = (nabu, loaded) => {
+	const attach = (nabu, stored, storedVersion, unsaved = false) => {
+		const loaded = stored !== null && !unsaved;
+		/** What the stored record contains, to export the tail from. @type {import('loro-crdt').VersionVector | undefined} */
+		let savedVersion = storedVersion;
 		/** Version known to be saved (`null`: never saved). */
 		let savedKey = loaded ? versionKey(nabu.doc) : null;
+		/**
+		 * What this editor last wrote or loaded (the record stored now, unless another tab wrote since), kept to become the backup
+		 * of the next save WITHOUT reading it back first (a save from `pagehide` must issue its requests synchronously).
+		 * @type {{ snapshot: Uint8Array, savedAt: number } | null}
+		 */
+		let lastStored = stored;
+		/** Version of the last save that was STARTED (a second flush must not repeat a save that is already running). @type {string | null} */
+		let requestedKey = savedKey;
 		/**
 		 * Where the last compaction of THIS session cut the history. The live document still holds the older history (Loro cannot
 		 * trim it in place), so from then on every save is a shallow snapshot at that version: the saved document stays compacted.
@@ -144,23 +227,99 @@ export async function createPersistedEditor({
 			await refs.call(store, docId, new Set([...Files.get(nabu).indexedHashes(), ...held]));
 		};
 
+		let disposed = false;
+
+		/** Whether there is anything not stored yet (a save scheduled, a change since the last save, a failed save to retry). */
+		const isUnsaved = () => autosave.pending()
+			|| state.status === 'error'
+			|| nabu.doc.getPendingTxnLength() > 0
+			|| (requestedKey !== null && versionKey(nabu.doc) !== requestedKey);
+
+		/** Never throws away the status of a change that came while a save was running. */
+		const settle = () => { state.status = isUnsaved() ? 'pending' : 'saved'; };
+
 		const save = () => lock(async () => {
+			if (!available) throw new Error('persistence is unavailable: IndexedDB cannot be used, the document is only in memory');
+			if (disposed) throw new Error('persistence was disposed');
 			const key = versionKey(nabu.doc);
-			const snap = compactedAt
-				? nabu.doc.export({ mode: 'shallow-snapshot', frontiers: compactedAt })
-				: nabu.doc.export({ mode: 'snapshot' });
-			await saveSnapshot(docId, snap);
-			await saveRefs();
-			savedKey = key;
+			requestedKey = key;
+			state.status = 'saving';
+			try {
+				const snap = compactedAt
+					? nabu.doc.export({ mode: 'shallow-snapshot', frontiers: compactedAt })
+					: nabu.doc.export({ mode: 'snapshot' });
+				const version = nabu.doc.version(); // (the export above committed any pending change: this is what `snap` contains)
+				await saveSnapshot(docId, snap, { conn, previous: lastStored });
+				lastStored = { snapshot: snap, savedAt: Date.now() };
+				savedVersion = version;
+				clearTail(docId); // the stored snapshot holds everything the tail had
+				await saveRefs();
+				savedKey = key;
+				state.lastSavedAt = Date.now();
+				state.lastError = null;
+				settle();
+			} catch (error) {
+				requestedKey = savedKey; // the failed version is unsaved again
+				state.lastError = error;
+				state.status = 'error';
+				throw error;
+			}
 		});
 
+		/** An automatic save (timer, page hide): nobody awaits it, so a failure is reported, not thrown. */
+		const autosaveRun = async () => {
+			try {
+				await save();
+			} catch (error) {
+				warn(`persistence: could not save "${docId}" (the changes stay in memory; the next change retries): ${error}`);
+				try { onSaveError?.(error); } catch (hookError) { warn(`persistence: onSaveError threw: ${hookError}`); }
+			}
+		};
+
+		const autosave = createAutosave({ debounce, maxWait: maxWaitMs, run: autosaveRun });
+
 		// Auto-save: Loro fires doc.subscribe() after every committed change
-		/** @type {ReturnType<typeof setTimeout> | undefined} */
-		let saveTimer;
-		const unsubscribe = nabu.doc.subscribe(() => {
-			clearTimeout(saveTimer);
-			saveTimer = setTimeout(save, debounce);
-		});
+		const unsubscribe = available
+			? nabu.doc.subscribe(() => {
+				if (state.status !== 'saving') state.status = 'pending'; // a change that comes while saving is picked up by `settle()`
+				autosave.touch();
+			})
+			: () => {};
+
+		/** Write the changes since the last save to `localStorage`, synchronously (see tail.js). Never throws. */
+		const writeTailNow = () => {
+			try { writeTail(docId, nabu.doc.export(savedVersion ? { mode: 'update', from: savedVersion } : { mode: 'update' })); } catch { /* best effort */ }
+		};
+
+		/**
+		 * Save RIGHT NOW (no debounce) if something is not stored: the page is going away (tab hidden, closed, navigated, reloaded).
+		 * CAVEAT: IndexedDB is asynchronous, and a browser may finish unloading before the write commits (Chromium drops the transaction
+		 * of a RELOAD, and often of a close). So the IndexedDB save is started at once from the connection kept open since boot (its
+		 * requests are issued synchronously and committed explicitly, which is what lets it complete on a navigation or a tab switch), AND
+		 * the changes since the last save are written synchronously to `localStorage` (the "tail", see tail.js), merged at the next boot.
+		 * Still best effort: a crash, a killed process, or a mobile browser that never sends these events loses the last seconds.
+		 */
+		const flushOnHide = () => {
+			if (disposed || !available || !isUnsaved()) return;
+			writeTailNow();
+			autosave.cancel();
+			void autosaveRun();
+		};
+		const onVisibility = () => { if (document.visibilityState === 'hidden') flushOnHide(); };
+		const listening = available && typeof document !== 'undefined' && typeof window !== 'undefined';
+		if (listening) {
+			document.addEventListener('visibilitychange', onVisibility);
+			window.addEventListener('pagehide', flushOnHide);
+		}
+
+		const stop = () => {
+			autosave.cancel();
+			unsubscribe();
+			if (listening) {
+				document.removeEventListener('visibilitychange', onVisibility);
+				window.removeEventListener('pagehide', flushOnHide);
+			}
+		};
 
 		/** @type {import('./compact.js').CompactContext} */
 		const ctx = {
@@ -169,7 +328,7 @@ export async function createPersistedEditor({
 			compacting: false,
 			base: () => compactedAt,
 			isDirty: () => savedKey === null || versionKey(nabu.doc) !== savedKey,
-			flush: async () => { clearTimeout(saveTimer); await save(); },
+			flush: async () => { autosave.cancel(); await save(); },
 			lock,
 			versionKey,
 			candidates: async () => { await loadHeld(); return new Set([...Files.get(nabu).indexedHashes(), ...held]); },
@@ -177,16 +336,20 @@ export async function createPersistedEditor({
 			setHeld: (hashes) => { heldLoaded = true; held.clear(); for (const hash of hashes) held.add(hash); },
 			saveRefs,
 			commit: async (snapshot, frontiers, key) => {
-				await saveSnapshot(docId, snapshot);
+				// the compacted snapshot replaces the history: the backup (the complete history) must not outlive it
+				await saveSnapshot(docId, snapshot, { conn, rotate: false, dropBackup: true });
+				lastStored = { snapshot, savedAt: Date.now() };
+				savedVersion = undefined; // (unknown which changes came in meanwhile: the next tail is exported in full, or not at all)
 				compactedAt = frontiers;
 				savedKey = key;
+				requestedKey = key;
 				await saveRefs();
 			},
 		};
 
 		/** Force an immediate save of the current document state. @returns {Promise<void>} */
 		/** @type {any} */ (nabu).saveNow = async () => {
-			clearTimeout(saveTimer);
+			autosave.cancel();
 			await Files.get(nabu).whenIdle(); // files of a paste / import / migration in progress belong to this save
 			await save();
 		};
@@ -200,16 +363,21 @@ export async function createPersistedEditor({
 		 * @param {CompactOptions} options
 		 * @returns {Promise<CompactResult>}
 		 */
-		/** @type {any} */ (nabu).compact = /** @param {CompactOptions} options */ (options) => runCompaction(ctx, options);
+		/** @type {any} */ (nabu).compact = /** @param {CompactOptions} options */ (options) => {
+			if (available) return runCompaction(ctx, options);
+			parseHistory({ mode: 'compact', retain: options?.retain }); // an invalid configuration still throws
+			return Promise.resolve({ compacted: false, reason: /** @type {const} */ ('failed'), error: new Error('persistence is unavailable') });
+		};
 
 		/**
-		 * Delete the persisted snapshot for this document and release its files: a file is deleted from the shared store only when no
-		 * other document references it; with a host, `files.onAssetReleased(url)` is called for each hosted file (Nabu deletes nothing
-		 * at the host).
+		 * Delete the persisted snapshot for this document (and its backup, and the records that were moved aside) and release its files:
+		 * a file is deleted from the shared store only when no other document references it; with a host, `files.onAssetReleased(url)`
+		 * is called for each hosted file (Nabu deletes nothing at the host).
 		 * @returns {Promise<void>}
 		 */
 		/** @type {any} */ (nabu).clearPersistence = async () => {
-			clearTimeout(saveTimer);
+			autosave.cancel();
+			if (!available) return; // nothing was ever read or written
 			const files = Files.get(nabu);
 			const reader = /** @type {any} */ (store);
 			const mine = new Set(files.indexedHashes());
@@ -217,38 +385,88 @@ export async function createPersistedEditor({
 			const urls = files.hostUrls(mine);
 			await deleteSnapshot(docId);
 			if (typeof reader.clearDocRefs === 'function') await reader.clearDocRefs(docId);
-			await outbox.clear?.();
+			await outbox?.clear?.();
 			const { skipped } = await releaseFiles(nabu, store, mine, urls);
 			// too recent to delete (grace period): kept in this docId's `docRefs`, reconsidered when a document with this id is next compacted / cleared
 			held.clear();
 			for (const hash of skipped) held.add(hash);
 			heldLoaded = true;
 			if (skipped.length && typeof reader.setDocRefs === 'function') await reader.setDocRefs(docId, skipped);
+			lastStored = null; // the backup was deleted with the rest
+			savedVersion = undefined;
+			clearTail(docId);
+			requestedKey = versionKey(nabu.doc); // what is in memory now is deliberately NOT stored: a page hide must not bring it back
+			if (state.status === 'pending') state.status = 'saved'; // the pending autosave was cancelled above: nothing is waiting
 		};
 
-		return { ctx, dispose: () => { clearTimeout(saveTimer); unsubscribe(); } };
+		state.dispose = () => {
+			if (disposed) return;
+			disposed = true;
+			stop();
+			conn.close();
+		};
+
+		return { ctx, dispose: stop, touch: () => { state.status = 'pending'; autosave.touch(); } };
 	};
 
-	let nabu = build(initialSnapshot);
-	let wiring = attach(nabu, Boolean(initialSnapshot));
+	let nabu = decision.value ?? build(null);
+
+	// ── 3. the tail left by a page that went away before IndexedDB could be written (see tail.js) ──
+	/** What the stored record contains, to export the next tail from. @type {import('loro-crdt').VersionVector | undefined} */
+	let storedVersion = initialSnapshot ? nabu.doc.version() : undefined;
+	let restoredFromTail = false;
+	let tailApplied = false;
+	const tail = available ? readTail(docId) : null;
+	if (tail) {
+		if (decision.outcome === 'new') {
+			// nothing stored (the first session never reached IndexedDB): the tail IS the document, history included
+			try { nabu = build(tail); restoredFromTail = tailApplied = true; } catch { parkTail(docId); }
+		} else {
+			try {
+				const before = versionKey(nabu.doc);
+				const status = nabu.doc.import(tail);
+				if (status.pending && status.pending.size > 0) parkTail(docId); // it does not follow from what is stored: keep it aside
+				else tailApplied = versionKey(nabu.doc) !== before;
+				if (!tailApplied && !(status.pending && status.pending.size > 0)) clearTail(docId); // already in the snapshot
+			} catch { parkTail(docId); }
+		}
+	}
+
+	let wiring = attach(nabu, available && initialSnapshot ? { snapshot: initialSnapshot, savedAt: decision.used?.savedAt ?? Date.now() } : null, storedVersion, tailApplied);
+	/** @type {any} */ (nabu).persistence = state;
+
+	if (tailApplied && available) wiring.touch(); // the merged tail is not in IndexedDB yet
+
+	if (!available) {
+		warn(unavailableError
+			? `persistence: IndexedDB is not available (${unavailableError}); "${docId}" works in memory only and will not be saved`
+			: `persistence: "${docId}" could not be moved aside safely (${quarantineError}); it works in memory only and will not be saved`);
+	}
+	if (recovery) {
+		warn(recovery.kind === 'backup'
+			? `persistence: the saved document "${docId}" could not be read (${recovery.error.message}); restored from the previous save, the unreadable record is kept in the "quarantine" store (${recovery.quarantinedKey})`
+			: `persistence: the saved document "${docId}" could not be read (${recovery.error.message}) and no backup was usable; starting empty, the unreadable record is kept in the "quarantine" store (${recovery.quarantinedKey})`);
+		try { onRecover?.(recovery); } catch (error) { warn(`persistence: onRecover threw: ${error}`); }
+	}
 
 	// `history: { mode: 'compact' }`: compact when the document is opened (never mid-session), once it is loaded, migrated and its
 	// uploads reconciled. A refusal (pending upload, failing archive…) leaves the document exactly as it was.
-	if (historyConfig.mode === 'compact' && initialSnapshot) {
+	if (historyConfig.mode === 'compact' && initialSnapshot && available) {
 		const { retain, onBeforeCompact } = historyConfig;
 		const result = await runCompaction(wiring.ctx, { retain, onBeforeCompact }, { flush: true });
 		if (result.compacted && result.snapshot) {
 			// Replace the instance nobody has seen yet by one built from the compacted snapshot: the history is gone from memory too.
 			wiring.dispose();
 			nabu = build(result.snapshot);
-			wiring = attach(nabu, true);
+			wiring = attach(nabu, { snapshot: result.snapshot, savedAt: Date.now() }, nabu.doc.version());
+			/** @type {any} */ (nabu).persistence = state;
 		} else if (result.reason !== 'nothing-to-compact') {
 			nabu.warn(`history: compaction at open skipped (${result.reason}), the document is unchanged`);
 		}
 	}
 
-	/** Whether this instance was created from a fresh document (no prior snapshot). */
-	/** @type {any} */ (nabu).isNew = !initialSnapshot;
+	/** Whether this instance was created from a fresh document (no readable snapshot, no tail). */
+	/** @type {any} */ (nabu).isNew = !initialSnapshot && !restoredFromTail;
 
 	return nabu;
 }

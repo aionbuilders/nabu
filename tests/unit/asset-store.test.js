@@ -129,7 +129,7 @@ describe('IndexedDBOutbox (fake-indexeddb)', () => {
 });
 
 describe('IndexedDB schema upgrade (ADR 014)', () => {
-  it('a version 2 database (snapshots, assets, docRefs) upgrades to 3, gains `outbox` and keeps ALL its data', async () => {
+  it('a version 2 database (snapshots, assets, docRefs) upgrades to 4, gains `outbox` and keeps ALL its data', async () => {
     globalThis.indexedDB = new IDBFactory();
     BlobCtor = NodeBlob;
     // what lot 1 created: version 2 with snapshots + assets + docRefs, each holding data
@@ -151,8 +151,8 @@ describe('IndexedDB schema upgrade (ADR 014)', () => {
     });
 
     const db = await openDB();
-    expect(db.version).toBe(3);
-    expect([...db.objectStoreNames].sort()).toEqual(['assets', 'docRefs', 'outbox', 'snapshots']);
+    expect(db.version).toBe(4);
+    expect([...db.objectStoreNames].sort()).toEqual(['assets', 'backups', 'docRefs', 'outbox', 'quarantine', 'snapshots']);
     db.close();
     expect([...(await loadSnapshot('doc'))]).toEqual([1, 2, 3]);
     const store = new IndexedDBAssetStore();
@@ -165,7 +165,7 @@ describe('IndexedDB schema upgrade (ADR 014)', () => {
     expect(await outbox.list()).toHaveLength(1);
   });
 
-  it('a version 1 database (snapshots only) upgrades to 3 and keeps its snapshots', async () => {
+  it('a version 1 database (snapshots only) upgrades to 4 and keeps its snapshots', async () => {
     globalThis.indexedDB = new IDBFactory();
     // what the beta created: base `nabu`, version 1, a `snapshots` store
     await new Promise((resolve, reject) => {
@@ -180,8 +180,8 @@ describe('IndexedDB schema upgrade (ADR 014)', () => {
     });
 
     const db = await openDB();
-    expect(db.version).toBe(3);
-    expect([...db.objectStoreNames].sort()).toEqual(['assets', 'docRefs', 'outbox', 'snapshots']);
+    expect(db.version).toBe(4);
+    expect([...db.objectStoreNames].sort()).toEqual(['assets', 'backups', 'docRefs', 'outbox', 'quarantine', 'snapshots']);
     db.close();
     expect([...(await loadSnapshot('old-doc'))]).toEqual([7, 8, 9]);
 

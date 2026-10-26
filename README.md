@@ -359,6 +359,34 @@ An opt-in overlay for reordering blocks by dragging. On hover, a `⠿` grip appe
 
 Reordering goes through the Loro tree (`moveBefore` / `moveAfter`) and commits as a single transaction, so it's collaborative and undo-safe. Structural integrity is preserved automatically — e.g. dragging a list item out to the document root re-wraps it in its own list. A block can never be dropped into its own subtree.
 
+## Local persistence (IndexedDB)
+
+`createPersistedEditor({ docId })` is the async twin of `createEditor()`: it restores the document from IndexedDB, saves automatically (`debounce`, default 2 s, and at least every `maxWait`, default 3 s, during a long burst of typing) and **immediately when the page is hidden or closed** (`visibilitychange` → `hidden`, `pagehide`). Because an IndexedDB write started while a page unloads is not guaranteed to complete (Chromium drops it on a reload), the changes since the last save are also written synchronously to `localStorage` and merged at the next boot. Call `engine.persistence.dispose()` when the editor is destroyed (it removes the page listeners). Full guide: [docs/guides/persistence.md](docs/guides/persistence.md), design: [ADR 010](docs/adr/010-persistence-strategy.md).
+
+`engine.persistence` is **reactive** (Svelte 5 state), ready for a "Saved / Saving…" indicator:
+
+```svelte
+<span>{engine.persistence.status}</span>  <!-- 'saved' | 'pending' | 'saving' | 'error' | 'unavailable' -->
+```
+
+```js
+const engine = await createPersistedEditor({
+  docId: 'note',
+  maxWait: 3000,                                  // longest time a burst of edits goes unsaved (0 / Infinity: off)
+  onSaveError: (error) => toast('Not saved: ' + error.message), // an AUTOMATIC save failed (quota…); the next change retries
+  onRecover: (recovery) => toast(recovery.kind === 'backup'     // the stored document was unreadable
+    ? 'Your document was restored from the previous save.'
+    : 'Your document could not be read; it was kept aside.'),
+});
+engine.persistence.status;      // 'saved' | 'pending' | 'saving' | 'error' | 'unavailable'
+engine.persistence.lastSavedAt; // epoch ms | null
+engine.persistence.lastError;   // the last save error, or why storage is unavailable
+engine.persistence.available;   // false: IndexedDB unusable, the editor works in memory only (no rejection)
+engine.persistence.recovery;    // null, or { kind: 'backup' | 'empty', error, quarantinedKey, quarantinedKeys, at }
+```
+
+Every save keeps the snapshot it replaces as a **backup**. A stored snapshot that cannot be imported is never deleted: it is copied to the `quarantine` object store of the `nabu` database, the backup is tried, and failing that the editor starts empty. The editor always boots.
+
 ## Files, images & media
 
 Image, Video, and File are void (non-editable) media blocks. Insert them via the slash menu (`/image`, `/video`, `/file` — triggers a file picker) or programmatically:
