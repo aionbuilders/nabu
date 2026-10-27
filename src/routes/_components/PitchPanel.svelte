@@ -28,10 +28,10 @@
   const viteConfigCode = `import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import wasm from 'vite-plugin-wasm';
-import topLevelAwait from 'vite-plugin-top-level-await';
 
 export default defineConfig({
-  plugins: [sveltekit(), wasm(), topLevelAwait()],
+  plugins: [sveltekit(), wasm()],
+  build: { target: 'esnext' }, // Loro's WASM uses top-level await
 });`;
 
   const pillars = [
@@ -128,8 +128,8 @@ export default defineConfig({
       <div class="setup-content" class:expanded={setupExpanded} aria-hidden={!setupExpanded}>
         <div class="setup-content-inner">
           <div class="setup-step">
-            <span class="step-label">1. Install plugins</span>
-            <CodeBlock lang="bash" code="$ npm install -D vite-plugin-wasm vite-plugin-top-level-await" />
+            <span class="step-label">1. Install the plugin</span>
+            <CodeBlock lang="bash" code="$ npm install -D vite-plugin-wasm" />
           </div>
           <div class="setup-step">
             <span class="step-label">2. Update your config</span>

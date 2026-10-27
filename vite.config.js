@@ -13,6 +13,6 @@ export default defineConfig({
 		wasm()
 	],
 	build: {
-		target: 'esnext' /* top-level await natif, pas besoin de vite-plugin-top-level-await */
+		target: 'esnext' /* top-level await natif (Loro WASM) */
 	}
 });

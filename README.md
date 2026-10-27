@@ -14,7 +14,7 @@ bun add @aionbuilders/nabu
 
 ## Required: Vite Setup
 
-Nabu depends on `loro-crdt`, which ships as a WebAssembly module. You must configure your Vite bundler to handle it.
+Nabu depends on `loro-crdt`, which ships as a WebAssembly module loaded with top-level `await`. You must configure your Vite bundler to handle it. Requires **Svelte >= 5.20**.
 
 The easiest way is the bundled plugin preset:
 
@@ -27,7 +27,7 @@ import { nabu } from '@aionbuilders/nabu/vite';
 export default defineConfig({
   plugins: [
     sveltekit(),
-    nabu() // registers vite-plugin-wasm + vite-plugin-top-level-await
+    nabu() // registers vite-plugin-wasm and sets build.target to 'esnext'
   ]
 });
 ```
@@ -35,30 +35,28 @@ export default defineConfig({
 <details>
 <summary>Manual setup (equivalent)</summary>
 
-**1. Install the required Vite plugins:**
+**1. Install the Vite plugin:**
 
 ```bash
-npm install -D vite-plugin-wasm vite-plugin-top-level-await
+npm install -D vite-plugin-wasm
 ```
 
-**2. Add them to your `vite.config.js`:**
+**2. Add it to your `vite.config.js`, with the `esnext` target:**
 
 ```js
 import { defineConfig } from 'vite';
 import { sveltekit } from '@sveltejs/kit/vite'; // or svelte()
 import wasm from 'vite-plugin-wasm';
-import topLevelAwait from 'vite-plugin-top-level-await';
 
 export default defineConfig({
-  plugins: [
-    sveltekit(),
-    wasm(),
-    topLevelAwait()
-  ]
+  plugins: [sveltekit(), wasm()],
+  build: { target: 'esnext' }
 });
 ```
 
 </details>
+
+**Why `esnext`?** Loro's WebAssembly module is loaded with top-level `await`, which every modern browser supports natively. The `esnext` build target tells Vite not to down-level it (Vite's default target does not allow top-level `await`, so the build would fail). No `vite-plugin-top-level-await` is needed, and it should not be used: it is incompatible with Vite 8 (Rolldown). `nabu()` sets the target for you unless you already set `build.target` yourself; if you do, keep it at `esnext` (or any target that supports top-level `await`).
 
 Without this setup, Nabu will fail to load.
 
