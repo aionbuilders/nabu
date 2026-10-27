@@ -108,8 +108,8 @@
   padding: 4px;
   background: var(--nb-bg-surface, #1a1a1a);
   border: 1px solid var(--nb-border, rgba(255,255,255,0.12));
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  border-radius: var(--nb-floating-radius, 8px);
+  box-shadow: var(--nb-floating-shadow, 0 8px 24px rgba(0,0,0,0.35));
   pointer-events: all;
 }
 .nabu-slash-item {

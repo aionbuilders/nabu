@@ -43,6 +43,12 @@
 		"./vite": {
 			"types": "./dist/vite.d.ts",
 			"default": "./dist/vite.js"
+		},
+		"./nabu-theme.css": {
+			"default": "./dist/nabu-theme.css"
+		},
+		"./themes/atelier.css": {
+			"default": "./dist/themes/atelier.css"
 		}
 	},
 	"peerDependencies": {

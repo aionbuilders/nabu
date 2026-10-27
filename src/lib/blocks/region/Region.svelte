@@ -43,7 +43,8 @@
     --nb-region-label-weight, --nb-region-gap, --nb-region-margin (they default to the host's text colour, so light and dark
     pages both work) and --nb-region-warning (the tint of a pending merge: amber; nabu-theme.css gives it a darker amber for
     light pages and a lighter one for dark pages, so the hint keeps a 4.5:1 contrast on both — the #b45309 fallback assumes
-    a light page).
+    a light page). Also: --nb-region-font, --nb-region-text-transform, --nb-region-letter-spacing (the whole seam: label and title) and
+    --nb-region-mark (a `url(...)` drawn in front of the label; default none).
 
     End marker (only when text of the parent follows the region): --nb-region-end-color (default: the text colour at 60%, like the seam), --nb-region-end-size
     (11.5px). Its height is fixed (2.6 × the size, one line, never wraps), which is what lets the rail stop above it.
@@ -155,9 +156,19 @@
         color: var(--nb-region-color, color-mix(in srgb, currentColor 62%, transparent));
         font-size: var(--nb-region-label-size, 0.75em);
         font-weight: var(--nb-region-label-weight, 500);
+        font-family: var(--nb-region-font, inherit);
+        text-transform: var(--nb-region-text-transform, none);
         line-height: 1.2;
-        letter-spacing: 0.02em;
+        letter-spacing: var(--nb-region-letter-spacing, 0.02em);
         position: relative;
+    }
+
+    /* Optional mark in front of the label: `--nb-region-mark: url("data:image/svg+xml,…")` (default `none`: nothing is drawn). Generated
+       content: not in the DOM, not selectable, takes no part in the caret. */
+    .nabu-region-seam::before {
+        content: var(--nb-region-mark, none);
+        flex: none;
+        user-select: none;
     }
 
     .nabu-region.debug.selected > .nabu-region-seam {

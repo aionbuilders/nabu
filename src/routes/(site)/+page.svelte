@@ -1,7 +1,15 @@
+<script>
+  import HeroEditor from '../../site/HeroEditor.svelte';
+</script>
+
 <section class="container hero">
   <h1>Every keystroke,<br />accounted for.</h1>
   <p class="lead">A block editor whose truth is a CRDT. Type on the left, watch the model move on the right.</p>
 </section>
+
+<div class="container">
+  <HeroEditor />
+</div>
 
 <style>
   .hero {
