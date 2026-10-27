@@ -117,14 +117,12 @@
     };
   });
 
-  // The editor element is the textbox: name it, mark it multi-line (the component renders a bare contenteditable).
+  // Name the editor. The component renders a bare contenteditable (no label prop on <NabuEditor>, no engine option), which browsers
+  // already expose as a multi-line textbox: only the accessible name is added. No `role` / `aria-multiline` override, it would
+  // flatten the headings and region seams inside for screen readers.
   $effect(() => {
     if (!engine || !scope) return;
-    const root = scope.querySelector('[data-nabu-root]');
-    if (!root) return;
-    root.setAttribute('role', 'textbox');
-    root.setAttribute('aria-multiline', 'true');
-    root.setAttribute('aria-label', 'Try Nabu');
+    scope.querySelector('[data-nabu-root]')?.setAttribute('aria-label', 'Try Nabu');
   });
 
   /** Clear the stored document and start again from the seed. One action, no confirmation. */
@@ -193,12 +191,12 @@
     min-width: 0;
   }
 
-  /* The pane's height: the seeded document at rest, measured (269px on one line per paragraph at 18px; 259px at 17px; 317px when the
-     two first paragraphs wrap, on a phone), so the page does not jump when the editor replaces the skeleton, nor when Reset reseeds.
-     It only grows when the visitor writes more. */
+  /* The pane's height: the seeded document at rest, measured (282px at 16px with the 36px padding; 258px with the 24px phone padding;
+     284px when the first paragraph wraps, ~400-480px wide; 311px when the two first wrap, below ~400px), rounded up, so the page does
+     not jump when the editor replaces the skeleton, nor when Reset reseeds. It only grows when the visitor writes more. */
   .slot,
   .slot :global(.nabu-editor) {
-    min-height: 269px;
+    min-height: 283px;
   }
   @media (max-width: 759.98px) {
     .slot,
@@ -209,7 +207,13 @@
   @media (max-width: 480px) {
     .slot,
     .slot :global(.nabu-editor) {
-      min-height: 317px;
+      min-height: 285px;
+    }
+  }
+  @media (max-width: 400px) {
+    .slot,
+    .slot :global(.nabu-editor) {
+      min-height: 311px;
     }
   }
 

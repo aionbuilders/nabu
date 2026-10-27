@@ -39,7 +39,18 @@ test.describe('home editor', () => {
     await expect(page.getByTestId('hero-editor-skeleton')).toHaveCount(0);
     await expect(pane(page).locator('.nabu-bold')).toHaveText('Start typing');
     await expect(pane(page).locator('[data-block-type="region"]')).toHaveText('The bank');
-    await expect(page.getByRole('textbox', { name: 'Try Nabu' })).toBeVisible();
+    // the accessible name is on the contenteditable itself; no role / aria-multiline override (it would flatten the headings inside)
+    await expect(page.getByLabel('Try Nabu')).toBeVisible();
+    await expect(pane(page)).toHaveAttribute('aria-label', 'Try Nabu');
+    await expect(pane(page)).not.toHaveAttribute('role', /.*/);
+    await expect(pane(page)).not.toHaveAttribute('aria-multiline', /.*/);
+    const ax = await page.context().newCDPSession(page);
+    const { nodes } = await ax.send('Accessibility.getFullAXTree');
+    const named = nodes.find((n: any) => n.name?.value === 'Try Nabu' && !n.ignored);
+    expect(named, 'the editor is named "Try Nabu" in the accessibility tree').toBeTruthy();
+    expect(named.properties.find((p: any) => p.name === 'editable')?.value.value).toBe('richtext');
+    // not flattened: the region seam is still a heading for assistive tech
+    expect(nodes.some((n: any) => n.role?.value === 'heading' && /THE BANK/i.test(n.name?.value ?? '') && !n.ignored)).toBe(true);
     expect(await page.evaluate(() => (window as any).nabu.isNew)).toBe(true);
     // the editor sits inside the Atelier scope, which is bound to the site theme (system here)
     await expect(scope(page)).toHaveClass(/nb-theme-atelier/);
@@ -122,6 +133,10 @@ test.describe('home editor', () => {
     await expect(bar).toBeVisible();
     expect(await bar.evaluate((el) => !!el.closest('.nb-theme-atelier'))).toBe(true);
     expect(await bar.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(DARK.float);
+    // the link button carries an inline SVG icon (no emoji), named by aria-label
+    const link = bar.getByRole('button', { name: 'Link' });
+    await expect(link.locator('svg[aria-hidden="true"]')).toHaveCount(1);
+    expect((await link.textContent())!.trim()).toBe('');
     await bar.getByRole('button', { name: 'Italic' }).click();
     await expect.poll(() => pane(page).locator('.nabu-italic').first().textContent()).toBe('Start');
   });
@@ -136,7 +151,7 @@ test.describe('home editor', () => {
       return { transform: cs.textTransform, size: cs.fontSize, mark: before.content, rule: rule.borderTopColor };
     });
     expect(s.transform).toBe('uppercase');
-    expect(s.size).toBe('12px');
+    expect(s.size).toBe('11px');
     expect(s.mark).toContain('url(');
     expect(s.rule).toBe('rgb(42, 42, 46)');
   });
@@ -185,7 +200,7 @@ test.describe('home editor', () => {
     ];
     for (const mode of ['dark', 'light']) {
       while ((await toggle.getAttribute('data-mode')) !== mode) await toggle.click();
-      await expect(pane(page)).toHaveAttribute('role', 'textbox');
+      await expect(pane(page)).toHaveAttribute('aria-label', 'Try Nabu');
       await focusEmpty(page); // the caret in the empty paragraph: its placeholder shows
       await expect(pane(page).locator('[data-placeholder="Start writing..."]')).toHaveCount(1);
       for (const [name, sel, pseudo] of checks) {
@@ -207,22 +222,78 @@ test.describe('home editor', () => {
     await ctx.close();
   });
 
-  test('keyboard: the editor is reachable with Tab and shows a visible focus ring', async ({ page }) => {
+  test('keyboard: the editor is reachable with Tab; the pane border strengthens (no outline), Reset gets the coral ring', async ({ page }) => {
     await open(page);
+    const read = () => pane(page).evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth), border: cs.borderTopColor, bg: cs.backgroundColor };
+    });
+    const rest = await read();
+    expect(rest.border).toBe('rgb(35, 35, 39)');
     let reached = false;
     for (let i = 0; i < 30 && !reached; i++) {
       await page.keyboard.press('Tab');
       reached = await page.evaluate(() => document.activeElement?.hasAttribute('data-nabu-root') ?? false);
     }
     expect(reached, 'Tab reaches the editor').toBe(true);
-    const ring = await pane(page).evaluate((el) => {
-      const cs = getComputedStyle(el);
-      return { style: cs.outlineStyle, width: cs.outlineWidth, color: cs.outlineColor };
-    });
-    expect(ring).toEqual({ style: 'solid', width: '2px', color: 'rgb(255, 111, 97)' });
-    // Tab leaves the editor again (no keyboard trap): the next stop is the Reset button
+    const focused = await read();
+    // no thick ring around the pane (it read as a form field): no outline, or at most 1px
+    expect(focused.style === 'none' || focused.width <= 1, `outline ${focused.style} ${focused.width}px`).toBe(true);
+    // ... but a perceivable change (WCAG 2.4.7): the border moves away from its resting colour by 3:1 or more
+    expect(focused.border).toBe('rgb(117, 117, 123)');
+    const lum = (rgb: string) => {
+      const c = rgb.match(/\d+/g)!.map((v) => Number(v) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+    expect(ratio(focused.border, rest.border), 'focused vs resting border').toBeGreaterThanOrEqual(3);
+    expect(ratio(focused.border, focused.bg), 'focused border vs pane').toBeGreaterThanOrEqual(3);
+    // Tab leaves the editor again (no keyboard trap): the next stop is the Reset button, which keeps the coral focus ring
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: 'Reset' })).toBeFocused();
+    const reset = page.getByRole('button', { name: 'Reset' });
+    await expect(reset).toBeFocused();
+    expect(await reset.evaluate((el) => { const cs = getComputedStyle(el); return { style: cs.outlineStyle, width: cs.outlineWidth, color: cs.outlineColor }; }))
+      .toEqual({ style: 'solid', width: '2px', color: 'rgb(255, 111, 97)' });
+  });
+
+  test('the pane: padding 36px / 40px, 16px text, the region rail sits inside the pane, left of the drag handle', async ({ page }) => {
+    await open(page);
+    const m = await pane(page).evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const p = el.querySelector('[data-block-type="paragraph"]') as HTMLElement;
+      return {
+        top: parseFloat(cs.paddingTop), bottom: parseFloat(cs.paddingBottom), left: parseFloat(cs.paddingLeft), right: parseFloat(cs.paddingRight),
+        size: cs.fontSize, line: cs.lineHeight, pSize: getComputedStyle(p).fontSize,
+        textLeft: p.getBoundingClientRect().left - el.getBoundingClientRect().left,
+      };
+    });
+    expect([m.top, m.bottom]).toEqual([36, 36]);
+    expect([m.left, m.right]).toEqual([40, 40]);
+    expect(m.textLeft, 'text offset from the pane edge').toBeGreaterThanOrEqual(40);
+    expect(m.size).toBe('16px');
+    expect(m.pSize).toBe('16px');
+    expect(parseFloat(m.line)).toBeCloseTo(16 * 1.65, 1);
+    // the site type scale
+    const site = await page.evaluate(() => ({
+      h1: getComputedStyle(document.querySelector('h1')!).fontSize,
+      lead: getComputedStyle(document.querySelector('.lead')!).fontSize,
+    }));
+    expect(site).toEqual({ h1: '64px', lead: '17px' });
+
+    await focusAt(page, 'Bold, italic, links, code', 4);
+    await expect(pane(page).locator('.nabu-region[data-region-caret]')).toHaveCount(1);
+    const rail = await pane(page).evaluate((el) => {
+      const region = el.querySelector('.nabu-region[data-region-caret]')!;
+      const r = region.getBoundingClientRect();
+      const b = el.getBoundingClientRect();
+      const before = getComputedStyle(region, '::before');
+      const x = r.left + parseFloat(before.left);
+      return { x, w: parseFloat(before.width), paneLeft: b.left, regionLeft: r.left, color: before.backgroundColor };
+    });
+    expect(rail.color).toBe('rgb(255, 111, 97)');
+    expect(rail.x - rail.paneLeft, 'rail distance from the pane edge').toBeGreaterThanOrEqual(8);
+    // the drag handle is a 24px strip flush against the block: the rail ends before it begins
+    expect(rail.x + rail.w).toBeLessThanOrEqual(rail.regionLeft - 24);
   });
 
   test('selection is visible: the theme colours ::selection in the editor', async ({ page }) => {
@@ -306,12 +377,8 @@ test.describe('home editor, screenshots', () => {
       const page = await ctx.newPage();
       await open(page);
       await page.evaluate(() => document.fonts.ready);
-      await focusEnd(page, LAST);
-      await shot(page, `hero-1440-${scheme}`);
-      if (scheme === 'light') {
-        await focusAt(page, 'Bold, italic, links, code', 4);
-        await shot(page, 'hero-region-light');
-      }
+      await focusAt(page, 'Bold, italic, links, code', 4); // the caret in the region: the rail shows
+      await shot(page, `hero-1440-${scheme}-v2`);
       await ctx.close();
     }
   });
@@ -321,7 +388,7 @@ test.describe('home editor, screenshots', () => {
     const page = await ctx.newPage();
     await open(page);
     await page.evaluate(() => document.fonts.ready);
-    await shot(page, 'hero-375-dark', true);
+    await shot(page, 'hero-375-dark-v2', true);
     await ctx.close();
   });
 
@@ -332,12 +399,12 @@ test.describe('home editor, screenshots', () => {
     await page.evaluate(() => document.fonts.ready);
     await selectRange(page, 'Start typing — this is Nabu.', 0, 'Start typing — this is Nabu.', 5);
     await expect(page.locator('.nabu-toolbar')).toBeVisible();
-    await shot(page, 'hero-toolbar-dark');
+    await shot(page, 'hero-toolbar-dark-v2');
     await focusEnd(page, 'Press / for blocks, ::: for a region, ⌘Z to rewind.');
     await page.keyboard.press('Enter');
     await page.keyboard.type('/');
     await expect(page.locator('.nabu-slash')).toBeVisible();
-    await shot(page, 'hero-slash-dark');
+    await shot(page, 'hero-slash-dark-v2');
     await page.keyboard.press('Escape');
     await ctx.close();
   });

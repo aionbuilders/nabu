@@ -29,11 +29,11 @@ test.describe('site shell', () => {
       const cs = getComputedStyle(el);
       return { size: cs.fontSize, weight: cs.fontWeight, family: cs.fontFamily };
     });
-    expect(h1.size).toBe('76px');
+    expect(h1.size).toBe('64px');
     expect(h1.family).toContain('Syne');
     // fonts are self-hosted: Syne really loaded, no Google Fonts request
     await page.evaluate(() => document.fonts.ready);
-    expect(await page.evaluate(() => document.fonts.check('700 76px Syne'))).toBe(true);
+    expect(await page.evaluate(() => document.fonts.check('700 64px Syne'))).toBe(true);
     // the library theme CSS and the head from the root layout are still there
     await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(1);
     await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute('href', /\/favicon\.svg$/);

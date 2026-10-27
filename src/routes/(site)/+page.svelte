@@ -23,7 +23,7 @@
     max-width: 960px;
     font-family: var(--site-font-display);
     font-weight: 700;
-    /* 76px from ~724px wide up; scales down so "Every keystroke," never overflows a phone. */
+    /* 64px from ~610px wide up; scales down so "Every keystroke," never overflows a phone. */
     font-size: clamp(36px, 10.5vw, var(--site-fs-display));
     line-height: var(--site-lh-display);
     letter-spacing: var(--site-ls-display);

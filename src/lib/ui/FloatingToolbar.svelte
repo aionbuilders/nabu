@@ -130,7 +130,7 @@
         title="Link"
         onmousedown={(e) => { e.preventDefault(); toggleLink(); }}
     >
-        🔗
+        <svg class="nabu-toolbar-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.5 9.5a2.5 2.5 0 0 0 3.54 0l2.46-2.46a2.5 2.5 0 0 0-3.54-3.54l-.7.7"/><path d="M9.5 6.5a2.5 2.5 0 0 0-3.54 0L3.5 8.96a2.5 2.5 0 0 0 3.54 3.54l.7-.7"/></svg>
     </button>
 </div>
 {/if}
@@ -159,6 +159,7 @@
     font-weight: 600;
     transition: background 0.1s;
 }
+.nabu-toolbar-icon { display: block; margin: 1px 0; pointer-events: none; }
 .nabu-toolbar-btn:hover { background: var(--nb-bg-surface-hover, rgba(255,255,255,0.08)); }
 .nabu-toolbar-btn.active { background: var(--nb-bg-surface-active, rgba(255,255,255,0.15)); }
 </style>

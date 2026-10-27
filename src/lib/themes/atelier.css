@@ -27,8 +27,8 @@
  *
  * WHAT IT TOUCHES
  *   - every `--nb-*` variable the editor and its UI read (the library's own `nabu-theme.css` defaults are overridden inside the scope);
- *   - the editor element (`.nabu-editor`) becomes the "pane": surface, 1px border, 16px radius, 36px 40px padding, Inter 18px/1.7, coral caret
- *     and focus ring. Set `--atelier-pane-padding` / `--atelier-pane-radius` on the scope to change the box; `--atelier-pane: transparent`
+ *   - the editor element (`.nabu-editor`) becomes the "pane": surface, 1px border, 16px radius, 36px 40px padding, Inter 16px/1.65, coral caret
+ *     and a focus state (the border strengthens, no outline). Set `--atelier-pane-padding` / `--atelier-pane-radius` on the scope to change the box; `--atelier-pane: transparent`
  *     (and no border) to blend it into your own surface;
  *   - typography of headings, lists, quotes, code, callouts through the blocks' public attributes and classes (`[data-block-type]`, `.nabu-*`).
  *   Nothing outside the scope is touched.
@@ -44,8 +44,9 @@
  *     error (file chip)             #FF8A80   8.1 /  7.4      #B91C1C   6.5 /  6.5
  *     text-primary on hover/active  12.9 / 11.2               16.1 / 14.7
  *     text-secondary on active      5.6                       5.9
- *   Non-text (3:1 needed): caret, focus ring, region rail and mark, drag indicator = the accent above (6.7 dark, 5.4 light on the pane;
- *   the region mark uses #F04E31 on light, 3.6:1). Hairlines (borders, region rule, divider) are decorative separators, deliberately
+ *   Non-text (3:1 needed): caret, focus ring of the controls, region rail and mark, drag indicator = the accent above (6.7 dark, 5.4 light
+ *   on the pane; the region mark uses #F04E31 on light, 3.6:1). The pane's own focus state is its border (no outline): resting -> focused
+ *   is #232327 -> #75757B (3.4:1 between the two, 4.0:1 on the pane) in dark, #E4E4DF -> #7C7C82 (3.3:1, 4.2:1 on the pane) in light. Hairlines (borders, region rule, divider) are decorative separators, deliberately
  *   quiet (1.3:1 to 1.5:1), as in the site design system.
  *   Placeholders and the region seam use text-muted (4.5:1 or more); a completed to-do is set in text-muted with a strike-through.
  *
@@ -65,6 +66,7 @@
     --atelier-line: light-dark(#D4D4CE, #2A2A2E);          /* borders, hairlines */
     --atelier-line-soft: light-dark(#ECECE8, #1E1E21);
     --atelier-line-pane: light-dark(#E4E4DF, #232327);     /* the pane border */
+    --atelier-line-pane-focus: light-dark(#7C7C82, #75757B); /* the pane border while focused: 3.3:1 / 3.4:1 against the resting one */
     --atelier-text: light-dark(#141416, #EDEDED);
     --atelier-text-2: light-dark(#55555B, #A9A9AE);
     --atelier-text-3: light-dark(#6B6B72, #8A8A90);
@@ -77,7 +79,8 @@
     /* ── Geometry the host may change ─────────────────────────────────────────────────── */
     --atelier-pane-padding: 36px 40px;
     --atelier-pane-radius: 16px;
-    --atelier-font-size: 18px;
+    --atelier-font-size: 16px;
+    --atelier-rail-offset: -28px;                           /* region rail, from the text's left edge: inside the pane padding, left of the drag handle */
 
     /* ── Fonts (provided by the host, see the header) ─────────────────────────────────── */
     --nb-font-text: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -132,7 +135,7 @@
     --nb-region-color: var(--atelier-text-3);
     --nb-region-title-color: var(--atelier-text-3);
     --nb-region-rule-color: var(--atelier-line);
-    --nb-region-label-size: 12px;
+    --nb-region-label-size: 11px;
     --nb-region-label-weight: 500;
     --nb-region-gap: 10px;
     --nb-region-font: var(--nb-font-text);
@@ -141,7 +144,8 @@
     --nb-region-warning: light-dark(#B45309, #F59E0B);
     --nb-region-rail: var(--atelier-accent);
     --nb-region-end-color: var(--atelier-text-3);
-    --nb-region-end-size: 12px;
+    --nb-region-end-size: 11px;
+    --nb-region-rail-offset: var(--atelier-rail-offset);
     /* The mark of the brand, 16px wide, in front of the label. Dark: #FF6F61; light: #F04E31 (the fill, 3.6:1 on white). */
     --nb-region-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 13 100 74' width='16' height='12' fill='%23FF6F61'%3E%3Cpath d='M20.31 28.86L27.75 13.25L47.79 13.19L60.16 28.71L52.71 44.31L40.34 28.8ZM60.16 28.71L67.6 13.1L87.63 13.04L100 28.56L92.56 44.16L80.19 28.65ZM79.69 71.14L72.25 86.75L52.21 86.81L39.84 71.29L47.29 55.69L59.66 71.2ZM39.84 71.29L32.4 86.9L12.37 86.96L0 71.44L7.44 55.84L19.81 71.35Z'/%3E%3C/svg%3E");
 }
@@ -163,7 +167,7 @@
 
 /* ══ The pane: the editor element ═══════════════════════════════════════════════════════ */
 
-.nb-theme-atelier .nabu-editor {
+.nb-theme-atelier .nabu-editor[data-nabu-root] {
     box-sizing: border-box;
     padding: var(--atelier-pane-padding);
     background: var(--atelier-pane);
@@ -172,13 +176,15 @@
     color: var(--atelier-text);
     font-family: var(--nb-font-text);
     font-size: var(--atelier-font-size);
-    line-height: 1.7;
+    line-height: 1.65;
     caret-color: var(--atelier-accent);
 }
 
-.nb-theme-atelier .nabu-editor:focus-visible {
-    outline: 2px solid var(--atelier-ring);
-    outline-offset: 2px;
+/* Focus: the caret (coral) is the indicator inside the text; the pane itself only strengthens its border (WCAG 2.4.7: 3.3:1 dark /
+   3.4:1 light against the resting border, 3.4+ against the pane and the page). No outline: it would read as a form field. */
+.nb-theme-atelier .nabu-editor[data-nabu-root]:focus-visible {
+    outline: none;
+    border-color: var(--atelier-line-pane-focus);
 }
 
 .nb-theme-atelier .nabu-editor ::selection {
@@ -188,13 +194,13 @@
 @media (max-width: 759.98px) {
     .nb-theme-atelier {
         --atelier-pane-padding: 24px 20px;
-        --atelier-font-size: 17px;
+        --atelier-rail-offset: -13px;                       /* no room for the handle: the rail comes closer to the text */
     }
 }
 
 /* ══ Blocks ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Paragraphs: 12px between blocks (at 18px). */
+/* Paragraphs: ~11px between blocks (at 16px). */
 .nb-theme-atelier .nabu-editor [data-block-type="paragraph"] {
     margin-bottom: 0.67em;
 }
@@ -252,7 +258,7 @@
 }
 .nb-theme-atelier .nabu-editor .nabu-code-wrapper pre.nabu-code {
     background: none;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.7;
     padding: 1em 1.1em;
 }

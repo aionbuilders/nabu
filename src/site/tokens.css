@@ -42,11 +42,11 @@
   --site-font-body: Inter, system-ui, sans-serif;
   --site-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --site-fs-display: 76px; /* Syne 700 · 1.0 · -0.035em */
+  --site-fs-display: 64px; /* Syne 700 · 1.0 · -0.035em */
   --site-fs-h1: 44px; /* Syne 700 · 1.1 · -0.02em */
   --site-fs-h2: 40px; /* Syne 700 · 1.1 · -0.02em (36 to 40) */
   --site-fs-h3: 26px; /* Syne 700 · 1.2 · -0.01em */
-  --site-fs-lead: 19px; /* Inter 400 · 1.55 (18 to 19) */
+  --site-fs-lead: 17px; /* Inter 400 · 1.55 (16 to 17) */
   --site-fs-body: 16px; /* Inter 400 · 1.7 */
   --site-fs-small: 14px; /* Inter 500 · 1.5 */
   --site-fs-label: 12px; /* JetBrains Mono 500 · 1.4 · +0.06em (11 to 12) */
