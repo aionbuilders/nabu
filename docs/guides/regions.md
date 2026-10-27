@@ -134,7 +134,7 @@ A `Region` (a read-only view over its block) has:
 | `label`, `prefix` | The label template applied, and applied with an empty title (what the seam shows before the title: "Chapter 2:") |
 | `fields` | Its typed fields, plus `title` |
 | `blocks`, `ownBlocks` | The children of the body, and those that are not regions |
-| `wordCount`, `ownWordCount` | Words of the body, sub-regions included (their titles count, the region's own title does not), and of the region's own content |
+| `wordCount`, `ownWordCount` | Words of the body text, sub-regions' bodies included, and of the region's own content only. **No title is ever counted**: neither the region's own nor its sub-regions' (a title is a label, not prose) |
 | `setField(name, value)` | Set a field (own undo step); `title` replaces the header text |
 | `block` | The region block |
 
@@ -175,7 +175,7 @@ expect(engine.regions.next(chapter)).toBe(scene);
 expect(chapter.blocks.map((block) => block.type)).toEqual(['paragraph', 'region']);
 expect(chapter.ownBlocks).toHaveLength(1);
 expect(chapter.ownWordCount).toBe(3);
-expect(chapter.wordCount).toBe(7); // 3 own words + the scene (its title, 2 words, and its body, 2 words)
+expect(chapter.wordCount).toBe(5); // 3 own words + the body of the scene (2 words); no title counts, 'Departure' and 'The bank' included
 expect(engine.regions.preamble.blocks).toHaveLength(0);
 
 // Fields are validated against the declaration.
@@ -240,12 +240,24 @@ expect(titles()).toEqual(['chapter:Three', 'chapter:Two', 'chapter:One']);
 // Unwrap: the region disappears, its title becomes a paragraph, its body stays in place.
 await engine.exec('region:unwrap', { region: engine.regions.list[0] });
 expect(engine.regions.count).toBe(2);
+
+// A sub-region, created INSIDE the body of an existing region (at the end by default; `index` picks the place).
+// Without a type it takes the shallowest declared type deeper than its parent.
+const one = () => engine.regions.list.find((region) => region.title === 'One');
+await engine.exec('region:insert', { at: 'inside', region: one(), title: 'Opening' });
+await engine.exec('region:insert', { at: 'inside', region: one(), type: 'scene', index: 0, title: 'First' });
+expect(one().children.map((region) => `${region.type}:${region.title}`)).toEqual(['scene:First', 'scene:Opening']);
+
+// The nesting rule holds: a type that is not deeper than the parent is refused (a warning, nothing is created).
+await engine.exec('region:insert', { at: 'inside', region: one().children[0], title: 'Too deep' });
+await engine.exec('region:insert', { at: 'inside', region: one(), type: 'chapter', title: 'Same level' });
+expect(one().children).toHaveLength(2);
 ```
 
 | Command | Default keys | `exec` data | |
 |---|---|---|---|
 | `region:split` | `Mod-Enter` | none | Cut at the caret; the rest goes to a new sibling |
-| `region:insert` | none | `{ type?, at?: 'after' \| 'before', title?, fields?, region? }` | A new empty region next to the given or current one |
+| `region:insert` | none | `{ type?, at?: 'after' \| 'before' \| 'inside', index?, title?, fields?, region? }` | A new empty region next to the given or current one (`'after'` by default), or a sub-region in its body (`'inside'`, see below) |
 | `region:create` | `:::` + Space | `{ type? }` | A region where the caret is. Asks for the type through the chooser when typed, runs directly through `exec` |
 | `region:close` | `:::` + Enter | `{ region? }` | End the region here. The caret block must be a closing mark: the `:::` paragraph, or an empty default paragraph in a body |
 | `region:exit` | `Mod-Shift-Enter` | `{ region? }` | A paragraph right after the region, one level up |
@@ -257,6 +269,8 @@ expect(engine.regions.count).toBe(2);
 | `region:move` | none | `{ direction: 'up' \| 'down', region? }` | Before or after the sibling of the same level |
 | `region:move-up`, `region:move-down` | none | `{ region? }` | The same, with the direction built in (what a key can bind) |
 | `region:next`, `region:prev`, `region:parent` | none | `{ region? }` | Put the caret at the first text position of the target region |
+
+`region:insert` creates a sibling by default (`at: 'after'`, or `'before'`). With `at: 'inside'` it creates a **sub-region in the body** of the given (or current) region, at the end of the body or at `index` (a position among the children of the body, clamped). The type must be strictly deeper than the parent, and without `type` it is the shallowest declared type deeper than the parent (the first declared of its level). When no type is deeper (a region of the deepest level), when `type` is not deeper or not declared, or when there is no region to nest in, nothing is created and a warning is emitted. The caret stays where it is, and the insertion is one undo step.
 
 Each structural gesture is one commit and one undo step. Bind the keyless commands with the `keymap` option: `createEditor({ keymap: { 'region:move-up': ['Mod-Alt-ArrowUp'] } })`.
 
@@ -412,5 +426,4 @@ A region draws its seam (an editable title between a label and a hairline) and i
 
 ## Gaps
 
-- Sub-regions can only be created from the keyboard (`:::` in a body, `region:demote`) or from markdown and JSON: there is no public command that creates a child region directly, and `region:insert` creates a sibling.
 - `nabu.commands.list()` without a context has no caret, so the merge labels are generic ("Merge with the previous region"). Pass a context (`list(ctx)`) to get the names. Both generic texts are messages (`mergePreviousGeneric`, `mergeNextGeneric`).

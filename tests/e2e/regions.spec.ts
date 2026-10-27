@@ -125,9 +125,9 @@ test.describe('seeded document', () => {
     expect(info.parents).toEqual([null, 'The ferryman', 'The ferryman', null]);
     expect(info.tree).toEqual([['1. The ferryman', ['1.1 The bank', '1.2 The water']], ['2. The return', []]]);
     expect(info.preamble).toBe(1);
-    // the body (the region's own title is not counted, the titles of its sub-regions are part of its body): "Opening of the first section." = 5,
-    // + "The bank" 2 + "Text of the bank." 4 + "The water" 2 + "Text of the water." 4 = 17; "Closing text." = 2
-    expect(info.words).toEqual([[17, 5], [4, 4], [4, 4], [2, 2]]);
+    // body text only, no titles at all (P-118b): "Opening of the first section." = 5,
+    // + "Text of the bank." 4 + "Text of the water." 4 = 13; "Closing text." = 2
+    expect(info.words).toEqual([[13, 5], [4, 4], [4, 4], [2, 2]]);
   });
 
   test('setting the title programmatically updates the seam and the label', async ({ page }) => {

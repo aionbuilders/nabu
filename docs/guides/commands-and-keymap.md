@@ -355,7 +355,7 @@ The `platform` option (`'mac'` or `'other'`) decides what `Mod` means and how sh
 
 Some commands are too risky to run from a single key press: merging two regions, for example. A command can declare how it asks for confirmation, with `confirm: { strategy }`. There are three strategies. The engine drives the keyboard and exposes the state; the default look is deliberately neutral, and the appearance is yours to design.
 
-A confirmation only protects **key presses**. `nabu.exec('region:merge-previous')` runs at once, with no confirmation: that is the accessible path (a menu, a palette, a button).
+A confirmation only protects **key presses**. `nabu.exec('region:merge-previous')` runs at once, with no confirmation: that is the accessible path (a menu, a palette, a button). To open the confirmation from code instead, see [Opening a confirmation from code](#opening-a-confirmation-from-code).
 
 ### `hold`: hold the key on a target
 
@@ -408,6 +408,70 @@ Used automatically when several commands tie on a key, and explicitly by a comma
 An option has `id`, `label`, optional `display`, `group` (consecutive options with the same group sit under a small header) and `detail` (a muted, right-aligned text); any other field you add comes back in `run`. Choosing *is* the confirmation: the chosen command runs at once.
 
 A `choose` is a safety net, not a normal mode: design the default keys so that they do not step on each other.
+
+### Opening a confirmation from code
+
+`nabu.commands.offer(id, ctx?)` opens the confirmation of a command as if its key had been pressed where `when` holds: a button, a menu entry or a palette can offer the same prompt (and the same protection) as the keyboard, instead of `exec`, which runs at once.
+
+```js test
+import { createEditor, ParagraphExtension } from '@aionbuilders/nabu';
+import { extension } from '@aionbuilders/nabu/extend';
+
+const ran = [];
+
+const Wipe = extension('wipe', {
+  commands: {
+    // A risky command: its key asks for a second press.
+    'wipe:all': {
+      label: 'Wipe everything',
+      keys: ['Mod-Alt-w'],
+      confirm: { strategy: 'invite' },
+      run: () => { ran.push('wipe'); }
+    },
+    // Variants: the user picks one.
+    'wipe:some': {
+      label: 'Wipe some',
+      confirm: { strategy: 'choose', options: () => [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] },
+      run: (nabu, ctx, option) => { ran.push(option.id); }
+    },
+    // No confirmation: nothing to ask.
+    'wipe:one': { label: 'Wipe one', run: () => { ran.push('one'); } }
+  }
+});
+
+const engine = createEditor({ preset: [ParagraphExtension], extensions: [Wipe], platform: 'other' });
+
+// A button asks for the same confirmation as the key: nothing ran yet.
+expect(engine.commands.offer('wipe:all')).toBe(true);
+expect(engine.pendingCommand).toMatchObject({ id: 'wipe:all', strategy: 'invite', display: 'Ctrl+Alt+W' });
+expect(ran).toEqual([]);
+
+// The first key again confirms (a fake key press, as the editor would receive it).
+const press = { key: 'w', code: 'KeyW', ctrlKey: true, altKey: true, shiftKey: false, metaKey: false, repeat: false, preventDefault() {} };
+engine.handleKeydown(press);
+expect(ran).toEqual(['wipe']);
+expect(engine.pendingCommand).toBeNull();
+
+// A chooser opens at the caret; the choice runs the command with the option.
+expect(engine.commands.offer('wipe:some')).toBe(true);
+expect(engine.pendingCommand.options.map((option) => option.id)).toEqual(['a', 'b']);
+engine.commandConfirm.choose(1);
+expect(ran).toEqual(['wipe', 'b']);
+
+// A command without confirmation simply runs; an unknown one does nothing.
+expect(engine.commands.offer('wipe:one')).toBe(true);
+expect(ran).toEqual(['wipe', 'b', 'one']);
+expect(engine.commands.offer('wipe:missing')).toBe(false);
+```
+
+Behaviour:
+
+- **`choose`**: the chooser opens with the options of the command; the choice runs `run(nabu, ctx, option)`.
+- **`invite`**: the prompt opens; pressing the command's first key again confirms. Escape, another key, a click or the timeout (5 seconds) cancels.
+- **`hold`**: nobody holds a key yet, so the prompt waits. The count starts when the user presses the command's first key; releasing it cancels, and the prompt lapses after the `invite` timeout when no key comes. (A hold never completes by itself.)
+- **No confirmation**: there is nothing to ask, so the command simply runs, like `exec`, with `when` checked.
+- It returns `true` when a confirmation opened or a command without confirmation ran. It returns `false` when nothing happened: unknown id (with a warning), `when` is false, a `choose` with no option, a `hold` or `invite` whose command has no key to confirm with (disabled by the `keymap`, with a warning), or a command without confirmation whose `run` returned `false`.
+- It takes an optional context (`nabu.commands.context()` plus your own facts); the default is the current one. A new offer replaces what was pending; `nabu.cancelPendingCommand()` cancels it.
 
 ### Rendering
 
@@ -506,5 +570,4 @@ expect(engine.tab).toBe('stay');
 
 ## Gaps
 
-- There is no public API to start a `hold`, `invite` or `choose` from code (the regions extension uses an internal one for `:::`). A confirmation starts from a key press only.
 - Commands cannot be registered after the editor is built, and `commands.list()` is not reactive.

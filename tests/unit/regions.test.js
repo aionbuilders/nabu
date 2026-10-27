@@ -151,7 +151,7 @@ describe('the region block: header = title, body = children', () => {
     expect(region.type).toBe('region');
     expect(region.children.map((c) => c.text)).toEqual(['ab cd', 'ef']);
     expect(region.positions).toBe(10 + 6 + 3); // title + 1, then each child's text + 1
-    expect(region.wordCount).toBe(2 + 2 + 1);
+    expect(region.wordCount).toBe(2 + 1); // the body only: the title (2 words) is not counted
     expect(region.resolveOffset(0)).toEqual({ block: region, offset: 0 });
     expect(region.resolveOffset(9)).toEqual({ block: region, offset: 9 }); // the end of the title is still the title
     expect(region.resolveOffset(10)).toMatchObject({ block: region.children[0], offset: 0 });
@@ -623,17 +623,22 @@ describe('registry: at, of, next, prev, blocks, preamble, word counts', () => {
     expect(names(c.ownBlocks)).toEqual(['b', 'e']);
   });
 
-  it('wordCount = the body (title excluded, sub-regions included), ownWordCount = the own blocks; follows the text', async () => {
+  it('wordCount = body text only (NO title: neither its own nor the sub-regions\'), ownWordCount = the own blocks; follows the text', async () => {
     const engine = await sample();
     const [p, c, s, c2] = engine.regions.list;
-    // the title of a sub-region is text of the parent's body: P = a(1) + C(title 1 + b 1 + S(title 1 + 2) + e 1) + C2(title 1 + f 1)
-    expect([p, c, s, c2].map((x) => x.wordCount)).toEqual([1 + 6 + 2, 1 + 3 + 1, 2, 1]);
+    // P = a(1) + C(b 1 + S(2) + e 1) + C2(f 1); every title (P, C, S, C2) is left out
+    expect([p, c, s, c2].map((x) => x.wordCount)).toEqual([1 + 4 + 1, 4, 2, 1]);
     expect([p, c, s, c2].map((x) => x.ownWordCount)).toEqual([1, 2, 2, 1]);
-    expect(p.block.wordCount).toBe(1 + p.wordCount); // the block itself counts its title as well
+    expect(p.block.wordCount).toBe(p.wordCount); // the region block counts its body as well
     at(engine, 'f').behaviors.get('text').container.insert(1, ' g h');
     await engine.commit();
     expect(c2.wordCount).toBe(3);
-    expect(p.wordCount).toBe(1 + 6 + (1 + 3));
+    expect(p.wordCount).toBe(1 + 4 + 3);
+    // a long title changes nothing
+    c.block.behaviors.get('text').container.insert(0, 'many many many words ');
+    await engine.commit();
+    expect(c.wordCount).toBe(4);
+    expect(p.wordCount).toBe(1 + 4 + 3);
   });
 
   it('preamble = the root blocks before the first root region (the whole document without any region)', async () => {

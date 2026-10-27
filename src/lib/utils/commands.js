@@ -305,6 +305,41 @@ export class CommandRegistry {
     }
 
     /**
+     * Open the confirmation of a command from code (a button, a menu, a palette, a typed trigger), as if its key had been
+     * pressed where `when` holds. This is the public way to start a confirmation, since `nabu.exec(id)` runs at once:
+     *
+     *  - the command has a `confirm`: its prompt opens (`hold`, `invite` or `choose`, see {@link CommandConfirm}), exactly as
+     *    for a key press: `nabu.pendingCommand`, the `CommandInvite` / `CommandChooser` components, keyboard handling and
+     *    cancellations. Nothing has run yet; the command runs when the user confirms. `invite` expects its first key again and
+     *    `hold` expects its first key to be held (counting from that press); both lapse after the `invite` timeout (5 s) when
+     *    no key comes, and need the command to have a key (else nothing opens);
+     *  - the command has NO `confirm`: there is nothing to ask, so it simply runs, like `nabu.exec(id)`, `when` checked.
+     *
+     * Returns `true` when a confirmation opened, or when a command without confirmation ran; `false` when nothing happened:
+     * unknown id (warning), `when` is false, no option for a `choose`, no key for a `hold` / `invite`, or a command without
+     * confirmation whose `run` returned `false`.
+     * @param {string} id  command id
+     * @param {CommandContext} [ctx]  default: the current context (`event: null`)
+     * @returns {boolean}
+     */
+    offer(id, ctx) {
+        const entry = this.entries.get(id);
+        if (!entry) { this.nabu.warn(`commands.offer: unknown command "${id}"`); return false; }
+        if (entry.def.confirm) return this.nabu.commandConfirm.offer(id, ctx);
+        const context = ctx ?? this.context(null);
+        if (typeof entry.def.when === 'function') {
+            let ok = false;
+            try { ok = !!entry.def.when(context); } catch (error) { this.nabu.warn(`commands: when() of "${id}" failed: ${error}`); }
+            if (!ok) return false;
+        }
+        let result;
+        try { result = entry.def.run(this.nabu, context); }
+        catch (error) { console.error(`[Nabu] command "${id}" failed`, error); return false; }
+        if (result && typeof result.then === 'function') result.then(undefined, (/** @type {unknown} */ error) => console.error(`[Nabu] command "${id}" failed`, error));
+        return result !== false;
+    }
+
+    /**
      * @param {CommandEntry} entry
      * @param {() => CommandContext} getContext
      * @returns {CommandInfo}

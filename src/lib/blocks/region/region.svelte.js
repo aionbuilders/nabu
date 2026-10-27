@@ -172,8 +172,9 @@ export class RegionBlock extends MegaBlock {
     // The title first, then the body
     positions = $derived(this.behavior.positions + this.children.reduce((sum, child) => sum + (child.positions ?? 0), 0));
 
-    // Words of the title + the body
-    wordCount = $derived((this.behavior?.wordCount ?? 0) + this.children.reduce((s, c) => s + (c.wordCount ?? 0), 0));
+    // Words of the BODY only: a title is a label, not prose, so neither this region's title nor the titles of its sub-regions
+    // (each sub-region block counts its own body the same way) are counted.
+    wordCount = $derived(this.children.reduce((s, c) => s + (c.wordCount ?? 0), 0));
 
     /**
      * Mixed block (like the toggle): the title comes first, then the body. The caret never gets collapsed away.

@@ -73,10 +73,13 @@ export class Region {
     /** The direct children of the body that are not regions: the region's own content. Reactive. @type {Block[]} */
     get ownBlocks() { return this.block.children.filter((b) => b.type !== REGION_TYPE); }
 
-    /** Words of the body (the title excluded, sub-regions included), summed from the blocks' own `wordCount` (no rendering). Reactive. */
+    /**
+     * Words of the body text, sub-regions' bodies included, summed from the blocks' own `wordCount` (no rendering). NO title is
+     * counted: neither this region's nor its sub-regions' (a region block's own `wordCount` is its body only). Reactive.
+     */
     get wordCount() { return this.block.children.reduce((sum, b) => sum + (b.wordCount ?? 0), 0); }
 
-    /** Words of the region's own content (sub-regions excluded). Reactive. */
+    /** Words of the region's own content: body text outside sub-regions (their titles and bodies excluded, like every title). Reactive. */
     get ownWordCount() { return this.ownBlocks.reduce((sum, b) => sum + (b.wordCount ?? 0), 0); }
 
     /** Sets a field of the region (validated, own undo step); `title` replaces the header text. @param {string} name @param {unknown} value */
@@ -94,6 +97,7 @@ export class Preamble {
     }
     /** Root index just after the last block of the preamble (exclusive). */
     get end() { return this.blocks.length; }
+    /** Words of the preamble (plain blocks: it holds no region, so no title). */
     get wordCount() { return this.blocks.reduce((sum, b) => sum + (b.wordCount ?? 0), 0); }
 }
 

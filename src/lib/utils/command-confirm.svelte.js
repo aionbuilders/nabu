@@ -18,7 +18,7 @@
  * @import { CommandEntry, CommandContext } from './commands.js'
  */
 
-import { eventChord, chordId, formatChord } from './keys.js';
+import { eventChord, chordId, formatChord, parseChord } from './keys.js';
 
 /** Default duration of a `hold`, in milliseconds. */
 export const DEFAULT_HOLD_MS = 700;
@@ -147,6 +147,7 @@ export function commandTargetElement(target) {
  * @property {string} chord  canonical id of the chord that started it
  * @property {ReturnType<typeof eventChord>} chordInfo
  * @property {string} code  physical key of the press (`event.code`)
+ * @property {boolean} [waiting]  `hold` opened from code: nobody holds the key yet; the count starts at the user's press
  * @property {number} startedAt
  * @property {number} ms  `hold`: duration; `invite`: timeout
  * @property {(() => void) | null} stopTimer
@@ -240,6 +241,18 @@ export class CommandConfirmation {
 
         if (confirm.strategy === 'choose') return this.#beginVariants(entry, ctx, event, info, chord);
 
+        return this.#beginSingle(entry, ctx, event, info, chord);
+    }
+
+    /**
+     * `hold` / `invite` of a command. `event` is the key press that starts it, or `null` when {@link CommandConfirmation#offer}
+     * opens it from code: nothing is held yet, so a `hold` waits for the user to press its key (the count starts then), and an
+     * `invite` waits for its second press; both give up after the `invite` timeout.
+     * @param {CommandEntry} entry @param {CommandContext} ctx @param {KeyboardEvent | null} event
+     * @param {NonNullable<ReturnType<typeof eventChord>>} info @param {string} chord
+     */
+    #beginSingle(entry, ctx, event, info, chord) {
+        const confirm = /** @type {any} */ (entry.def.confirm);
         const display = formatChord(info, { platform: this.#nabu.commands.platform });
         const label = this.#labelOf(entry, ctx);
         const hold = confirm.strategy === 'hold';
@@ -253,9 +266,13 @@ export class CommandConfirmation {
         const session = this.#open(pending, entry, ctx, chord, info, event);
         session.ms = ms;
         this.#announce(message);
-        if (hold) this.#tick();
+        if (!event) {
+            // From code: no key is down. A hold counts from the user's press (see `handleKeydown`); until then, and for an invite, a timeout cancels.
+            session.waiting = hold;
+            session.stopTimer = this.#clock.timeout(() => this.cancel('timeout'), hold ? this.#inviteMs : ms);
+        } else if (hold) this.#tick();
         else session.stopTimer = this.#clock.timeout(() => this.cancel('timeout'), ms);
-        event.preventDefault();
+        event?.preventDefault();
         return true;
     }
 
@@ -284,27 +301,45 @@ export class CommandConfirmation {
     }
 
     /**
-     * Open the `choose` strategy of a command WITHOUT a key press (a typed trigger, a menu, an input rule): the same chooser a
-     * key would open (`nabu.pendingCommand`, the `CommandChooser` component, the keyboard handling, the cancellations), whose
-     * options come from `confirm.options(ctx)` and whose choice runs `run(nabu, ctx, option)`. The command's `when` is checked.
-     * Returns false (nothing opens) when the command does not exist, has no `choose` confirmation, does not apply, or offers
-     * no option.
+     * Open the confirmation of a command WITHOUT a key press (a typed trigger, a menu, a button, an input rule): the same
+     * prompt a key would open (`nabu.pendingCommand`, the `CommandInvite` / `CommandChooser` components, the keyboard handling,
+     * the cancellations). The command's `when` is checked. Prefer the public `nabu.commands.offer(id)`, which also runs a command
+     * that has no confirmation.
+     *
+     *  - `choose`: the options come from `confirm.options(ctx)`, the choice runs `run(nabu, ctx, option)`;
+     *  - `invite`: asks to press the command's first key again (`invite` timeout);
+     *  - `hold`: asks to hold the command's first key; the count starts at the user's press and the confirmation lapses after the
+     *    `invite` timeout when no key comes.
+     *
+     * `hold` and `invite` need a key to confirm with: a command with no key (disabled by the `keymap`) opens nothing.
+     * Returns false (nothing opens) when the command does not exist, has no confirmation, does not apply, or offers no option.
      * @param {string} id  command id
      * @param {CommandContext} [context]  default: the current context
      * @returns {boolean}
      */
     offer(id, context) {
         const entry = this.#nabu.commands.entries.get(id);
-        if (!entry || /** @type {any} */ (entry.def.confirm)?.strategy !== 'choose') return false;
+        const strategy = /** @type {any} */ (entry?.def.confirm)?.strategy;
+        if (!entry || (strategy !== 'choose' && strategy !== 'hold' && strategy !== 'invite')) return false;
         const ctx = context ?? this.#nabu.commands.context(null);
         if (typeof entry.def.when === 'function') {
             let ok = false;
             try { ok = !!entry.def.when(ctx); } catch (error) { this.#nabu.warn(`commands: when() of "${id}" failed: ${error}`); }
             if (!ok) return false;
         }
+        if (strategy === 'choose') {
+            this.#spent = null;
+            this.cancel('restart');
+            return this.#beginVariants(entry, ctx, null, null, '');
+        }
+        const platform = this.#nabu.commands.platform;
+        /** @type {ReturnType<typeof eventChord>} */
+        let info = null;
+        for (const key of entry.keys) { info = parseChord(key, { platform }); if (info) break; }
+        if (!info) { this.#nabu.warn(`commands: "${id}" has no key to confirm with: ${strategy} not opened`); return false; }
         this.#spent = null;
         this.cancel('restart');
-        return this.#beginVariants(entry, ctx, null, null, '');
+        return this.#beginSingle(entry, ctx, null, info, chordId(info));
     }
 
     /** `confirm: { strategy: 'choose', options(ctx) }`: the command offers variants; `run(nabu, ctx, option)` receives the chosen one. `event` / `info` are null when {@link CommandConfirmation#offer} opens it. */
@@ -440,7 +475,17 @@ export class CommandConfirmation {
         const same = chord === session.chord;
 
         if (session.strategy === 'hold') {
-            if (same) { event.preventDefault(); return true; } // the held key repeating (or pressed twice): nothing to do
+            if (same) {
+                event.preventDefault(); // the held key repeating (or pressed twice): nothing to do…
+                if (session.waiting && !event.repeat) { // …except for a hold opened from code, which counts from the user's fresh press
+                    session.waiting = false;
+                    session.code = event.code ?? '';
+                    session.stopTimer?.();
+                    session.startedAt = this.#clock.now();
+                    this.#tick();
+                }
+                return true;
+            }
             this.cancel('key');
             return false;
         }
@@ -559,7 +604,7 @@ export class CommandConfirmation {
         const spent = this.#spent;
         if (spent?.chordInfo && releases(spent.chordInfo, spent.code)) this.#spent = null;
         const session = this.#session;
-        if (session?.strategy === 'hold' && session.chordInfo && releases(session.chordInfo, session.code)) this.cancel('release');
+        if (session?.strategy === 'hold' && !session.waiting && session.chordInfo && releases(session.chordInfo, session.code)) this.cancel('release');
     }
 
     /** The DOM selection moved away from where the confirmation started. */

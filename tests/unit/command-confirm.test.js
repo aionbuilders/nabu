@@ -562,3 +562,130 @@ describe('live region texts (nabu.commandAnnouncement)', () => {
 });
 
 function watchWarn() { warn = vi.spyOn(Nabu.prototype, 'warn').mockImplementation(() => {}); }
+
+describe('commands.offer: open a confirmation from code (P-117)', () => {
+  const chooseCmd = (init = {}) => cmd({
+    label: 'Paste as', keys: ['Mod-Alt-v'],
+    confirm: { strategy: 'choose', options: () => [{ id: 'plain', label: 'Plain' }, { id: 'rich', label: 'Rich' }] },
+    ...init,
+  });
+  const inviteCmd = (init = {}) => cmd({ label: 'Wipe', keys: ['Mod-Alt-w'], confirm: { strategy: 'invite' }, ...init });
+
+  it('choose: opens the chooser (no key), the choice runs the command with the option', async () => {
+    const run = vi.fn();
+    const engine = await make({ extensions: [ext('x', { 'x:v': chooseCmd({ run }) })] });
+    expect(engine.commands.offer('x:v')).toBe(true);
+    expect(engine.pendingCommand).toMatchObject({ id: 'x:v', strategy: 'choose' });
+    expect(engine.pendingCommand.options.map((o) => o.id)).toEqual(['plain', 'rich']);
+    expect(run).not.toHaveBeenCalled();
+    engine.commandConfirm.choose(1);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][2]).toMatchObject({ id: 'rich' });
+    expect(engine.pendingCommand).toBeNull();
+  });
+
+  it('invite: opens the prompt; the first key again confirms; a timeout cancels', async () => {
+    const run = vi.fn();
+    const engine = await make({ extensions: [ext('x', { 'x:w': inviteCmd({ run }) })] });
+    expect(engine.commands.offer('x:w')).toBe(true);
+    expect(engine.pendingCommand).toMatchObject({ id: 'x:w', strategy: 'invite', label: 'Wipe', display: 'Ctrl+Alt+W' });
+    expect(run).not.toHaveBeenCalled();
+    press(engine, 'w', { ctrlKey: true, altKey: true, code: 'KeyW' });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(engine.pendingCommand).toBeNull();
+
+    expect(engine.commands.offer('x:w')).toBe(true);
+    engine.clock.advance(5001);
+    expect(engine.pendingCommand).toBeNull();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('hold: waits for the key (no automatic run), counts from the press, runs at holdMs; a release cancels', async () => {
+    const run = vi.fn();
+    const engine = await make({ extensions: [ext('x', { 'x:m': holdCmd({ run }) })] });
+    expect(engine.commands.offer('x:m')).toBe(true);
+    expect(engine.pendingCommand).toMatchObject({ id: 'x:m', strategy: 'hold', progress: 0 });
+    engine.clock.advance(3000); // nobody holds the key: nothing runs, the prompt is still there
+    expect(run).not.toHaveBeenCalled();
+    expect(engine.pendingCommand).not.toBeNull();
+    up(engine, 'm', { ctrlKey: true, code: 'KeyM' }); // a release seen before the press does not cancel
+    expect(engine.pendingCommand).not.toBeNull();
+
+    pressM(engine);
+    engine.clock.advance(300);
+    expect(engine.pendingCommand.progress).toBeGreaterThan(0.3);
+    engine.clock.advance(500);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(engine.pendingCommand).toBeNull();
+    up(engine, 'm', { ctrlKey: true, code: 'KeyM' });
+
+    expect(engine.commands.offer('x:m')).toBe(true);
+    pressM(engine);
+    engine.clock.advance(200);
+    up(engine, 'm', { ctrlKey: true, code: 'KeyM' });
+    expect(engine.pendingCommand).toBeNull();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('hold: lapses after the invite timeout when no key comes', async () => {
+    const run = vi.fn();
+    const engine = await make({ extensions: [ext('x', { 'x:m': holdCmd({ run }) })] });
+    engine.commands.offer('x:m');
+    engine.clock.advance(5001);
+    expect(engine.pendingCommand).toBeNull();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('hold / invite need a key: a command without one (keymap []) opens nothing, with a warning', async () => {
+    warn = vi.spyOn(Nabu.prototype, 'warn').mockImplementation(() => {});
+    const engine = await make({ extensions: [ext('x', { 'x:m': holdCmd(), 'x:w': inviteCmd() })], keymap: { 'x:m': [], 'x:w': [] } });
+    expect(engine.commands.offer('x:m')).toBe(false);
+    expect(engine.commands.offer('x:w')).toBe(false);
+    expect(engine.pendingCommand).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('a command without confirmation simply runs (like exec, when checked); false from run = false', async () => {
+    const run = vi.fn();
+    const engine = await make({ extensions: [ext('x', { 'x:plain': cmd({ run }), 'x:no': cmd({ run: () => false }) })] });
+    expect(engine.commands.offer('x:plain')).toBe(true);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0][1].event).toBeNull();
+    expect(engine.pendingCommand).toBeNull();
+    expect(engine.commands.offer('x:no')).toBe(false);
+  });
+
+  it('when false: nothing opens and nothing runs, whatever the strategy', async () => {
+    const run = vi.fn();
+    const when = () => false;
+    const engine = await make({ extensions: [ext('x', {
+      'x:c': chooseCmd({ run, when }), 'x:w': inviteCmd({ run, when }), 'x:m': holdCmd({ run, when }), 'x:plain': cmd({ run, when }),
+    })] });
+    for (const id of ['x:c', 'x:w', 'x:m', 'x:plain']) expect(engine.commands.offer(id)).toBe(false);
+    expect(engine.pendingCommand).toBeNull();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('when sees the context given; a unknown id warns and returns false; a choose with no option returns false', async () => {
+    warn = vi.spyOn(Nabu.prototype, 'warn').mockImplementation(() => {});
+    const seen = vi.fn(() => true);
+    const engine = await make({ extensions: [ext('x', {
+      'x:w': inviteCmd({ when: seen }),
+      'x:empty': chooseCmd({ confirm: { strategy: 'choose', options: () => [] } }),
+    })] });
+    const ctx = { ...engine.commands.context(null), custom: 1 };
+    expect(engine.commands.offer('x:w', ctx)).toBe(true);
+    expect(seen).toHaveBeenCalledWith(ctx);
+    expect(engine.commands.offer('x:empty')).toBe(false);
+    expect(engine.commands.offer('nope')).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a new offer replaces the pending one; the internal commandConfirm.offer keeps working (choose)', async () => {
+    const engine = await make({ extensions: [ext('x', { 'x:v': chooseCmd(), 'x:w': inviteCmd() })] });
+    expect(engine.commandConfirm.offer('x:v')).toBe(true);
+    expect(engine.pendingCommand.id).toBe('x:v');
+    engine.commands.offer('x:w');
+    expect(engine.pendingCommand.id).toBe('x:w');
+  });
+});

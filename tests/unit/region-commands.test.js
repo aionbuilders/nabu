@@ -1034,3 +1034,89 @@ describe('commands.list() labels', () => {
     expect(row(engine, 'region:merge-previous').label).toBe('Fusionner avec la région précédente');
   });
 });
+
+describe("region:insert at 'inside' (P-118a)", () => {
+  const setup = async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('part', 'P', [P('a'), R('chapter', 'C', [P('b')]), P('z')]), R('part', 'Q', [P('q')])]);
+    return engine;
+  };
+  const insert = (engine, data) => engine.commands.invoke(engine.commands.entries.get('region:insert'), data);
+
+  it('creates a sub-region at the end of the body, of the shallowest deeper type by default; the caret stays; one undo step', async () => {
+    const engine = await setup();
+    const before = doc(engine);
+    setCaret(engine, at(engine, 'a'), 1);
+    await insert(engine, { at: 'inside', region: engine.regions.list[0], title: 'N' });
+    await flush();
+    expect(doc(engine)).toBe('R:part(P){p(a) R:chapter(C){p(b)} p(z) R:chapter(N)} ; R:part(Q){p(q)}');
+    expect(engine.selection.setCursor).not.toHaveBeenCalled();
+    expect(engine.regions.list.map((r) => r.parent?.title ?? null)).toEqual([null, 'P', 'P', null]);
+    await expectOneUndo(engine, before);
+  });
+
+  it('uses the region holding the caret when none is given', async () => {
+    const engine = await setup();
+    setCaret(engine, at(engine, 'b'), 0);
+    await engine.exec('region:insert', { at: 'inside', title: 'S' });
+    await flush();
+    expect(doc(engine)).toBe('R:part(P){p(a) R:chapter(C){p(b) R:scene(S)} p(z)} ; R:part(Q){p(q)}');
+  });
+
+  it('an explicit valid type (deeper, even skipping a level), at an index (clamped)', async () => {
+    const engine = await setup();
+    const [part] = engine.regions.list;
+    await insert(engine, { at: 'inside', region: part, type: 'scene', index: 1, title: 'S' });
+    await flush();
+    expect(doc(engine)).toBe('R:part(P){p(a) R:scene(S) R:chapter(C){p(b)} p(z)} ; R:part(Q){p(q)}');
+    await insert(engine, { at: 'inside', region: part, type: 'chapter', index: 0, title: 'F' });
+    await insert(engine, { at: 'inside', region: part, type: 'chapter', index: 99, title: 'L' });
+    await flush();
+    expect(doc(engine)).toBe('R:part(P){R:chapter(F) p(a) R:scene(S) R:chapter(C){p(b)} p(z) R:chapter(L)} ; R:part(Q){p(q)}');
+  });
+
+  it('an invalid type (same or shallower level, undeclared) is refused: warning, false, nothing changes', async () => {
+    const engine = await setup();
+    const warn = vi.spyOn(Nabu.prototype, 'warn').mockImplementation(() => {});
+    const [part, chapter] = engine.regions.list;
+    const before = doc(engine);
+    expect(await insert(engine, { at: 'inside', region: part, type: 'part' })).toBe(false);
+    expect(await insert(engine, { at: 'inside', region: chapter, type: 'chapter' })).toBe(false);
+    expect(await insert(engine, { at: 'inside', region: chapter, type: 'part' })).toBe(false);
+    expect(await insert(engine, { at: 'inside', region: part, type: 'nope' })).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(4);
+    await flush();
+    expect(doc(engine)).toBe(before);
+    expect(engine.undoManager.canUndo()).toBe(false);
+  });
+
+  it('a region of the deepest level has no room for a sub-region: refused with a warning', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('part', 'P', [R('chapter', 'C', [R('scene', 'S', [P('s')])])])]);
+    const warn = vi.spyOn(Nabu.prototype, 'warn').mockImplementation(() => {});
+    const scene = engine.regions.list[2];
+    expect(await insert(engine, { at: 'inside', region: scene })).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(doc(engine)).toBe('R:part(P){R:chapter(C){R:scene(S){p(s)}}}');
+  });
+
+  it('needs a region: with none (the caret is outside) it warns and returns false', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [P('pre'), R('part', 'P')]);
+    const warn = vi.spyOn(Nabu.prototype, 'warn').mockImplementation(() => {});
+    setCaret(engine, at(engine, 'pre'), 0);
+    expect(await insert(engine, { at: 'inside' })).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('an empty region takes its first sub-region; a bad `at` is refused', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('part', 'P')]);
+    const warn = vi.spyOn(Nabu.prototype, 'warn').mockImplementation(() => {});
+    expect(await insert(engine, { at: 'inside', region: engine.regions.list[0], title: 'one' })).toBe(true);
+    await flush();
+    expect(doc(engine)).toBe('R:part(P){R:chapter(one)}');
+    expect(await insert(engine, { at: 'around', region: engine.regions.list[0] })).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+});

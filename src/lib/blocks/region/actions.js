@@ -120,23 +120,45 @@ export async function splitRegion(nabu, ctx) {
 }
 
 /**
- * Inserts an empty region next to a region, as one undo step; the caret stays where it is.
+ * Inserts an empty region next to a region, or inside its body, as one undo step; the caret stays where it is.
  *  - `at: 'after'` (default): right after `region`, in its parent (a sibling; its whole body stays with it); `'before'`: right before it;
+ *  - `at: 'inside'`: a SUB-region, in the body of `region`, at the end of the body or at `index` (clamped). The nesting rule
+ *    holds: the type must be strictly deeper than `region`, and without `type` the shallowest declared deeper type is used (the
+ *    first declared of its level). A warning and `false` when no type is deeper (a region of the deepest level) or `type` is
+ *    not valid there; `region` is required;
  *  - without `region` (the caret is outside any region): at the caret's position among the root blocks (`from` = the caret
  *    block): after / before the root block that holds it.
  * @param {Nabu} nabu
  * @param {Region | null} region  the region the position is relative to
- * @param {{ type?: string, at?: 'after' | 'before', title?: string, fields?: Record<string, any> }} [options]
- *   `type` defaults to the type of `region`, else the default (top-level) type.
+ * @param {{ type?: string, at?: 'after' | 'before' | 'inside', index?: number, title?: string, fields?: Record<string, any> }} [options]
+ *   `type` defaults to the type of `region` (`'inside'`: see above), else the default (top-level) type. `index` only counts for `'inside'`.
  * @param {Block | null} [from]  the caret block, for the case without region
  * @returns {Promise<boolean>}
  */
-export async function insertNearRegion(nabu, region, { type, at = 'after', title, fields } = {}, from = null) {
+export async function insertNearRegion(nabu, region, { type, at = 'after', index: bodyIndex, title, fields } = {}, from = null) {
     const regions = Regions.get(nabu);
     const { types, defaultType: topType } = regions.config;
+    if (at !== 'after' && at !== 'before' && at !== 'inside') { nabu.warn(`region:insert: "at" must be "after", "before" or "inside", got ${JSON.stringify(at)}`); return false; }
+
+    if (at === 'inside') {
+        if (!region) { nabu.warn('region:insert: at "inside" needs a region (none given, none holds the caret)'); return false; }
+        const deeper = [...types.values()].filter((def) => def.level > region.level);
+        if (!deeper.length) { nabu.warn(`region:insert: no region type is deeper than "${region.type}" (level ${region.level}): nothing can be nested in it`); return false; }
+        const def = type === undefined
+            ? deeper.reduce((best, d) => (d.level < best.level ? d : best))
+            : types.get(type);
+        if (!def) { nabu.warn(`region:insert: region type "${type}" is not declared`); return false; }
+        if (def.level <= region.level) { nabu.warn(`region:insert: "${def.id}" (level ${def.level}) cannot be nested in "${region.type}" (level ${region.level}): a sub-region must be deeper`); return false; }
+        createRegion(nabu, {
+            type: def.id, parentId: region.block.id, title, fields,
+            index: typeof bodyIndex === 'number' && Number.isFinite(bodyIndex) ? bodyIndex : null,
+        });
+        await nabu.commit();
+        return true;
+    }
+
     const wanted = type ?? (region && types.has(region.type) ? region.type : topType);
     if (!types.has(wanted)) { nabu.warn(`region:insert: region type "${wanted}" is not declared`); return false; }
-    if (at !== 'after' && at !== 'before') { nabu.warn(`region:insert: "at" must be "after" or "before", got ${JSON.stringify(at)}`); return false; }
 
     /** @type {string | null} */
     let parentId = null;

@@ -11,7 +11,7 @@
  *  | `region:demote`         | `Tab` (in a title only)        | none         | becomes the last sub-region of the previous sibling           |
  *  | `region:promote`        | `Shift-Tab` (in a title only)  | none         | leaves its parent; the following siblings follow it           |
  *  | `region:unwrap`         | -                              | -            | the title becomes a paragraph, the body stays                 |
- *  | `region:insert`         | -                              | -            | `{ type?, at?: 'after' \| 'before', title?, fields? }`         |
+ *  | `region:insert`         | -                              | -            | `{ type?, at?: 'after' \| 'before' \| 'inside', index?, title?, fields? }` |
  *  | `region:create`         | - (`:::` + Space)              | choose       | `{ type? }`: a region where the caret is (see create.js)      |
  *  | `region:close`          | - (`:::` + Enter)              | choose       | `{ region? }`: end the region here (see close.js)             |
  *  | `region:move`           | -                              | -            | `{ direction: 'up' \| 'down' }`                                |
