@@ -3,12 +3,13 @@
  * Unit tests for CodeBlock — static serializers/parsers and integration flags.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { CodeBlock } from '#lib/blocks/code/code.svelte.js';
 import { Nabu } from '#lib/blocks/nabu.svelte.js';
 import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
 import { CodeExtension } from '#lib/blocks/code/index.js';
 import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
 
 describe('CodeBlock statics', () => {
     it('toMarkdown wraps in fenced code block with language', async () => {
@@ -96,5 +97,43 @@ describe('CodeBlock integration', () => {
         expect(block.splitsOnEnter).toBe(false);
         expect(block.transformsEnabled).toBe(false);
         expect(block.marksEnabled).toBe(false);
+    });
+});
+
+
+describe('action topics: `code` is the inline mark, `code:block` the block (P-115)', () => {
+    async function make() {
+        const engine = new Nabu({ extensions: [ParagraphExtension, CodeExtension, RichTextExtension, BlockExtension] });
+        engine.insert('paragraph', { text: 'abc' });
+        await engine.commit();
+        const block = engine.children[0];
+        engine.selection = { anchorBlock: block, focusBlock: block, startBlock: block, endBlock: block, blocks: new Set([block]), isCollapsed: true, sync: vi.fn(), normalize: vi.fn(), setCursor: vi.fn() };
+        return { engine, id: block.id };
+    }
+    const typeOf = (engine, id) => engine.tree.roots().find((r) => r.id.toString() === id.toString()).data.get('type');
+
+    it('exec("code") only toggles the mark: the block is not transformed', async () => {
+        const { engine, id } = await make();
+        const stored = vi.spyOn(engine, 'toggleStoredMark');
+        await engine.exec('code');
+        expect(stored).toHaveBeenCalledWith('code');
+        expect(typeOf(engine, id)).toBe('paragraph');
+    });
+
+    it('exec("code:block") transforms the block and does not touch the mark', async () => {
+        const { engine, id } = await make();
+        const stored = vi.spyOn(engine, 'toggleStoredMark');
+        await engine.exec('code:block');
+        expect(stored).not.toHaveBeenCalled();
+        expect(typeOf(engine, id)).toBe('code');
+    });
+
+    it('the slash entry "Code" runs code:block', async () => {
+        const { engine, id } = await make();
+        const stored = vi.spyOn(engine, 'toggleStoredMark');
+        const entry = engine.slashCommands.find((c) => c.title === 'Code');
+        await entry.run(engine);
+        expect(stored).not.toHaveBeenCalled();
+        expect(typeOf(engine, id)).toBe('code');
     });
 });

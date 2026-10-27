@@ -91,8 +91,10 @@ export function createRegionCommands(messages) {
      */
     const mergeLabel = (nabu, region, joined) => {
         const plan = region ? mergePlan(nabu, region) : null;
-        if (plan?.kind === 'merge') return joined === 'mergePrevious' ? text('mergePrevious', params(plan.into)) : text('mergeNext', params(region));
-        return text(region && plan ? 'dissolve' : joined, params(region));
+        // No caret (`commands.list()` without a context), or nothing to merge with: no name to give, a generic label.
+        if (!region || !plan) return text(joined === 'mergePrevious' ? 'mergePreviousGeneric' : 'mergeNextGeneric');
+        if (plan.kind === 'merge') return joined === 'mergePrevious' ? text('mergePrevious', params(plan.into)) : text('mergeNext', params(region));
+        return text('dissolve', params(region));
     };
 
     return {

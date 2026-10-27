@@ -83,6 +83,7 @@ exec(topic, data) {
 | `mark:toggle` / `mark:apply` / `mark:remove` | `RichTextExtension` | Marks inline |
 | `bold`, `italic`, `underline`, `code`, `strikethrough` | `RichTextExtension` | Aliases courts |
 | `block:transform` | `BlockExtension` | Transform type du bloc courant |
+| `code:block` | `CodeExtension` | Alias → délègue à `block:transform` (`code` seul = la marque inline) |
 | `heading:1`…`heading:6` | `HeadingExtension` | Aliases → délèguent à `block:transform` |
 | `paragraph` | `ParagraphExtension` | Alias → délègue à `block:transform` |
 | `list:indent` / `list:unindent` | `ListItemExtension` | Indent/unindent item de liste |

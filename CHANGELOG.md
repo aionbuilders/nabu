@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Breaking: block transform action `code` renamed `code:block` (P-115), generic region labels without a caret (P-116)
+- Breaking: the block transform action `code` of `CodeExtension` is renamed **`code:block`** (`nabu.exec('code:block')`). `code` now only toggles the inline code mark (`RichTextExtension`, like `bold` / `italic`): before, `exec('code')` ran both. The slash entry "Code" runs `code:block`. Migration: `exec('code')` meaning the block becomes `exec('code:block')` (or `exec('block:transform', { type: 'code' })`).
+- Several extensions may still declare the same action topic (all handlers run, by design); the rule is now documented in `Extension#actions`.
+- `nabu.commands.list()` without a context (no caret) no longer reads `Merge with “”`: `region:merge-previous` / `region:merge-next` fall back to generic labels ("Merge with the previous region", "Merge the next region into this one"). New overridable region messages `mergePreviousGeneric` and `mergeNextGeneric`.
+
 ### Breaking: the slash menu is agnostic, `DEFAULT_SLASH_COMMANDS` removed (P-114)
 - The slash menu no longer knows any block type: `DEFAULT_SLASH_COMMANDS` (15 hard-coded entries, shown whatever extensions were loaded, e.g. "Callout" in an editor without the callout extension, where it did nothing) is **removed** from `@aionbuilders/nabu/ui`. The menu lists only `nabu.slashCommands`, the entries contributed by the loaded extensions (`Extension#slashCommands`), plus the integrator's extras.
 - Each built-in extension now declares its own entries, with the same titles, aliases and actions as before: Paragraph (Text), Heading (Heading 1-3), List (Bulleted / Numbered / To-do list), Code, Callout, Blockquote (Quote), Toggle, Divider, Image, Video, File; Regions' entries are in the `structure` group.

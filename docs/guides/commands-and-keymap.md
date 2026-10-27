@@ -28,7 +28,7 @@ Things to know:
 
 - Actions act on the **current selection**. A toolbar button must not take the focus away from the editor (use `mousedown` + `preventDefault`), or the selection is gone when the action runs. `exec` re-reads the DOM selection first, so a selection made with the keyboard a moment ago is taken into account.
 - A topic that no loaded extension declares **does nothing and raises no error**. `exec('heading:1')` is silent in an editor without `HeadingExtension`.
-- Two extensions may declare the same topic: all their handlers run.
+- Two extensions may declare the same topic: all their handlers run (an extension can observe another one's topic). The bus does not warn about it, so give your own topics a distinctive `namespace:verb` name.
 
 ### The built-in topics
 
@@ -43,7 +43,7 @@ These are the topics of the built-in extensions. A topic exists only when its ex
 | `link:set` `{ href }`, `link:remove`, `link:toggle` `{ href }` | `RichTextExtension` | Links on the selection. An unsafe URL (`javascript:`...) is refused |
 | `block:transform` `{ type, props? }` | `BlockExtension` | Turn the block holding the caret into another type |
 | `paragraph`, `heading:1` ... `heading:6` | `ParagraphExtension`, `HeadingExtension` | Aliases of `block:transform` |
-| `blockquote`, `callout`, `toggle` | their extension | The same, for these blocks |
+| `blockquote`, `callout`, `toggle`, `code:block` | their extension | The same, for these blocks |
 | `list:convert` `{ listType }` | `ListItemExtension` | Make the block a list: `'bullet'`, `'ordered'` or `'todo'` |
 | `list:indent`, `list:unindent` | `ListItemExtension` | Nest or un-nest the current list item |
 | `divider:insert` | `DividerExtension` | A divider after the block (or in place of an empty one) |
@@ -55,7 +55,7 @@ A few details:
 
 - `mark:toggle` and the aliases act on the selected text. With a **collapsed caret** they toggle the mark for the *next typed text* instead (a "stored mark"). `mark:apply`, `mark:remove` and the link topics do nothing without a selected range.
 - `block:transform` works on the block holding the caret and puts the caret back after the change.
-- `code` is declared twice: by `RichTextExtension` (the inline code mark) and by `CodeExtension` (the code block), so `exec('code')` triggers both when both are loaded. Use `mark:code` for the mark and `block:transform` with `{ type: 'code' }` for the block.
+- `code` is the inline code mark (`RichTextExtension`, like `bold` and `italic`); the code block is `code:block` (`CodeExtension`), the same as `block:transform` with `{ type: 'code' }`.
 
 ```js test
 import { createDocumentEditor } from '@aionbuilders/nabu';
@@ -324,7 +324,7 @@ Not everything is a command yet. Tab in lists, the code block's keys, the toggle
 
 ## Listing commands
 
-`nabu.commands.list()` returns a plain snapshot of every command, in registration order: build a help sheet, a shortcut cheat sheet or a command palette from it. The snapshot is not reactive; the set of commands is fixed once the editor is built.
+`nabu.commands.list()` returns a plain snapshot of every command, in registration order: build a help sheet, a shortcut cheat sheet or a command palette from it. The snapshot is not reactive; the set of commands is fixed once the editor is built. Labels that depend on the caret (`region:merge-previous` names the region it joins) are evaluated with the current context, which has no caret when nothing is focused: they then fall back to a generic text ("Merge with the previous region"). Pass a context, `list(ctx)`, to get the names.
 
 ```js test
 import { createDocumentEditor } from '@aionbuilders/nabu';
@@ -508,4 +508,3 @@ expect(engine.tab).toBe('stay');
 
 - There is no public API to start a `hold`, `invite` or `choose` from code (the regions extension uses an internal one for `:::`). A confirmation starts from a key press only.
 - Commands cannot be registered after the editor is built, and `commands.list()` is not reactive.
-- `nabu.exec('code')` runs both the inline mark and the block transform when both extensions are loaded (see above).

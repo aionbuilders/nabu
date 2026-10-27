@@ -1004,3 +1004,33 @@ describe('registration', () => {
     expect(engine.selection.setCursor).toHaveBeenLastCalledWith(at(engine, 'b'), 0);
   });
 });
+
+
+// ─── labels without a caret (P-116) ────────────────────────────────────────
+
+describe('commands.list() labels', () => {
+  const row = (engine, id, ctx) => engine.commands.list(ctx).find((r) => r.id === id);
+
+  it('without a caret the merge labels are generic and never empty', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('part', 'A', [P('a')]), R('part', 'B', [P('b')])]);
+    expect(row(engine, 'region:merge-previous').label).toBe('Merge with the previous region');
+    expect(row(engine, 'region:merge-next').label).toBe('Merge the next region into this one');
+    for (const { label } of engine.commands.list()) expect(label.trim()).not.toBe('');
+    for (const { label } of engine.commands.list()) expect(label).not.toContain('“”');
+  });
+
+  it('with the caret in a region the label still names the region', async () => {
+    const engine = await makeEditor(BOOK);
+    await build(engine, [R('part', 'A', [P('a')]), R('part', 'B', [P('b')])]);
+    setCaret(engine, at(engine, 'b'), 0);
+    expect(row(engine, 'region:merge-previous', engine.commands.context(null)).label).toBe('Merge with “A”');
+    expect(row(engine, 'region:merge-previous').label).toBe('Merge with “A”');
+  });
+
+  it('the generic labels are messages, overridable', async () => {
+    const engine = await makeEditor(BOOK, { messages: { mergePreviousGeneric: 'Fusionner avec la région précédente' } });
+    await build(engine, [R('part', 'A', [P('a')])]);
+    expect(row(engine, 'region:merge-previous').label).toBe('Fusionner avec la région précédente');
+  });
+});

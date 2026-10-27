@@ -32,6 +32,8 @@
  * @property {string | ((p: { type: string }) => string)} [insert]  label of `region:insert`
  * @property {string | ((p: RegionMessageParams) => string)} [mergePrevious]  label of `region:merge-previous`, "the previous region" being `p`
  * @property {string | ((p: RegionMessageParams) => string)} [mergeNext]  label of `region:merge-next` when the next region (`p`, the one that disappears) joins the previous region
+ * @property {string | (() => string)} [mergePreviousGeneric]  label of `region:merge-previous` when no region is known (`commands.list()` without a caret): "Merge with the previous region"
+ * @property {string | (() => string)} [mergeNextGeneric]  label of `region:merge-next` when no region is known (`commands.list()` without a caret)
  * @property {string | ((p: RegionMessageParams) => string)} [dissolve]  label of a protected merge that has no region to join: the region `p` is dissolved in place
  *   (its body stays where it is, its title goes away)
  * @property {string | (() => string)} [exit]  label of `region:exit`
@@ -73,6 +75,8 @@ export const DEFAULT_REGION_MESSAGES = {
     insert: 'Insert a region',
     mergePrevious: ({ title }) => `Merge with “${title}”`,
     mergeNext: ({ title }) => `Merge “${title}” into this region`,
+    mergePreviousGeneric: 'Merge with the previous region',
+    mergeNextGeneric: 'Merge the next region into this one',
     dissolve: ({ title }) => `Dissolve “${title}”`,
     exit: 'Leave the region',
     unwrap: 'Dissolve the region',

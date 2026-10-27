@@ -73,10 +73,11 @@ export const CodeExtension = extension("code", {
     block: CodeBlock,
     component: CodeComponent,
     slashCommands: [
-        { title: 'Code', icon: '<>', aliases: ['code', 'snippet'], group: 'blocks', order: 0, run: (e) => e.exec('code') },
+        { title: 'Code', icon: '<>', aliases: ['code', 'snippet'], group: 'blocks', order: 0, run: (e) => e.exec('code:block') },
     ],
     actions: {
-        'code': (nabu) => nabu.exec('block:transform', { type: 'code' }),
+        // `code` alone is the inline mark of RichTextExtension (like `bold`, `italic`...): the block is `code:block`.
+        'code:block': (nabu) => nabu.exec('block:transform', { type: 'code' }),
     },
     hooks: {
         onBeforeInput,

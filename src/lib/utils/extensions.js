@@ -99,6 +99,9 @@
  * @property {Partial<ExtensionHooks>} [hooks]
  * @property {Record<string, (nabu: Nabu) => any>} [serializers]
  * @property {Record<string, (nabu: Nabu, data: any, topic: string) => any>} [actions]
+ *   Handlers of the action bus, by topic (`nabu.exec(topic, data)`). COLLISION RULE: several extensions may declare the same topic and
+ *   ALL their handlers run (that is how an extension observes another one's topic), so give a topic of your own a distinctive name
+ *   (`namespace:verb`): two extensions that each mean something different by `code` would both fire. Built-in topics: `mark:*`, `block:*`, `list:*`...
  * @property {Record<string, import('./commands.js').CommandDef>} [commands]
  *   Commands (ADR 017): `{ [id]: { label, keys?, when?, scope?, run(nabu, ctx, data?), confirm? } }`. Each one is also an action of the
  *   bus (`nabu.exec(id, data)`); the engine resolves their `keys` at keydown, before the legacy `onKeyDown` hooks.

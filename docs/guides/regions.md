@@ -373,7 +373,7 @@ expect(engine.commands.get('region:split').label).toBe('Couper ici');
 expect(engine.commands.get('region:exit').label).toBe('Leave the region'); // not overridden
 ```
 
-The keys of `messages`: `split`, `insert`, `mergePrevious`, `mergeNext`, `dissolve`, `exit`, `unwrap`, `move`, `moveUp`, `moveDown`, `promote`, `demote`, `next`, `prev`, `parent`, `create`, `chooser`, `createOption`, `createNext`, `slash`, `untitled`, `closeCommand`, `closeOption`, `closeChooser`, `closeFooter`, `groupHere`, `groupNext`, `chooserFooter`, `endOf`, `backTo`, `outside` and `hold`. The `RegionMessages` typedef documents the parameters of each.
+The keys of `messages`: `split`, `insert`, `mergePrevious`, `mergeNext`, `mergePreviousGeneric`, `mergeNextGeneric`, `dissolve`, `exit`, `unwrap`, `move`, `moveUp`, `moveDown`, `promote`, `demote`, `next`, `prev`, `parent`, `create`, `chooser`, `createOption`, `createNext`, `slash`, `untitled`, `closeCommand`, `closeOption`, `closeChooser`, `closeFooter`, `groupHere`, `groupNext`, `chooserFooter`, `endOf`, `backTo`, `outside` and `hold`. The `RegionMessages` typedef documents the parameters of each.
 
 ## Theming
 
@@ -413,4 +413,4 @@ A region draws its seam (an editable title between a label and a hairline) and i
 ## Gaps
 
 - Sub-regions can only be created from the keyboard (`:::` in a body, `region:demote`) or from markdown and JSON: there is no public command that creates a child region directly, and `region:insert` creates a sibling.
-- `nabu.commands.list()` evaluates region labels without a caret, so `region:merge-previous` reads "Merge with ..." with an empty title until the caret is in a region. Pass a context (`list(ctx)`) to get the names.
+- `nabu.commands.list()` without a context has no caret, so the merge labels are generic ("Merge with the previous region"). Pass a context (`list(ctx)`) to get the names. Both generic texts are messages (`mergePreviousGeneric`, `mergeNextGeneric`).
