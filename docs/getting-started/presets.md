@@ -2,7 +2,7 @@
 title: Presets
 description: The four built-in presets (Minimal, Text, Document, Full), what each contains, their Tab default, and how to add or remove extensions.
 section: getting-started
-order: 3
+order: 4
 ---
 
 # Presets

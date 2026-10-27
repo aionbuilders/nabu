@@ -50,7 +50,7 @@ test.describe('site shell', () => {
     expect(external).toEqual([]);
   });
 
-  test('nav links point to the right routes and every stub renders', async ({ page }) => {
+  test('nav links point to the right routes and every page renders', async ({ page }) => {
     await page.goto('/');
     for (const [label, href] of NAV) {
       await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: label, exact: true })).toHaveAttribute('href', href);
@@ -62,9 +62,11 @@ test.describe('site shell', () => {
       // The API reference is a real page now (tests/e2e/site-api.spec.ts): its H1 and title say "API reference".
       const title = href === '/api' ? 'API reference' : label;
       await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
-      // Labs and the API reference are real pages (Labs lists the Performance lab); the others are still stubs.
+      // Labs, the API reference, the docs (tests/e2e/site-docs.spec.ts) and the changelog are real pages (Labs lists the Performance lab); the others are still stubs.
       if (href === '/labs') await expect(page.getByRole('link', { name: /Performance/ })).toBeVisible();
       else if (href === '/api') await expect(page.getByRole('navigation', { name: 'API reference' })).toBeVisible();
+      else if (href === '/docs') await expect(page.getByRole('navigation', { name: 'Documentation' })).toBeVisible();
+      else if (href === '/changelog') await expect(page.getByRole('heading', { level: 2, name: 'Unreleased' })).toBeVisible();
       else await expect(page.getByText('Coming soon')).toBeVisible();
       await expect(page.getByRole('banner')).toBeVisible();
       await expect(page.locator('footer')).toBeVisible();

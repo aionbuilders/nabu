@@ -13,15 +13,7 @@ export default defineConfig({
 			// Only used by the demo/e2e app (`vite build`); the library itself is packaged with `svelte-package`.
 			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 			adapter: adapter(SLOT ? { out: `build-${SLOT}` } : {}),
-			...(SLOT ? { outDir: `.svelte-kit-${SLOT}` } : {}),
-			prerender: {
-				// TEMP: the API reference links into /docs pages that are still being built.
-				// Remove once the docs routes land, so a broken link fails the build again.
-				handleHttpError: ({ path, message }) => {
-					if (path.startsWith('/docs/')) return console.warn(message);
-					throw new Error(message);
-				}
-			}
+			...(SLOT ? { outDir: `.svelte-kit-${SLOT}` } : {})
 		}),
 		wasm()
 	],

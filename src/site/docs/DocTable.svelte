@@ -2,7 +2,8 @@
   /**
    * The table block of the documentation (see table.svelte.js). Same contract as any block component: the element carries the block id and
    * type, is bound to `block.element`, and the tags are glued (the editor preserves whitespace). The `<table>` itself is the block
-   * element and sits inside a scroller, so that a wide table scrolls by itself on a phone and its cells stay inside the block's box.
+   * element and sits inside a scroller (marked `data-nabu-ui`: the selection machinery leaves a selection inside it alone, instead of moving it to the
+   * nearest text block as it does for a block that holds no text, so that a cell can be selected and copied natively), so that a wide table scrolls by itself on a phone and its cells stay inside the block's box.
    */
   import { RichText } from '#lib/extend.js';
 
@@ -10,7 +11,9 @@
   let { block } = $props();
 </script>
 
-<div class="doc-table" role="region" aria-label="Table" tabindex="0" contenteditable="false" oncopy={(e) => e.stopPropagation()}><table
+<!-- A scroll container must be reachable from the keyboard (axe: scrollable-region-focusable). -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div class="doc-table" data-nabu-ui role="region" aria-label="Table" tabindex="0" oncopy={(e) => e.stopPropagation()}><table
     bind:this={block.element}
     data-block-id={block.id}
     data-block-type="table"

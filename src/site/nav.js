@@ -1,4 +1,4 @@
-/** Main navigation, shared by the header (and mirrored by the footer columns). Every target is a stub page for now. */
+/** Main navigation, shared by the header (and mirrored by the footer columns). Docs, API and Changelog are real pages; the others are stubs for now. */
 export const NAV = [
   { href: '/docs', label: 'Docs' },
   { href: '/api', label: 'API' },
@@ -15,8 +15,8 @@ export const FOOTER_COLUMNS = [
   {
     title: 'Learn',
     links: [
-      { href: '/docs', label: 'Getting started' },
-      { href: '/docs', label: 'Guides' },
+      { href: '/docs/getting-started/installation', label: 'Getting started' },
+      { href: '/docs#guides', label: 'Guides' },
       { href: '/api', label: 'API reference' }
     ]
   },

@@ -1,0 +1,155 @@
+/*
+ * A documentation page is a Nabu document, read-only, drawn with the Atelier theme. This stylesheet makes it sit in the docs column like
+ * the rest of the documentation (docs.css): the pane (surface, border, padding) is removed, the theme's palette is pointed at the SITE
+ * tokens (so the page follows the site's dark / light choice, with no JavaScript and no `data-nb-scheme`), and the type scale of
+ * the API reference is applied to the headings, lists, quotes and code. Scoped by `.doc-article`; only `--site-*` tokens.
+ *
+ * Everything the document may become when "Edit this page" flips `readonly` off (same markup, same box) is deliberately left to the theme.
+ */
+
+.site .doc-article.nb-theme-atelier {
+  min-width: 0;
+  color-scheme: inherit;
+
+  /* The theme's palette -> the site's */
+  --atelier-pane: transparent;
+  --atelier-pane-padding: 0;
+  --atelier-pane-radius: 0;
+  --atelier-line-pane: transparent;
+  --atelier-line-pane-focus: transparent;
+  --atelier-font-size: var(--site-fs-body);
+  --atelier-text: var(--site-text);
+  --atelier-text-2: var(--site-text-muted);
+  --atelier-text-3: var(--site-text-subtle);
+  --atelier-accent: var(--site-accent);
+  --atelier-accent-fill: var(--site-accent-fill);
+  --atelier-line: var(--site-border);
+  --atelier-line-soft: var(--site-border-subtle);
+  --atelier-sunken: var(--site-surface);
+  --atelier-code: var(--site-hover-bg);
+  --atelier-selection: color-mix(in srgb, var(--site-accent) 28%, transparent);
+  --nb-font-text: var(--site-font-body);
+  --nb-font-heading: var(--site-font-display);
+  --nb-font-mono: var(--site-font-mono);
+}
+
+/* The editor element: no pane, no minimum height, the site's reading rhythm. */
+.site .doc-article.nb-theme-atelier .nabu-editor[data-nabu-root] {
+  min-height: 0;
+  border: 0;
+  background: none;
+  line-height: var(--site-lh-body);
+  overflow-wrap: anywhere;
+}
+.site .doc-article .nabu-editor[data-nabu-root]:focus-visible { outline: none; }
+
+/* Paragraphs */
+.site .doc-article .nabu-editor [data-block-type='paragraph'] { margin: 0 0 var(--site-space-3); }
+
+/* Headings: the scale of the API reference (Syne 700). The first block (the page title) is the h1. */
+.site .doc-article .nabu-editor [data-block-type='heading'] {
+  scroll-margin-top: var(--site-space-4);
+  color: var(--site-text);
+}
+.site .doc-article .nabu-editor h1[data-block-type='heading'] {
+  margin: 0 0 var(--site-space-4);
+  font-size: clamp(32px, 6vw, var(--site-fs-h1));
+  line-height: 1.2; /* Syne's glyph box is 1.2em: a tighter line box would let the text overflow its block (the DOM invariant of the e2e suite) */
+  letter-spacing: var(--site-ls-heading);
+}
+.site .doc-article .nabu-editor h2[data-block-type='heading'] {
+  margin: var(--site-space-12) 0 var(--site-space-3);
+  font-size: 26px;
+  line-height: var(--site-lh-h3);
+  letter-spacing: var(--site-ls-h3);
+}
+.site .doc-article .nabu-editor h3[data-block-type='heading'] {
+  margin: var(--site-space-8) 0 var(--site-space-2);
+  font-size: 20px;
+  line-height: var(--site-lh-h3);
+  letter-spacing: var(--site-ls-h3);
+}
+.site .doc-article .nabu-editor :is(h4, h5, h6)[data-block-type='heading'] {
+  margin: var(--site-space-6) 0 var(--site-space-2);
+  font-size: 16px;
+  line-height: 1.4;
+  letter-spacing: 0;
+}
+.site .doc-article .nabu-editor > [data-block-type='heading']:first-child { margin-top: 0; }
+
+/* Links, inline code */
+.site .doc-article .nabu-editor .nabu-link { color: var(--site-accent); }
+.site .doc-article .nabu-editor span.nabu-code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--site-hover-bg);
+  color: var(--site-text);
+  font: 500 0.875em / 1.4 var(--site-font-mono);
+}
+.site .doc-article .nabu-editor :is(h1, h2, h3)[data-block-type='heading'] span.nabu-code { font-size: 0.8em; }
+.site .doc-article .nabu-editor .nabu-bold { font-weight: 600; }
+
+/* Quote */
+.site .doc-article .nabu-editor [data-block-type='blockquote'] {
+  margin: 0 0 var(--site-space-3);
+  padding: var(--site-space-3) var(--site-space-4);
+  border: 1px solid var(--site-note-border);
+  border-radius: var(--site-radius-card-sm);
+  background: var(--site-note-bg);
+}
+
+/* Divider */
+.site .doc-article .nabu-editor [data-block-type='divider'] { margin: var(--site-space-8) 0; border-top-color: var(--site-border); }
+
+/* Code: the shared `.cb` (docs.css), inside the editor. */
+.site .doc-article .nabu-editor .cb { margin: 0 0 var(--site-space-4); }
+.site .doc-article .nabu-editor .cb-head { user-select: none; -webkit-user-select: none; }
+.site .doc-article .nabu-editor .cb pre.nabu-code {
+  display: block;
+  margin: 0;
+  padding: 16px 20px;
+  overflow-x: auto;
+  background: transparent;
+  color: var(--site-text);
+  font: 400 var(--site-fs-code) / var(--site-lh-body) var(--site-font-mono);
+  white-space: pre;
+}
+.site .doc-article .nabu-editor .cb pre.nabu-code code { font: inherit; background: none; padding: 0; white-space: inherit; }
+
+/* Table: a scroller around the <table> block, hairlines like the API tables. */
+.site .doc-article .doc-table {
+  margin: 0 0 var(--site-space-4);
+  overflow-x: auto;
+  border: 1px solid var(--site-border);
+  border-radius: var(--site-radius-card-sm);
+  scrollbar-width: thin;
+}
+.site .doc-article .doc-table:focus-visible { outline-offset: -2px; }
+.site .doc-article .doc-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--site-fs-small);
+  line-height: var(--site-lh-small);
+  white-space: normal;
+}
+.site .doc-article .doc-table :is(th, td) {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--site-border-subtle);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: normal;
+  word-break: normal; /* the editor's `word-break: break-word` would cut "Browser" in two on a phone: the table scrolls instead */
+}
+.site .doc-article .doc-table :is(th, td) + :is(th, td) { border-left: 1px solid var(--site-border-subtle); }
+.site .doc-article .doc-table tbody tr:last-child td { border-bottom: 0; }
+.site .doc-article .doc-table th {
+  background: var(--site-surface-2);
+  color: var(--site-text-subtle);
+  font: 500 var(--site-fs-label) / var(--site-lh-label) var(--site-font-mono);
+  letter-spacing: var(--site-ls-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.site .doc-article .doc-table td { color: var(--site-text-muted); min-width: 8ch; }
+.site .doc-article .doc-table td span.nabu-code { font-size: 0.85em; white-space: nowrap; }
+.site .doc-article .doc-table td:first-child { color: var(--site-text); }

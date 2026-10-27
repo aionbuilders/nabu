@@ -67,7 +67,7 @@ export class DocTableBlock extends Block {
     this.align = /** @type {Align[]} */ (node.data.get('align') ?? []);
 
     const props = () => ({ head: this.head, rows: this.rows, align: this.align });
-    this.serializers.set('markdown', () => DocTableBlock.toMarkdown({ type: 'table', props: props() }));
+    this.serializers.set('markdown', () => DocTableBlock.toMarkdown({ props: props() }));
     this.serializers.set('json', () => ({ id: this.id, type: 'table', props: props() }));
     this.serializers.set('application/x-nabu+json', () => ({ type: 'table', props: props(), partial: false }));
   }
@@ -85,7 +85,7 @@ export class DocTableBlock extends Block {
   static toMarkdown(pb) {
     const { head = [], rows = [], align = [] } = pb.props ?? {};
     const line = (/** @type {Cell[]} */ cells) => `| ${cells.map((c) => escapeCell(cellText(c))).join(' | ')} |`;
-    const rule = head.map((_, i) => ({ left: ':---', center: ':---:', right: '---:' })[/** @type {'left'} */ (align[i])] ?? '---');
+    const rule = head.map((/** @type {Cell} */ _, /** @type {number} */ i) => ({ left: ':---', center: ':---:', right: '---:' })[/** @type {'left'} */ (align[i])] ?? '---');
     return [line(head), `| ${rule.join(' | ')} |`, ...rows.map(line)].join('\n');
   }
 
@@ -96,7 +96,7 @@ export class DocTableBlock extends Block {
     const cell = (/** @type {string} */ tag, /** @type {Cell} */ c, /** @type {number} */ i) =>
       `<${tag}${align[i] ? ` style="text-align:${align[i]}"` : ''}>${esc(cellText(c))}</${tag}>`;
     const tr = (/** @type {string} */ tag, /** @type {Cell[]} */ cells) => `<tr>${cells.map((c, i) => cell(tag, c, i)).join('')}</tr>`;
-    return `<table><thead>${tr('th', head)}</thead><tbody>${rows.map((r) => tr('td', r)).join('')}</tbody></table>`;
+    return `<table><thead>${tr('th', head)}</thead><tbody>${rows.map((/** @type {Cell[]} */ r) => tr('td', r)).join('')}</tbody></table>`;
   }
 
   /** A GFM pipe table: a header row, a delimiter row of the same width, then the rows up to a blank line or the next block. */

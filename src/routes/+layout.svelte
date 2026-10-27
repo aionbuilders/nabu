@@ -37,13 +37,15 @@
   // A page can override the title and opt out of indexing through its load data (`{ title, noindex }`): a nested <svelte:head>
   // <title> would be rendered next to this one (duplicate tags), so the single source of truth stays here.
   const TITLE = $derived(page.data.title ?? DEFAULT_TITLE);
+  // Same for the description (the documentation pages take theirs from their frontmatter).
+  const DESC = $derived(page.data.description ?? DESCRIPTION);
   const canonical = $derived(SITE_URL + (page.url.pathname === '/' ? '' : page.url.pathname));
 </script>
 
 <svelte:head>
   <!-- Primary -->
   <title>{TITLE}</title>
-  <meta name="description" content={DESCRIPTION} />
+  <meta name="description" content={DESC} />
   <meta name="keywords" content="svelte, svelte5, block editor, rich text editor, contenteditable, crdt, loro, local-first, collaborative, npm, javascript" />
   <meta name="author" content="Killian Di Vincenzo" />
   <meta name="robots" content={page.data.noindex ? 'noindex, follow' : 'index, follow'} />
@@ -53,7 +55,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content={canonical} />
   <meta property="og:title" content={TITLE} />
-  <meta property="og:description" content={DESCRIPTION} />
+  <meta property="og:description" content={DESC} />
   <meta property="og:image" content="{SITE_URL}/og.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -64,7 +66,7 @@
   <!-- Twitter / X -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content={TITLE} />
-  <meta name="twitter:description" content={DESCRIPTION} />
+  <meta name="twitter:description" content={DESC} />
   <meta name="twitter:image" content="{SITE_URL}/og.png" />
   <meta name="twitter:image:alt" content="Nabu block editor — live demo" />
 
