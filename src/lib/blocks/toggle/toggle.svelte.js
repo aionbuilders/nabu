@@ -74,6 +74,7 @@ export class ToggleBlock extends MegaBlock {
     selection = $derived(this.behavior.selection);
 
     // When collapsed, exclude children from positions so cursor cannot enter hidden body
+    // @ts-ignore — `super.positions`: Svelte compiles the parent's `$derived` field to a prototype accessor, which TS sees as a field
     positions = $derived(this.behavior.positions + (this.collapsed ? 0 : super.positions));
 
     // Count body words regardless of collapse state
@@ -319,12 +320,12 @@ export class ToggleBlock extends MegaBlock {
     /**
      * @param {Nabu} nabu
      * @param {string} type
-     * @param {Object} [props={}]
+     * @param {Record<string, any>} [props={}]
      * @param {string|null} [parentId=null]
      * @param {number|null} [index=null]
      */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index ?? undefined);
+        const node = nabu.tree.createNode(/** @type {import('loro-crdt').TreeID | undefined} */ (parentId || undefined), index ?? undefined);
         /** @type {any} */ (node.data).set('type', 'toggle');
         /** @type {any} */ (node.data).set('collapsed', props.collapsed ?? false);
         const container = /** @type {any} */ (node.data).setContainer('text', new LoroText());

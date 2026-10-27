@@ -84,6 +84,7 @@ export { formatChord } from './utils/keys.js';
 // ---------------------------------------------------------------------------
 
 /** @typedef {import('./blocks/nabu.svelte.js').NabuInit} NabuInit Options of `new Nabu()` (and of the factories). */
+/** @typedef {import('./presets.js').EditorOptions} EditorOptions Options of the factories: `NabuInit` plus `preset`. */
 /** @typedef {import('./files/files.svelte.js').FilesConfig} FilesConfig The `files` option: uploads, limits, embedding. */
 /** @typedef {import('./files/files.svelte.js').EmbeddedAsset} EmbeddedAsset */
 /** @typedef {import('./utils/placeholders.js').PlaceholdersOption} PlaceholdersOption */

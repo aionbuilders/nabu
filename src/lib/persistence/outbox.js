@@ -1,6 +1,9 @@
 import { OUTBOX_STORE, withStore } from './indexeddb.js';
 
-/** @import { Outbox, OutboxEntry } from '../files/outbox.js' */
+/**
+ * @typedef {import('../files/outbox.js').Outbox} Outbox
+ * @typedef {import('../files/outbox.js').OutboxEntry} OutboxEntry
+ */
 
 /**
  * The {@link Outbox} of a persisted editor (ADR 014 lot 2): database `nabu`, object store `outbox`

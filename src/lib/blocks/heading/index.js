@@ -24,7 +24,7 @@ const HeadingExtension = extension("heading", {
         'heading:6': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 6 } }),
     },
     hooks: {
-        /** @param {Nabu} nabu @param {Heading} block @param {Event} event @param {{offset: number, delta: import('loro-crdt').Delta<string>}} data */
+        /** @param {Nabu} nabu @param {Heading} block @param {Event | null} event @param {import('../../utils/extensions.js').SplitData} data */
         onSplit: (nabu, block, event, data) => {
             const { offset, delta } = data;
             const length = block.text.length;

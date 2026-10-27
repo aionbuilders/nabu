@@ -32,7 +32,8 @@ export class Block {
         this.nabu = nabu;
         this.node = node;
         const metadata = node.data;
-        this.id = node.id.toString()
+        /** The Loro tree id of the node (also the key in `nabu.blocks`). @type {import('loro-crdt').TreeID} */
+        this.id = /** @type {import('loro-crdt').TreeID} */ (node.id.toString());
         this.type = metadata.get("type") || "block";
         this.nabu.blocks.set(this.id, this);
         const blocksOfType = this.nabu.blocksByType.get(this.type) || new SvelteSet();
@@ -43,7 +44,7 @@ export class Block {
 
         const parent = node.parent();
         if (parent) {
-            this.parent = this.nabu.blocks.get(parent.id.toString()) || null;
+            this.parent = /** @type {MegaBlock | null} */ (this.nabu.blocks.get(parent.id.toString()) || null);
         }
     }
 
@@ -202,6 +203,7 @@ export class Block {
 
     /** @param {(block: Block) => boolean} predicate @returns {Block | null} */
     findBackward(predicate) {
+        /** @type {Block | null} */
         let current = this;
         while (current) {
             const parent = current.parent || current.nabu;
@@ -283,7 +285,7 @@ export class Block {
     /**
      * Transforme ce bloc en un autre type de bloc.
      * @param {string} newType 
-     * @param {Object} [props={}] 
+     * @param {Record<string, any>} [props={}] 
      */
     transformTo(newType, props = {}) {
         this.retype(newType, props);
@@ -296,7 +298,7 @@ export class Block {
      * its id, text and position survive). Override it when a block cannot simply change type where it
      * stands (e.g. because its parent only accepts some children): do the same job with Loro mutations only.
      * @param {string} newType
-     * @param {Object} [props={}]
+     * @param {Record<string, any>} [props={}]
      */
     retype(newType, props = {}) {
         const data = this.node.data;
@@ -446,7 +448,7 @@ export class Block {
 
     // -- Event Handling --
 
-    /** @param {string} eventName @param {Event} event @param {Object} [data={}] */
+    /** @param {string} eventName @param {Event | null} event @param {Object} [data={}] */
     ascend(eventName, event, data = {}) {
         //@ts-ignore
         if (this.parent && typeof this.parent[eventName] === "function") {
@@ -518,9 +520,9 @@ export class Block {
         return block;
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index ?? undefined);
+        const node = nabu.tree.createNode(/** @type {import('loro-crdt').TreeID | undefined} */ (parentId || undefined), index ?? undefined);
         node.data.set("type", type);
         const block = Block.load(nabu, node);
         return block;

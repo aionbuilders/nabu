@@ -14,7 +14,7 @@ function buildMarkdownRuleset(nabu) {
     /** @type {Array<{ BlockClass: any, rule: any }>} */
     const ruleset = [];
     for (const [, BlockClass] of nabu.registry) {
-        const rules = BlockClass.markdownRules;
+        const rules = /** @type {{ markdownRules?: unknown }} */ (BlockClass).markdownRules;
         if (!Array.isArray(rules)) continue;
         for (const rule of rules) ruleset.push({ BlockClass, rule });
     }

@@ -58,7 +58,7 @@ const ParagraphExtension = extension("paragraph", {
             if (!mayEmptyRoot(nabu)) return;
             if (nabu.tree.roots().length === 0) nabu.insert("paragraph", { text: "" });
         },
-        /** @param {Nabu} nabu @param {Paragraph} block @param {Event} event @param {{offset: number, delta: import('loro-crdt').Delta<string>}} data */
+        /** @param {Nabu} nabu @param {Paragraph} block @param {Event | null} event @param {import('../../utils/extensions.js').SplitData} data */
         onSplit: (nabu, block, event, data) => {
             const { offset, delta } = data;
             
@@ -68,7 +68,7 @@ const ParagraphExtension = extension("paragraph", {
             const parent = block.node.parent();
             const parentId = parent?.id.toString() || null;
             
-            const newBlock = nabu.insert("paragraph", { delta }, parentId, currentIndex + 1);
+            const newBlock = nabu.insert("paragraph", { delta }, parentId, /** @type {number} */ (currentIndex) + 1);
 
             block.commit().then(() => nabu.selection.setCursor(newBlock, 0));
 

@@ -376,6 +376,7 @@ export class RegionBlock extends MegaBlock {
      * body. One pasted text block is the engine's inline paste (declined). Blocks without text (an image…) are dropped.
      * @param {import('../../utils/extensions.js').PasteBlock[]} blocks
      * @param {{ offset: number }} ctx
+     * @returns {{ block: RegionBlock, offset: number } | null}
      */
     acceptPaste(blocks, ctx) {
         if (!blocks?.length || (blocks.length === 1 && !blocks[0].children?.length)) return null;
@@ -548,10 +549,11 @@ export class RegionBlock extends MegaBlock {
      *   else `title`, else `fields.title`: it is never stored in the `fields` map. Invalid values for declared fields are
      *   dropped (warning); unknown fields are kept as-is.
      * @param {string|null} [parentId=null] @param {number|null} [index=null]
+     * @returns {RegionBlock}
      */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const config = this.config;
-        const node = nabu.tree.createNode(/** @type {any} */ (parentId || undefined), index ?? undefined);
+        const node = nabu.tree.createNode(/** @type {import('loro-crdt').TreeID | undefined} */ (parentId || undefined), index ?? undefined);
         const data = /** @type {any} */ (node.data);
         const regionType = typeof props.regionType === 'string' && props.regionType ? props.regionType : config.defaultType;
         data.set("type", "region");

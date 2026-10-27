@@ -148,15 +148,15 @@ export class Heading extends TextBlock {
         return { type: 'heading', props: { level: rule?.props?.level ?? 1 }, delta, partial: false };
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index ?? undefined);
+        const node = nabu.tree.createNode(/** @type {import('loro-crdt').TreeID | undefined} */ (parentId || undefined), index ?? undefined);
         node.data.set("type", "heading");
         node.data.set("level", props.level || 1);
         const container = node.data.setContainer("text", new LoroText());
         if (props.text) container.insert(0, props.text);
         if (props.delta) container.applyDelta([...props.delta]);
-        const block = new Heading(nabu, node);
+        const block = new Heading(nabu, /** @type {HeadingNode} */ (node));
         return block;
     }
 }

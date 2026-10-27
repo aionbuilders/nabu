@@ -40,7 +40,7 @@ export const onBeforeInput = (nabu, event, block) => {
     
     const level = match[1].length;
     
-    if (block.type === "heading" && block.level === level) return CONTINUE;
+    if (block.type === "heading" && /** @type {Heading} */ (block).level === level) return CONTINUE;
     
     const blockId = block.node.id.toString();
 

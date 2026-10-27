@@ -105,7 +105,7 @@ export class ImageBlock extends MediaBlock {
         return { type: 'image', props: { alt: m[1], ref: m[2] }, partial: false };
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = MediaBlock.createNode(nabu, 'image', props, parentId, index);
         const block = new ImageBlock(nabu, /** @type {ImageNode} */ (/** @type {unknown} */ (node)));

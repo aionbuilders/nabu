@@ -1,6 +1,9 @@
 import { ASSETS_STORE, DOC_REFS_STORE, withStore, openDB } from './indexeddb.js';
 
-/** @import { AssetStore, AssetMeta } from '../files/store.js' */
+/**
+ * @typedef {import('../files/store.js').AssetStore} AssetStore
+ * @typedef {import('../files/store.js').AssetMeta} AssetMeta
+ */
 
 /**
  * The {@link AssetStore} of a persisted editor (ADR 014 §3.3): database `nabu`, object store `assets` (`{ hash, blob, mime,

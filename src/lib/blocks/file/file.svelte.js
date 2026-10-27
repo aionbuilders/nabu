@@ -68,7 +68,7 @@ export class FileBlock extends MediaBlock {
         return { type: 'file', props: { ref: href, name }, partial: false };
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = MediaBlock.createNode(nabu, 'file', props, parentId, index);
         const block = new FileBlock(nabu, /** @type {any} */ (node));

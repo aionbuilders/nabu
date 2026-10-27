@@ -861,7 +861,7 @@ export class TextBehavior {
         return this.block.ascend("onSplit", null, { offset: from, delta: this.container.sliceDelta(from, to)});
     }
     
-    /** @param {string} markName @param {any} value @param {ReturnType<TextBehavior["getSelection"]>} sel */
+    /** @param {string} markName @param {any} value @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel */
     applyMark(markName, value, sel) {
         if (!sel || sel.isCollapsed) return;
         // Model guard: an unsafe link (javascript:…) never enters the document through any mark API.
@@ -872,13 +872,13 @@ export class TextBehavior {
         this.container.mark({ start: sel.from, end: sel.to }, markName, value);
     }
 
-    /** @param {string} markName @param {ReturnType<TextBehavior["getSelection"]>} sel */
+    /** @param {string} markName @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel */
     removeMark(markName, sel) {
         if (!sel || sel.isCollapsed) return;
         this.container.unmark({ start: sel.from, end: sel.to }, markName);
     }
 
-    /** @param {string} markName @param {ReturnType<TextBehavior["getSelection"]>} sel */
+    /** @param {string} markName @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel */
     isMarkActive(markName, sel) {
         if (!sel || sel.isCollapsed) return false;
         const delta = this.container.toDelta();
@@ -894,7 +894,7 @@ export class TextBehavior {
         return true;
     }
 
-    /** @param {string} markName @param {any} value @param {ReturnType<TextBehavior["getSelection"]>} sel */
+    /** @param {string} markName @param {any} value @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel */
     toggleMark(markName, value, sel) {
         if (!sel || sel.isCollapsed) return;
         if (this.isMarkActive(markName, sel)) {
@@ -926,8 +926,8 @@ export class TextBehavior {
 
     /**
      * Serializes a (partial) range of this block's text as a PasteBlock.
-     * @param {{ from?: number, to?: number, partial?: 'start'|'end'|'both'|false, props?: Record<string,any> }} [context]
-     * @returns {import('../utils/extensions.js').PasteBlock}
+     * @param {{ from?: number, to?: number | null, partial?: 'start'|'end'|'both'|false, props?: Record<string,any> }} [context]
+     * @returns {import('../../utils/extensions.js').PasteBlock}
      */
     toClipboardBlock({ from = 0, to = null, partial = false, props = {} } = {}) {
         const end = to ?? this.container.length;

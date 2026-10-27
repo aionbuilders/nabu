@@ -71,7 +71,7 @@ export class VideoBlock extends MediaBlock {
         };
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = MediaBlock.createNode(nabu, 'video', props, parentId, index);
         const block = new VideoBlock(nabu, /** @type {any} */ (node));

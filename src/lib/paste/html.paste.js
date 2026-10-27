@@ -351,7 +351,7 @@ function buildRuleset(nabu) {
     /** @type {Array<{ BlockClass: any, rule: any }>} */
     const ruleset = [];
     for (const [, BlockClass] of nabu.registry) {
-        const rules = BlockClass.htmlRules;
+        const rules = /** @type {{ htmlRules?: unknown }} */ (BlockClass).htmlRules;
         if (!Array.isArray(rules)) continue;
         for (const rule of rules) ruleset.push({ BlockClass, rule });
     }

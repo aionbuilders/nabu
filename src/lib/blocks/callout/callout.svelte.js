@@ -174,9 +174,9 @@ export class CalloutBlock extends TextBlock {
         return { type: 'callout', props: { variant }, delta, partial: false };
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(/** @type {any} */ (parentId || undefined), index ?? undefined);
+        const node = nabu.tree.createNode(/** @type {import('loro-crdt').TreeID | undefined} */ (parentId || undefined), index ?? undefined);
         /** @type {any} */ (node.data).set('type', 'callout');
         const variant = CALLOUT_VARIANTS.includes(props.variant) ? props.variant : 'note';
         /** @type {any} */ (node.data).set('variant', variant);

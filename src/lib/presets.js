@@ -1,3 +1,7 @@
+/**
+ * @import { Extension } from './utils/extensions.js';
+ */
+
 import { Nabu } from './blocks/nabu.svelte.js';
 import { ParagraphExtension } from './blocks/paragraph/index.js';
 import { HeadingExtension } from './blocks/heading/index.js';
@@ -54,17 +58,17 @@ export const tabDefaultFor = (preset) => TAB_DEFAULTS.get(preset) ?? 'focus';
 // ---------------------------------------------------------------------------
 
 /**
+ * Options of the editor factories: every `NabuInit` option (`files`, `placeholders`, `snapshot`, `keymap`, `tab`, `lang`…, forwarded to
+ * `Nabu`) plus the `preset` the factory starts from. `extensions` are appended to the preset's.
+ * - `preset`: base extensions (default: `FullPreset`, or the preset of the named factory).
+ * - `tab`: default by preset: Minimal / Text `'focus'`, Document / Full `'stay'`, a custom preset array `'focus'`.
+ * @typedef {Omit<import('./blocks/nabu.svelte.js').NabuInit, 'extensions'> & { preset?: Extension[], extensions?: Extension[] }} EditorOptions
+ */
+
+/**
  * Create a Nabu editor instance from a preset and optional extra extensions.
  *
- * @param {object} [options]
- * @param {typeof ParagraphExtension[]} [options.preset] - Base preset (default: FullPreset)
- * @param {typeof ParagraphExtension[]} [options.extensions] - Extra extensions to append
- * @param {import('./files/files.svelte.js').FilesConfig} [options.files] - File/upload config (forwarded to Nabu)
- * @param {import('./utils/placeholders.js').PlaceholdersOption} [options.placeholders] - Forwarded to Nabu
- * @param {boolean} [options.spellcheck] - Forwarded to Nabu (default `true`)
- * @param {string} [options.lang] - Forwarded to Nabu (BCP 47 tag of the content)
- * @param {'focus' | 'stay' | 'indent'} [options.tab] - What Tab does in a plain text block (forwarded to Nabu). Default by preset:
- *   Minimal / Text `'focus'`, Document / Full `'stay'` (the default preset is Full), a custom preset array `'focus'`.
+ * @param {EditorOptions} [options]
  * @returns {Nabu}
  *
  * @example
@@ -82,28 +86,28 @@ export function createEditor({ preset = FullPreset, extensions = [], ...init } =
 
 /**
  * Paragraph-only editor. Ideal as a simple textarea replacement.
- * @param {{ extensions?: typeof ParagraphExtension[] }} [options]
+ * @param {EditorOptions} [options]  every `NabuInit` option (`files`, `snapshot`, `keymap`…) and extra `extensions`
  */
 export const createMinimalEditor = (options = {}) =>
     createEditor({ preset: MinimalPreset, ...options });
 
 /**
  * Paragraph + rich text marks. Good for comment boxes, descriptions.
- * @param {{ extensions?: typeof ParagraphExtension[] }} [options]
+ * @param {EditorOptions} [options]  every `NabuInit` option (`files`, `snapshot`, `keymap`…) and extra `extensions`
  */
 export const createTextEditor = (options = {}) =>
     createEditor({ preset: TextPreset, ...options });
 
 /**
  * Paragraph + headings + rich text. Good for articles, notes.
- * @param {{ extensions?: typeof ParagraphExtension[] }} [options]
+ * @param {EditorOptions} [options]  every `NabuInit` option (`files`, `snapshot`, `keymap`…) and extra `extensions`
  */
 export const createDocumentEditor = (options = {}) =>
     createEditor({ preset: DocumentPreset, ...options });
 
 /**
  * All built-in blocks + rich text. The full Nabu experience.
- * @param {{ extensions?: typeof ParagraphExtension[] }} [options]
+ * @param {EditorOptions} [options]  every `NabuInit` option (`files`, `snapshot`, `keymap`…) and extra `extensions`
  */
 export const createFullEditor = (options = {}) =>
     createEditor({ preset: FullPreset, ...options });

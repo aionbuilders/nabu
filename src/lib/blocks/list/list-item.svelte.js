@@ -13,7 +13,7 @@ import { renderItem, adjacentRun, markerWidth } from "./markdown.js";
  */
 
 /**
- * @typedef {NabuNode<{type: "list-item", text: LoroText}>} ListItemNode
+ * @typedef {NabuNode<{type: "list-item", text: LoroText, checked?: boolean}>} ListItemNode
  */
 
 /** What the list renderers (markdown.js) need from outside: the inline serializer and the `start` normalizer. */
@@ -27,7 +27,7 @@ const markdownEnv = { toMarkdown: (/** @type {any[]} */ delta) => deltaToMarkdow
  */
 export function indentListItem(item) {
     const node = /** @type {import("../nabu.svelte.js").NabuNode} */ (item.node);
-    const movable = !!node.index() && node.parent()?.children()?.[node.index() - 1]?.data.get('type') === 'list-item';
+    const movable = !!node.index() && node.parent()?.children()?.[/** @type {number} */ (node.index()) - 1]?.data.get('type') === 'list-item';
     if (movable) moveItems(item.nabu, [node], false);
     return movable;
 }
@@ -144,6 +144,7 @@ export class ListItem extends MegaBlock {
 
     selection = $derived(this.behavior.selection);
 
+    // @ts-ignore — `super.positions`: Svelte compiles the parent's `$derived` field to a prototype accessor, which TS sees as a field
     positions = $derived(this.behavior.positions + super.positions);
 
     wordCount = $derived((this.behavior?.wordCount ?? 0) + this.children.reduce((sum, c) => sum + (c.wordCount ?? 0), 0));
@@ -208,7 +209,7 @@ export class ListItem extends MegaBlock {
      * A list item cannot simply change type where it stands (a list only holds items): it leaves its list,
      * which is split around it, and keeps its text, marks and caret. See convert.js.
      * @param {string} newType
-     * @param {Object} [props={}]
+     * @param {Record<string, any>} [props={}]
      */
     retype(newType, props = {}) {
         retypeItem(this.nabu, /** @type {NabuNode} */ (this.node), newType, props);
@@ -315,15 +316,15 @@ export class ListItem extends MegaBlock {
         return result;
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index ?? undefined);
+        const node = nabu.tree.createNode(/** @type {import('loro-crdt').TreeID | undefined} */ (parentId || undefined), index ?? undefined);
         node.data.set("type", "list-item");
         const container = node.data.setContainer("text", new LoroText());
         if (props.text) container.insert(0, props.text);
         if (props.delta) container.applyDelta([...props.delta]);
         if (props.checked !== undefined) /** @type {any} */ (node.data).set('checked', !!props.checked);
-        const block = new ListItem(nabu, node);
+        const block = new ListItem(nabu, /** @type {ListItemNode} */ (node));
         return block;
     }
 }

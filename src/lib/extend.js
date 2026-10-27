@@ -59,11 +59,12 @@ export { escapeHtml, escapeAttr } from './utils/html.js';
 
 /**
  * A node of the document tree: `NabuNode<{ type: 'x', … }>`.
- * @template {Object<string, any>} [T={}]
+ * @template {Object<string, any>} [T=Record<string, any>]
  * @typedef {import('./blocks/nabu.svelte.js').NabuNode<T>} NabuNode
  */
 /** @typedef {import('./utils/extensions.js').ExtensionInit} ExtensionInit */
 /** @typedef {import('./utils/extensions.js').ExtensionHooks} ExtensionHooks */
+/** @typedef {import('./utils/extensions.js').SplitData} SplitData What the `onSplit` hook receives: the caret offset and the tail of the text. */
 /** @typedef {import('./utils/extensions.js').InputRule} InputRule */
 /** @typedef {import('./utils/extensions.js').PasteBlock} PasteBlock */
 /** @typedef {import('./utils/extensions.js').PasteFragment} PasteFragment */

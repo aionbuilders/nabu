@@ -6,7 +6,8 @@
  * batch depend on the earlier ones. All the moves belong to ONE transaction (one undo step); the
  * selection is captured before and restored after.
  *
- * @import { Nabu, NabuNode, Block } from "../nabu.svelte.js";
+ * @import { Nabu, NabuNode } from "../nabu.svelte.js";
+ * @import { Block } from "../block.svelte.js";
  */
 
 import { List } from "./list.svelte.js";
@@ -70,7 +71,7 @@ export function indentNode(nabu, item) {
     const previous = parentList && kids(parentList)[index - 1];
     if (!previous || typeOf(previous) !== "list-item") return false;
 
-    nabu.tree.move(item.id.toString(), sublistForType(nabu, previous, listTypeOf(parentList)).id.toString());
+    nabu.tree.move(item.id, sublistForType(nabu, previous, listTypeOf(parentList)).id);
     return true;
 }
 
@@ -93,11 +94,11 @@ export function unindentNode(nabu, item) {
     const followers = kids(parentList).slice((item.index() ?? 0) + 1);
     const laterSublists = kids(parentItem).slice((parentList.index() ?? 0) + 1);
     if (followers.length) {
-        const sublistId = sublistForType(nabu, item, listTypeOf(parentList)).id.toString();
-        for (const follower of followers) nabu.tree.move(follower.id.toString(), sublistId);
+        const sublistId = sublistForType(nabu, item, listTypeOf(parentList)).id;
+        for (const follower of followers) nabu.tree.move(follower.id, sublistId);
     }
-    for (const later of laterSublists) nabu.tree.move(later.id.toString(), item.id.toString());
-    nabu.tree.move(item.id.toString(), targetList.id.toString(), (parentItem.index() ?? 0) + 1);
+    for (const later of laterSublists) nabu.tree.move(later.id, item.id);
+    nabu.tree.move(item.id, targetList.id, (parentItem.index() ?? 0) + 1);
     dropIfEmpty(nabu, parentList);
     return true;
 }

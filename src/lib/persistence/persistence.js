@@ -113,7 +113,7 @@ export async function createPersistedEditor({
 	onRecover,
 	history,
 	...init
-} = {}) {
+} = /** @type {any} */ ({})) {
 	const historyConfig = parseHistory(history); // a typo in `history` must fail loudly, before anything is read
 	const maxWaitMs = resolveMaxWait(maxWait, debounce);
 	const conn = new IDBConnection();

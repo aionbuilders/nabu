@@ -27,7 +27,13 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 */
 
 /**
-* @template {Object<string, any>} [T={}]
+* The data map of a block's tree node: a `type` plus the block's own (open-ended) properties. Block classes narrow it
+* with their own node typedef (`NabuNode<{text: LoroText}>`).
+* @typedef {{type: string} & Record<string, any>} NabuNodeData
+*/
+
+/**
+* @template {Object<string, any>} [T=Record<string, any>]
 * @typedef {LoroTreeNode<{type: string} & T>} NabuNode
 */
 
@@ -169,7 +175,7 @@ export class Nabu {
         }
         
         this.selection = new NabuSelection(this);
-        this.tree = /** @type {LoroTree<Record<string, NabuNode>>} */ (this.doc.getTree("blocks"));
+        this.tree = /** @type {LoroTree<NabuNodeData>} */ (this.doc.getTree("blocks"));
         this.content = this.doc.getMap("content");
 
         // Initialize Undo/Redo Manager
@@ -229,11 +235,11 @@ export class Nabu {
                 if (ext.block && ext.defaultBlock) this.defaultBlockType = ext.name;
                 if (ext.component) this.components.set(ext.name, ext.component);
                 if (ext.hooks) {
-                    for (const [hookName, hookFn] of Object.entries(ext.hooks)) {
+                    for (const [hookName, hookFn] of /** @type {[string, (nabu: Nabu, ...args: any[]) => any][]} */ (Object.entries(ext.hooks))) {
                         if (!this.hooks.has(hookName)) {
                             this.hooks.set(hookName, []);
                         }
-                        this.hooks.get(hookName).push(hookFn);
+                        /** @type {Array<(nabu: Nabu, ...args: any[]) => any>} */ (this.hooks.get(hookName)).push(hookFn);
                         this.hookOwners.set(hookFn, ext.name);
                     }
                 }
@@ -316,13 +322,15 @@ export class Nabu {
                     e.diff.diff.forEach(action => {
                         if (action.action === 'delete') removed = true;
                         if (action.action === 'create' || action.action === 'move' || action.action === 'delete') {
-                            if (action.parent) parents.add(action.parent.toString());
+                            // `parent` is set on create / move, `oldParent` on move / delete (a TreeDiffItem is a union of the three)
+                            const { parent, oldParent } = /** @type {{ parent?: string, oldParent?: string }} */ (action);
+                            if (parent) parents.add(parent.toString());
                             else rootsDirty = true;
 
-                            if (action.oldParent) parents.add(action.oldParent.toString());
+                            if (oldParent) parents.add(oldParent.toString());
                             // A node that LEAVES the root for a container has no `oldParent` (the root is no node): the
                             // root list must be refreshed too, else the old element stays rendered next to the new one.
-                            else if (action.action === 'move' && action.parent) rootsDirty = true;
+                            else if (action.action === 'move' && parent) rootsDirty = true;
                         }
                     })
                 }
@@ -345,7 +353,7 @@ export class Nabu {
             if (rootsDirty) this.updateRoots(retyped);
             for (const parentId of parents) {
                 // A block retyped into a leaf (no children) in the same transaction has no updateChildren().
-                this.blocks.get(parentId)?.updateChildren?.(retyped);
+                /** @type {{ updateChildren?: (retyped?: Set<string>) => void } | undefined} */ (this.blocks.get(parentId))?.updateChildren?.(retyped);
             }
         });
         
@@ -384,6 +392,10 @@ export class Nabu {
      */
     systems = new SvelteMap();
     
+    /**
+     * Extension hooks by name, in registration order (see `ExtensionHooks`).
+     * @type {Map<string, Array<(nabu: Nabu, ...args: any[]) => any>>}
+     */
     hooks = new Map();
 
     /**
@@ -596,6 +608,11 @@ export class Nabu {
         }
     }
 
+    /**
+     * Run the `hookName` hooks of every extension, in order, until one returns `BREAK`. Each is called as `hook(nabu, ...args)`.
+     * @param {string} hookName
+     * @param {...any} args
+     */
     trigger(hookName, ...args) {
         const hooks = this.hooks.get(hookName) || [];
         for (const hook of hooks) {
@@ -2196,7 +2213,7 @@ export class Nabu {
      * Replace the entire document with a `serialize('json')` export. An export of a version this editor does not know
      * is refused with a warning (the document is left untouched), like the clipboard does; a block type that is not
      * registered is degraded to the default text block (`degradeUnknownBlocks`), nothing is dropped.
-     * @param {{version?: string | number, blocks: any[], assets?: Record<string, any>} | string} json
+     * @param {{version?: string | number, blocks: Parameters<typeof import('../utils/extensions.js').jsonToPasteBlocks>[0], assets?: Record<string, import('../files/files.svelte.js').EmbeddedAsset>} | string} json
      * @returns {Promise<void>}
      */
     async importJSON(json) {

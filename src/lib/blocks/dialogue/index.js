@@ -24,7 +24,7 @@ export function createDialogueExtension({ dash = '–' } = {}) {
         block: BlockClass,
         component: DialogueComponent,
         hooks: {
-            /** @param {Nabu} nabu @param {Dialogue} block @param {Event} event @param {{offset: number, delta: import('loro-crdt').Delta<string>}} data */
+            /** @param {Nabu} nabu @param {Dialogue} block @param {Event | null} event @param {import('../../utils/extensions.js').SplitData} data */
             onSplit: (nabu, block, event, data) => {
                 const { offset, delta } = data;
 

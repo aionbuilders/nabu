@@ -131,7 +131,7 @@ export class List extends MegaBlock {
             "list-item",
             { delta },
             this.node.id.toString(), // Le parent est la liste actuelle
-            currentIndex + 1
+            /** @type {number} */ (currentIndex) + 1
         );
 
         // 3.1. On transfère TOUS les enfants du sourceItem vers le newItem
@@ -249,14 +249,14 @@ export class List extends MegaBlock {
         return { type: 'list', props: start === null ? { listType } : { listType, start }, children, partial: false };
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Object} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
     static create(nabu, type, props = {}, parentId = null, index = null) {
-        const node = nabu.tree.createNode(parentId || undefined, index ?? undefined);
+        const node = nabu.tree.createNode(/** @type {import('loro-crdt').TreeID | undefined} */ (parentId || undefined), index ?? undefined);
         node.data.set("type", "list");
         node.data.set("listType", props.listType || "bullet");
         const start = listStart(props.listType, /** @type {any} */ (props).start);
         if (start !== null) /** @type {any} */ (node.data).set("start", start);
-        const block = new List(nabu, node);
+        const block = new List(nabu, /** @type {ListNode} */ (node));
         return block;
     }
 }

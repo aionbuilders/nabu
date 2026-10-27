@@ -5,7 +5,7 @@
 /**
  * @typedef {Object} PasteBlock
  * @property {string} type
- * @property {'start' | 'end' | 'both' | false} partial
+ * @property {'start' | 'end' | 'both' | false} [partial] absent = false (a whole block)
  * @property {Record<string, any>} [props]
  * @property {import('loro-crdt').Delta<string>[]} [delta]
  * @property {PasteBlock[]} [children]
@@ -16,7 +16,7 @@
  * @property {boolean} [external] the content comes from outside the editor (the HTML of a web page, Docs…) rather than from
  *   Nabu itself: `files.importRemote` applies to its remote media URLs
  * @property {PasteBlock[]} blocks
- * @property {Record<string, { mime: string, name: string, size: number, data: string }>} [assets] bytes (base64) of the
+ * @property {Record<string, import('../files/files.svelte.js').EmbeddedAsset>} [assets] bytes (base64) of the
  *   `nabu-asset:` refs used by `blocks` (see docs/design/clipboard-format.md)
  */
 
@@ -59,18 +59,33 @@
  */
 
 /**
+ * What `onSplit` receives besides the block: where the text is cut, and the tail that moves to the new block.
+ * @typedef {Object} SplitData
+ * @property {number} offset  caret offset in the block's text
+ * @property {import('loro-crdt').Delta<string>[]} delta  the text from `offset` to the end, as a Loro delta
+ */
+
+/**
+ * The hooks an extension can register (`ExtensionInit.hooks`). A hook returns `nabu.BREAK` (or, for `onSplit`, an object)
+ * to stop the engine from going on; the others return nothing. Any other name is a custom hook, run with `nabu.trigger(name, ...args)`.
+ * Declared as methods, so a handler may narrow the block parameter (`(nabu, block: Paragraph) => ...`).
+ *
+ * `onBlockCreate`, `onBlockDelete`, `onBlockUpdate`, `onAfterTransaction` and `onInput` are declared for forward compatibility:
+ * the engine does not call them yet.
  * @typedef {{
- * onInit: function(Nabu): void,
- * onBlockCreate: function(Nabu, Block): void,
- * onBlockDelete: function(Nabu, Block): void,
- * onBlockUpdate: function(Nabu, Block): void,
- * onBeforeTransaction: function(Nabu, Array<{type: string, block: Block}>): void,
- * onAfterTransaction: function(Nabu, Array<{type: string, block: Block}>): void,
- * onSplit: function(Nabu, Block, Event, {offset: number, delta: import('loro-crdt').Delta<string>}): {block: Block},
- * onBeforeInput: function(Nabu, InputEvent, Block): void,
- * onBeforeMerge: function(Nabu, Block, Block): symbol | void,
- * onInput: function(Nabu, InputEvent, Block): void,
- * } & Object<string, function>} ExtensionHooks
+ * onInit(nabu: Nabu): void,
+ * onBlockCreate(nabu: Nabu, block: Block): void,
+ * onBlockDelete(nabu: Nabu, block: Block): void,
+ * onBlockUpdate(nabu: Nabu, block: Block): void,
+ * onBeforeTransaction(nabu: Nabu, ...args: any[]): void,
+ * onAfterTransaction(nabu: Nabu, ...args: any[]): void,
+ * onSplit(nabu: Nabu, block: Block, event: Event | null, data: SplitData): { block: Block } | void,
+ * onBeforeInput(nabu: Nabu, event: InputEvent, block: Block): symbol | boolean | void,
+ * onKeyDown(nabu: Nabu, event: KeyboardEvent, block: Block): symbol | boolean | void,
+ * onBeforeMerge(nabu: Nabu, survivor: Block, victim: Block): symbol | void,
+ * onInput(nabu: Nabu, event: InputEvent, block: Block): void,
+ * [hook: string]: (nabu: Nabu, ...args: any[]) => any,
+ * }} ExtensionHooks
  */
 
 /**

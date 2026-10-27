@@ -190,7 +190,7 @@ export class SvelteSelection {
                 isCollapsed: this.raw.isCollapsed,
                 rangeCount: this.raw.rangeCount,
                 type: this.raw.type,
-                direction: this.raw.direction || 'none',
+                direction: /** @type {"forward" | "backward" | "none"} */ (this.raw.direction || 'none'),
                 text,
                 html
             };
@@ -505,16 +505,17 @@ export class SvelteSelection {
     #observedElements = new Set();
     
     /** @type {number?} */
+    /** @type {ReturnType<typeof setTimeout> | null} */
     #debounceTimer = null;
     
     /**
     * Observe un élément contenteditable pour les mutations DOM qui peuvent
     * affecter la position du caret sans déclencher selectionchange
     * 
-    * @param {Element} element - L'élément contenteditable à observer
-    * @param {Object} options - Options d'observation
-    * @param {number} options.debounceMs - Délai de debounce en ms (défaut: 16ms = ~1 frame)
-    * @param {boolean} options.observeAttributes - Observer les changements d'attributs (défaut: false)
+    * @param {HTMLElement} element - L'élément contenteditable à observer
+    * @param {Object} [options] - Options d'observation
+    * @param {number} [options.debounceMs] - Délai de debounce en ms (défaut: 16ms = ~1 frame)
+    * @param {boolean} [options.observeAttributes] - Observer les changements d'attributs (défaut: false)
     * @returns {boolean} True si l'observation a été configurée avec succès
     */
     observe = (element, options = {}) => {
@@ -538,7 +539,7 @@ export class SvelteSelection {
                         if (mutation.type === 'attributes') {
                             const attr = mutation.attributeName;
                             // Ne considérer que les attributs qui peuvent affecter le layout/contenu
-                            return ['class', 'style', 'contenteditable'].includes(attr);
+                            return ['class', 'style', 'contenteditable'].includes(/** @type {string} */ (attr));
                         }
                         
                         // Toujours considérer les changements de contenu
@@ -582,7 +583,7 @@ export class SvelteSelection {
         if (this.#observedElements.size === 0 && this.#mutationObserver) {
             this.#mutationObserver.disconnect();
             this.#mutationObserver = null;
-            clearTimeout(this.#debounceTimer);
+            clearTimeout(this.#debounceTimer ?? undefined);
             this.#debounceTimer = null;
         }
         
@@ -599,7 +600,7 @@ export class SvelteSelection {
         }
         
         this.#observedElements.clear();
-        clearTimeout(this.#debounceTimer);
+        clearTimeout(this.#debounceTimer ?? undefined);
         this.#debounceTimer = null;
     };
     
