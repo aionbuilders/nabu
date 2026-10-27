@@ -142,12 +142,20 @@ export class SvelteSelection {
         }).filter(rect => rect !== null);
     });
     
+    /**
+     * Whether the live DOM selection is one this wrapper reflects. A subclass bound to a part of the page (an editor's own
+     * root) overrides it: a selection that is none of its business is NOT mirrored, the wrapper reads as "no selection".
+     * @param {Selection} raw
+     * @returns {boolean}
+     */
+    reflects(raw) { return true; }
+
     // Méthode privée pour mettre à jour la sélection
     #updateSelection = () => {
         try {
             this.raw = window.getSelection();
             
-            if (!this.raw) {
+            if (!this.raw || !this.reflects(this.raw)) {
                 this.#sel = null;
                 this.#ranges = [];
                 return;
@@ -228,7 +236,9 @@ export class SvelteSelection {
         if (typeof window === 'undefined' || !window.getSelection) return false;
         const raw = window.getSelection();
         const cur = this.#sel;
-        if (!raw || raw.rangeCount === 0) {
+        if (raw && !this.reflects(raw)) {
+            if (!cur) return false; // already "no selection"
+        } else if (!raw || raw.rangeCount === 0) {
             if (!cur || cur.rangeCount === 0) return false;
         } else if (cur && cur.rangeCount === raw.rangeCount && cur.type === raw.type) {
             const range = raw.getRangeAt(0);

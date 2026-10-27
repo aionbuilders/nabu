@@ -85,7 +85,8 @@ export function makeEndpoint(block, offset, role, withCursors = true) {
  */
 function locate(nabu, node, offset) {
     const el = /** @type {Element | null} */ (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
-    if (!el || el.closest('[data-nabu-ui]')) return null;
+    if (!el || nabu.selection.closestOwn(el, '[data-nabu-ui]')) return null;
+    if (!nabu.selection.owns(node)) return null; // a point of another editor (or of none) is not a position in THIS model
     const id = el.closest('[data-block-id]')?.getAttribute('data-block-id');
     const block = id ? nabu.blocks.get(id) : null;
     if (!block) return null;
@@ -106,6 +107,7 @@ export function livePoints(nabu) {
     if (typeof window === 'undefined' || !window.getSelection) return null;
     const live = window.getSelection();
     if (!live || live.rangeCount === 0 || !live.anchorNode || !live.focusNode) return null;
+    if (nabu.selection.scope(live) !== 'mine') return null;
     const anchor = locate(nabu, live.anchorNode, live.anchorOffset);
     const focus = locate(nabu, live.focusNode, live.focusOffset);
     return anchor && focus ? { anchor, focus } : null;
@@ -141,6 +143,7 @@ export function captureSelection(nabu) {
     if (typeof window === 'undefined' || !window.getSelection) return null;
     const live = window.getSelection();
     if (!live || live.rangeCount === 0 || !live.anchorNode || !live.focusNode) return null;
+    if (nabu.selection.scope(live) !== 'mine') return null;
     const a = locate(nabu, live.anchorNode, live.anchorOffset);
     const f = locate(nabu, live.focusNode, live.focusOffset);
     if (!a || !f) return null;

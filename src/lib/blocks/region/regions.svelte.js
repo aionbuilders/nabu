@@ -125,21 +125,43 @@ export class Regions {
      */
     start() {
         if (this.#stopFocus || typeof document === 'undefined') return;
+        // MY root only: the focus in another editor of the page (a neighbour, a nested one) is not "the focus is in this editor".
         /** @param {EventTarget | null} target */
-        const inEditor = (target) => target instanceof Element && !!target.closest('[data-nabu-root]');
-        const onIn = (/** @type {FocusEvent} */ e) => { this.#focused = inEditor(e.target); };
-        const onOut = (/** @type {FocusEvent} */ e) => { this.#focused = inEditor(e.relatedTarget); }; // no related target: the focus left the page or went nowhere
+        const inEditor = (target) => target instanceof Node && this.#nabu.selection.owns(target);
+        const onIn = (/** @type {FocusEvent} */ e) => this.#setFocused(inEditor(e.target));
+        const onOut = (/** @type {FocusEvent} */ e) => this.#setFocused(inEditor(e.relatedTarget)); // no related target: the focus left the page or went nowhere
         document.addEventListener('focusin', onIn);
         document.addEventListener('focusout', onOut);
         this.#focused = inEditor(document.activeElement);
         this.#stopFocus = () => { document.removeEventListener('focusin', onIn); document.removeEventListener('focusout', onOut); };
     }
 
+    /** The latest value asked of {@link Regions#setFocused}, written by the microtask that is already scheduled (null: none). @type {boolean | null} */
+    #focusWanted = null;
+
+    /**
+     * Write `#focused` from a focus event, DEFERRED to a microtask. The browser fires `focusout` synchronously when a focused node
+     * is removed from the DOM, i.e. possibly in the middle of Svelte's own work (an effect teardown, a block being destroyed): a
+     * `$state` write there throws `state_unsafe_mutation`. The value is decided now (the event's targets), only the write waits;
+     * the last value asked wins, so an out-then-in of one focus move ends on "in".
+     * @param {boolean} value
+     */
+    #setFocused(value) {
+        const scheduled = this.#focusWanted !== null;
+        this.#focusWanted = value;
+        if (scheduled) return;
+        queueMicrotask(() => {
+            const wanted = this.#focusWanted;
+            this.#focusWanted = null;
+            if (wanted !== null && wanted !== this.#focused) this.#focused = wanted;
+        });
+    }
+
     /** System hook: stops following the focus. */
     stop() {
         this.#stopFocus?.();
         this.#stopFocus = null;
-        this.#focused = false;
+        this.#setFocused(false); // deferred as well: `stop` runs in an effect teardown
     }
 
     /**

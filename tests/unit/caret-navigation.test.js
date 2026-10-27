@@ -83,6 +83,7 @@ function render(engine, spec) {
     root.appendChild(el);
   });
   document.body.appendChild(root);
+  engine.selection.attachRoot(root); // the engine's own root (what Nabu.svelte does on mount)
   return { root, texts };
 }
 const caret = (node, offset) => window.getSelection().setBaseAndExtent(node, offset, node, offset);

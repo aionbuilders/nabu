@@ -15,6 +15,7 @@ import { normalizePlaceholders } from '../utils/placeholders.js';
 import { normalizeLang } from '../utils/spellcheck.js';
 import { resolveTabMode, handleTabKey, isModifierKey, DEFAULT_TAB_HINT } from '../utils/tab.js';
 import { moveBlocks } from './move.js';
+import { closestWithin } from '../utils/dom-scope.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset } from './undo-selection.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
@@ -149,7 +150,7 @@ export const isTransformInput = (e) => {
  * @property {Nabu['handleDrop']} handleDrop
  * @property {Nabu['dropAt']} dropAt Drop a `DataTransfer` at a position, as the drag and drop does.
  * @property {DropTarget | null} dropTarget The drop indicator being shown (reactive).
- * @property {{ normalize: NabuSelection['normalize'], scheduleRepair: NabuSelection['scheduleRepair'], repairAfterRemoval: NabuSelection['repairAfterRemoval'], placements: number }} selection The selection's own repair machinery.
+ * @property {{ normalize: NabuSelection['normalize'], scheduleRepair: NabuSelection['scheduleRepair'], repairAfterRemoval: NabuSelection['repairAfterRemoval'], placements: number, attachRoot: NabuSelection['attachRoot'], owns: NabuSelection['owns'], scope: NabuSelection['scope'], root: HTMLElement | null }} selection The selection's own repair machinery, and the engine's root element: `attachRoot(el)` (what `Nabu.svelte` calls on mount, it returns the detach function), `root`, `owns(node)` (inside MY root, not in a nested editor) and `scope()` ('mine' | 'outside' | 'foreign': whose business the live DOM selection is).
  */
 
 export class Nabu {
@@ -1895,7 +1896,7 @@ export class Nabu {
         const el = target && (target.nodeType === Node.ELEMENT_NODE ? /** @type {Element} */ (target) : target.parentElement);
         if (!root || !el || this.#composing) return false;
         if (el.closest('[data-nabu-root]') !== root) return false;
-        return !el.closest('[data-nabu-ui], input, textarea, select');
+        return !closestWithin(el, '[data-nabu-ui], input, textarea, select', root);
     }
 
     /**
@@ -2515,6 +2516,10 @@ export class Nabu {
                 scheduleRepair: selection.scheduleRepair.bind(selection),
                 repairAfterRemoval: selection.repairAfterRemoval.bind(selection),
                 get placements() { return selection.placements; },
+                attachRoot: selection.attachRoot.bind(selection),
+                owns: selection.owns.bind(selection),
+                scope: selection.scope.bind(selection),
+                get root() { return selection.root; },
             }),
         });
     }

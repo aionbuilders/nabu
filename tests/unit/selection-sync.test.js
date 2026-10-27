@@ -16,6 +16,8 @@ async function makeEditor() {
   await engine.commit();
   const [a, b] = engine.children;
   const root = document.createElement('div');
+  root.setAttribute('data-nabu-root', 'true');
+  engine.selection.attachRoot(root); // the engine's own root (what Nabu.svelte does on mount)
   const texts = {};
   for (const [blk, txt] of [[a, 'hello world'], [b, 'second']]) {
     const el = document.createElement('div');
@@ -137,11 +139,15 @@ describe('P-08 · selection.sync()', () => {
     engine.insert('paragraph', {});
     await engine.commit();
     const [a] = engine.children;
+    const root = document.createElement('div');
+    root.setAttribute('data-nabu-root', 'true');
+    engine.selection.attachRoot(root);
     const el = document.createElement('div');
     el.setAttribute('data-block-id', a.id);
     const ta = document.createTextNode('hello world');
     el.appendChild(ta);
-    document.body.appendChild(el);
+    root.appendChild(el);
+    document.body.appendChild(root);
 
     caret(ta, 5);
     engine.selection.sync();

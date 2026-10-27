@@ -9,6 +9,8 @@
  *  - A {@link DropTarget} is a position + what the drop will do (`kind`). It is what `nabu.dropTarget` exposes.
  */
 
+import { closestWithin } from './dom-scope.js';
+
 /**
  * @import { Nabu } from '../blocks/nabu.svelte.js';
  * @import { Block } from '../blocks/block.svelte.js';
@@ -214,7 +216,7 @@ const textLength = (block) => block.behaviors?.get('text')?.text?.length ?? 0;
  */
 function blockAtPoint(nabu, root, x, y) {
     const el = /** @type {Element | null} */ (document.elementFromPoint(x, y));
-    if (!el || !root.contains(el) || el.closest('[data-nabu-ui]')) return null;
+    if (!el || !root.contains(el) || closestWithin(el, '[data-nabu-ui]', root)) return null;
     const id = el.closest('[data-block-id]')?.getAttribute('data-block-id');
     return (id && nabu.blocks.get(id)) || null;
 }

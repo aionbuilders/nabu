@@ -641,7 +641,12 @@ export class CommandConfirmation {
         const blur = () => this.onBlur();
         const focusout = (/** @type {FocusEvent} */ e) => {
             const next = /** @type {any} */ (e.relatedTarget);
-            if (next?.closest?.('[data-nabu-root], [data-nabu-ui]')) return;
+            const selection = this.#nabu.selection;
+            // Focus leaving ANOTHER editor is none of my business; focus moving to my own root or UI (or to a UI island on the
+            // page, outside every editor) is not a blur. Moving to another editor IS one.
+            if (selection.kindOf(e.target instanceof Node ? e.target : null) === 'foreign') return;
+            const where = next instanceof Node ? selection.kindOf(next) : 'none';
+            if (where === 'mine' || (where === 'none' && next?.closest?.('[data-nabu-ui]'))) return;
             this.onBlur();
         };
         document.addEventListener('keyup', keyup, true);

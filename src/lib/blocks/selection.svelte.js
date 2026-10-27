@@ -1,6 +1,7 @@
 
 import { untrack } from "svelte";
 import { SvelteSelection } from "../utils/selection.svelte.js";
+import { closestWithin } from "../utils/dom-scope.js";
 
 /**
 * @import { Nabu } from "./nabu.svelte.js";
@@ -11,6 +12,91 @@ import { SvelteSelection } from "../utils/selection.svelte.js";
 export class NabuSelection extends SvelteSelection {
     /** How many times the editor itself placed the selection: lets a deferred fix-up tell that someone else already did. */
     placements = 0;
+
+    // ── Which part of the page is MINE ───────────────────────────────────────
+    // The DOM selection is a single, page-wide object: with several editors on a page every engine sees the caret of all the
+    // others. An engine only ever acts on the selection that lies in its OWN root (the `[data-nabu-root]` element that
+    // `Nabu.svelte` mounts and hands over with `attachRoot`). Three kinds of endpoint, for an engine:
+    //  - 'mine'    inside my root and not inside a NESTED editor (an editor in one of my UI islands is not mine);
+    //  - 'foreign' inside another editor's root (a neighbour, or a nested editor);
+    //  - 'none'    inside no editor at all (page text, a form field, the body).
+    // And three kinds of selection (see `scope`):
+    //  - 'mine'    at least one end is mine and no end is foreign: normalized, mirrored in the model, recorded for undo;
+    //  - 'outside' no end is mine and none is foreign: none of my business (not mirrored, not normalized, not recorded);
+    //  - 'foreign' (including a range that CROSSES roots, anchor in one editor and focus in another, e.g. a drag from one editor
+    //    to the next): left strictly alone by every engine. Nobody rewrites it, and each engine reads it as "no selection of
+    //    mine". The browser (or the user) is the only one to change it.
+
+    /**
+     * The root element of this engine (set by `Nabu.svelte` through {@link NabuSelection#attachRoot}); null while no editor is
+     * mounted. Not part of the stable contract.
+     * @type {HTMLElement | null}
+     */
+    root = null;
+
+    /**
+     * Declare the element that renders this engine (the `[data-nabu-root]` div). Returns the function that detaches it (only
+     * clears the reference when it is still this element: a remount may already have set the next one).
+     * @param {HTMLElement} el
+     * @returns {() => void}
+     */
+    attachRoot(el) {
+        this.root = el;
+        return () => { if (this.root === el) this.root = null; };
+    }
+
+    /**
+     * How `node` stands relative to this engine's root (see above). A node of a detached tree is 'none'.
+     * @param {Node | null | undefined} node
+     * @returns {'mine' | 'foreign' | 'none'}
+     */
+    kindOf(node) {
+        if (!node) return 'none';
+        const el = /** @type {Element | null} */ (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+        const root = el?.closest('[data-nabu-root]');
+        if (!root) return 'none';
+        return root === this.root ? 'mine' : 'foreign';
+    }
+
+    /** Whether `node` is inside this engine's own root (and not inside a nested editor). @param {Node | null | undefined} node */
+    owns(node) { return this.kindOf(node) === 'mine'; }
+
+    /**
+     * The nearest ancestor-or-self of `node` matching `selector` that lies inside MY root: a `[data-nabu-ui]` island or an inert
+     * block AROUND my root (this editor nested in a block of another one) is not a marker of my content.
+     * @param {Node | null | undefined} node @param {string} selector
+     * @returns {Element | null}
+     */
+    closestOwn(node, selector) { return closestWithin(node, selector, this.root); }
+
+    /**
+     * The scope of the live DOM selection for this engine (see above).
+     * @param {Selection | null} [live]  defaults to `window.getSelection()`
+     * @returns {'mine' | 'outside' | 'foreign'}
+     */
+    scope(live = typeof window !== 'undefined' && window.getSelection ? window.getSelection() : null) {
+        if (!live || live.rangeCount === 0) return 'outside';
+        const a = this.kindOf(live.anchorNode);
+        const f = this.kindOf(live.focusNode);
+        if (a === 'foreign' || f === 'foreign') return 'foreign';
+        return a === 'mine' || f === 'mine' ? 'mine' : 'outside';
+    }
+
+    /**
+     * The model mirrors a selection that is mine, and one in an editor's CHROME outside every root (its floating toolbar: the
+     * toolbar must not vanish because the user pressed on it). A selection in another editor, across roots, or in the page is
+     * not mirrored: the model reads "no selection of mine" (see `scope`).
+     * @param {Selection} raw
+     */
+    reflects(raw) {
+        const scope = this.scope(raw);
+        if (scope !== 'outside') return scope === 'mine';
+        const chrome = (/** @type {Node | null} */ node) => {
+            const el = /** @type {Element | null} */ (node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement));
+            return !!el?.closest('[data-nabu-ui]');
+        };
+        return chrome(raw.anchorNode) || chrome(raw.focusNode);
+    }
 
     /** @param {Nabu} nabu */
     constructor(nabu) {
@@ -54,6 +140,8 @@ export class NabuSelection extends SvelteSelection {
                     // (root handler, slash menu…): make sure they read the CURRENT caret,
                     // not the one from a not-yet-delivered `selectionchange`.
                     this.sync();
+                    // A key typed while the selection is in another editor (or nowhere in an editor) is none of my business.
+                    if (this.scope() !== 'mine') return;
                     this.nabu.captureUndoSelection?.(); // the selection an undo step pushed by this key gives back
                     if (e.isComposing || e.keyCode === 229) return; // IME composition: hands off the caret
                     // A caret left on a dead position by the PREVIOUS key is fixed (with that key's direction)
@@ -103,6 +191,7 @@ export class NabuSelection extends SvelteSelection {
                 // later (a task of its own): fix a dead landing as soon as the key is released, not a task later.
                 const onKeyup = (/** @type {KeyboardEvent} */ e) => {
                     this.sync();
+                    if (this.scope() !== 'mine') return;
                     if (e.isComposing || e.keyCode === 229) return;
                     this.#keyReleased = true; // the browser has moved the caret by now: "it did not move" means something
                     this.normalize();
@@ -111,9 +200,14 @@ export class NabuSelection extends SvelteSelection {
                     this.#arrowStart = null;
                     if (start && start.key === e.key) this.#openTrailingIfStuck(start);
                 };
-                const onMousedown = () => { this.nabu.storedMarks = null; this.#pendingDirection = null; this.#shiftAnchor = null; this.#vertical = null; this.#homeFocus = null; this.nabu.sealUndoEnd?.(); };
+                const onMousedown = (/** @type {MouseEvent} */ e) => {
+                    // A click inside another editor (a neighbour, a nested one) is none of my business; one on the page or on a
+                    // toolbar still ends what I was doing (stored marks, the "where did the last action end" mark).
+                    if (this.kindOf(/** @type {Node | null} */ (e.target instanceof Node ? e.target : null)) === 'foreign') return;
+                    this.nabu.storedMarks = null; this.#pendingDirection = null; this.#shiftAnchor = null; this.#vertical = null; this.#homeFocus = null; this.nabu.sealUndoEnd?.();
+                };
                 // Fires after every selection move, the user's and the editor's: the freshest "selection before the next change".
-                const onSelectionChange = () => this.nabu.captureUndoSelection?.();
+                const onSelectionChange = () => { if (this.scope() === 'mine') this.nabu.captureUndoSelection?.(); };
                 document.addEventListener('selectionchange', onSelectionChange);
                 document.addEventListener('keydown', onKeydown, true);
                 document.addEventListener('keyup', onKeyup, true);
@@ -160,9 +254,15 @@ export class NabuSelection extends SvelteSelection {
         if (this.nabu.composing) return false; // IME composition: the browser owns the DOM and the caret
         const live = window.getSelection();
         if (!live || live.rangeCount === 0) return false;
+        // Not mine (in another editor, across roots, or in no editor): never rewritten. Whatever direction a key of MINE had
+        // announced is stale by now.
+        if (this.scope(live) !== 'mine') {
+            this.#pendingDirection = null;
+            return false;
+        }
 
         const activeEl = document.activeElement;
-        if (activeEl && activeEl.closest?.('[data-nabu-ui], input, textarea, select, button')) {
+        if (activeEl && this.closestOwn(activeEl, '[data-nabu-ui], input, textarea, select, button')) {
             this.#pendingDirection = null;
             return false;
         }
@@ -177,7 +277,7 @@ export class NabuSelection extends SvelteSelection {
         const focusEl = /** @type {Element | null} */ (focus?.nodeType === Node.ELEMENT_NODE ? focus : focus?.parentElement);
 
         // Skip normalization when the selection touches a UI element (e.g. a block's UI controls).
-        if (anchorEl?.closest('[data-nabu-ui]') || focusEl?.closest('[data-nabu-ui]')) {
+        if (this.closestOwn(anchorEl, '[data-nabu-ui]') || this.closestOwn(focusEl, '[data-nabu-ui]')) {
             this.#pendingDirection = null;
             return false;
         }
@@ -216,7 +316,7 @@ export class NabuSelection extends SvelteSelection {
             /** @type {{ node: Node, offset: number } | null} */
             let end = { node: focus, offset: focusOffset };
             if (focusInvalid) {
-                const target = findNearestTextNode(focus, focusOffset, explicit, filter);
+                const target = findNearestTextNode(focus, focusOffset, explicit, filter, this.root);
                 const block = target && this.#blockOf(target);
                 end = block ? /** @type {any} */ (block).getDOMPoint?.(explicit === 'forward' ? 0 : (block.behaviors?.get('text')?.text.length ?? 0)) ?? null : null;
             }
@@ -228,7 +328,7 @@ export class NabuSelection extends SvelteSelection {
 
         if (anchorInvalid) {
             const dir = explicit ?? offsetHeuristic(anchor, anchorOffset);
-            const target = findNearestTextNode(anchor, anchorOffset, dir, filter);
+            const target = findNearestTextNode(anchor, anchorOffset, dir, filter, this.root);
             if (!target) {
                 // Leaving the document by keyboard with nothing to land on: the document must offer a caret there.
                 if (explicit === 'forward') this.nabu.openTrailingCaret();
@@ -240,7 +340,7 @@ export class NabuSelection extends SvelteSelection {
         }
         if (focusInvalid && focus) {
             const dir = explicit ?? offsetHeuristic(focus, focusOffset);
-            const target = findNearestTextNode(focus, focusOffset, dir, filter);
+            const target = findNearestTextNode(focus, focusOffset, dir, filter, this.root);
             if (!target) return false;
             const point = this.#landingPoint(target, dir);
             this.setBaseAndExtent(anchor, anchorOffset, point.node, point.offset);
@@ -288,18 +388,19 @@ export class NabuSelection extends SvelteSelection {
         const live = window.getSelection();
         const node = live?.anchorNode;
         if (!live || live.rangeCount === 0 || !node || !node.isConnected) return false;
+        if (this.scope(live) !== 'mine') return false; // the caret is in another editor, or in none: not mine to repair
         const activeEl = document.activeElement;
-        if (activeEl && activeEl.closest?.('[data-nabu-ui], input, textarea, select, button')) return false;
+        if (activeEl && this.closestOwn(activeEl, '[data-nabu-ui], input, textarea, select, button')) return false;
         // Only a selection that is dead for lack of a block under it: an inert block (an image…) selected on purpose stays.
-        const stray = (/** @type {Node | null} */ n) => !!n && !isInInert(n) && this.#isDead(n);
+        const stray = (/** @type {Node | null} */ n) => !!n && !this.#inInert(n) && this.#isDead(n);
         if (!stray(live.anchorNode) && !stray(live.focusNode)) return false;
         this.sync();
         /** @type {NodeFilter} */
         const filter = { acceptNode: (n) => this.#isValidTextNode(n) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT };
         /** @type {'forward' | 'backward'} */
         let dir = 'backward';
-        let target = findNearestTextNode(node, live.anchorOffset, 'backward', filter);
-        if (!target) { dir = 'forward'; target = findNearestTextNode(node, live.anchorOffset, 'forward', filter); }
+        let target = findNearestTextNode(node, live.anchorOffset, 'backward', filter, this.root);
+        if (!target) { dir = 'forward'; target = findNearestTextNode(node, live.anchorOffset, 'forward', filter, this.root); }
         if (!target) return false;
         const point = this.#landingPoint(target, dir);
         this.setBaseAndExtent(point.node, point.offset, point.node, point.offset);
@@ -421,7 +522,7 @@ export class NabuSelection extends SvelteSelection {
         /** @type {NodeFilter} */
         const filter = { acceptNode: (node) => this.#isValidTextNode(node) && !this.#blockOf(node)?.isolatesSelection ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT };
         // @ts-ignore — TreeWalker filter shape is correct, TS typedef is overly strict
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, filter);
+        const walker = document.createTreeWalker(this.root ?? document.body, NodeFilter.SHOW_TEXT, filter);
         const host = focusBlock.element ?? focus;
         walker.currentNode = forward ? getLastDescendant(host) : host;
         const target = forward ? walker.nextNode() : walker.previousNode();
@@ -485,17 +586,20 @@ export class NabuSelection extends SvelteSelection {
 
     /**
      * A selection endpoint where nothing can be typed: inside an inert block, an element caret anywhere
-     * in an editor, or a text node that is not part of a text block's own text. Endpoints outside any
-     * editor are none of our business.
+     * in MY editor, or a text node that is not part of a text block's own text. Endpoints outside my own
+     * root (no editor, another editor, a nested editor) are none of my business.
      * @param {Node} node
      */
     #isDead(node) {
-        const el = /** @type {Element | null} */ (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
-        if (!el?.closest('[data-nabu-root]')) return false;
-        if (isInInert(node)) return true;
+        // Only MY root counts: a caret in another editor (or in no editor) is not dead for me, it is not mine at all.
+        if (!this.owns(node)) return false;
+        if (this.#inInert(node)) return true;
         if (node.nodeType !== Node.TEXT_NODE) return true;
         return !this.#isValidTextNode(node);
     }
+
+    /** Inside an inert block of MY content (an inert ancestor above my root, when I am nested, does not count). @param {Node} node */
+    #inInert(node) { return !!this.closestOwn(node, '[data-nabu-inert]'); }
 
     /**
      * True for a text node that belongs to the text of a text block (not inert, not whitespace
@@ -503,7 +607,8 @@ export class NabuSelection extends SvelteSelection {
      * @param {Node} node
      */
     #isValidTextNode(node) {
-        if (isInInert(node)) return false;
+        if (!this.owns(node)) return false; // a text node of another editor is never a place for MY caret to land
+        if (this.#inInert(node)) return false;
         const id = node.parentElement?.closest('[data-block-id]')?.getAttribute('data-block-id');
         const block = id ? this.nabu.blocks.get(id) : null;
         if (!block || !block.behaviors?.has('text')) return false;
@@ -531,6 +636,7 @@ export class NabuSelection extends SvelteSelection {
     #openTrailingIfStuck(start) {
         const live = window.getSelection();
         if (!live?.isCollapsed || live.anchorNode !== start.node || live.anchorOffset !== start.offset) return;
+        if (this.scope(live) !== 'mine') return;
         const block = this.anchorBlock;
         if (!block?.behaviors?.has('text') || block.findForward((b) => !!b.behaviors?.has('text'))) return;
         const last = this.nabu.lastVisibleBlock;
@@ -639,15 +745,6 @@ export class NabuSelection extends SvelteSelection {
  */
 const KEY_WINDOW = 600;
 
-/** @param {Node | null} node */
-function isInInert(node) {
-    if (!node) return false;
-    const el = node.nodeType === Node.ELEMENT_NODE
-        ? /** @type {Element} */ (node)
-        : node.parentElement;
-    return !!el?.closest('[data-nabu-inert]');
-}
-
 /**
  * Heuristic for mouse clicks: infer direction from where in the element the
  * cursor landed. At/past the last child → user likely moving forward; otherwise
@@ -687,11 +784,12 @@ function getLastDescendant(node) {
  * @param {number} fromOffset
  * @param {'forward' | 'backward'} direction
  * @param {NodeFilter} filter  Accepts the valid text nodes
+ * @param {Node | null} [within]  The root of the search: the editor's own root (default: the page)
  * @returns {Text | null}
  */
-function findNearestTextNode(fromNode, fromOffset, direction, filter) {
+function findNearestTextNode(fromNode, fromOffset, direction, filter, within = null) {
     // @ts-ignore — TreeWalker filter shape is correct, TS typedef is overly strict
-    const bodyWalker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, filter);
+    const bodyWalker = document.createTreeWalker(within ?? document.body, NodeFilter.SHOW_TEXT, filter);
 
     if (fromNode.nodeType === Node.TEXT_NODE) {
         bodyWalker.currentNode = fromNode;

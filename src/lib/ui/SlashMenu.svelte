@@ -118,6 +118,8 @@
     if (!ctrl.open) return;
     /** @param {KeyboardEvent} ev */
     const onKey = (ev) => {
+      // A key typed in ANOTHER editor of the page is not for this menu (it stays open until its own editor's selection moves).
+      if (engine.selection.kindOf(ev.target instanceof Node ? ev.target : null) === 'foreign') return;
       if (hidden && ev.key !== 'Escape') return; // not on screen: the keys keep their normal meaning
       if (ev.key === 'ArrowDown') { ev.preventDefault(); ev.stopImmediatePropagation(); ctrl.moveSelection(1); }
       else if (ev.key === 'ArrowUp') { ev.preventDefault(); ev.stopImmediatePropagation(); ctrl.moveSelection(-1); }

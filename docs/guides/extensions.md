@@ -457,7 +457,7 @@ The types are exported from `@aionbuilders/nabu/extend`: `NabuNode`, `ExtensionI
 | `handleCompositionStart`, `handleCompositionUpdate`, `handleCompositionEnd` | IME composition |
 | `handleCopy`, `handleCut`, `handlePaste`, `insertFragment` | The clipboard pipeline: what the editor does on copy, cut and paste |
 | `handleDragStart`, `handleDragOver`, `handleDragLeave`, `handleDragEnd`, `handleDrop`, `dropAt`, `dropTarget` | The drag and drop pipeline, and the drop indicator (reactive) |
-| `selection` | The selection's repair machinery: `normalize`, `scheduleRepair`, `repairAfterRemoval`, `placements` |
+| `selection` | The selection's repair machinery: `normalize`, `scheduleRepair`, `repairAfterRemoval`, `placements`; and the engine's own root element: `attachRoot`, `root`, `owns`, `scope` (several editors on one page never act on each other's selection) |
 
 ```js test
 import { createEditor, TextPreset } from '@aionbuilders/nabu';

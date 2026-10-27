@@ -20,6 +20,21 @@
     $effect.pre(syncReadonly);
     const isReadonly = $derived(readonly !== undefined ? !!readonly : engine.readonly);
 
+    // The engine learns which element is its own root (an attachment: set when the root mounts, cleared when it goes away, and re-run
+    // if `engine` changes). Everything the engine does with the page-wide DOM selection or a document-level event is limited to
+    // this element, so that several editors can share a page without ever acting on each other's caret (see NabuSelection).
+    /** @type {import('svelte/attachments').Attachment<HTMLElement>} */
+    const claimRoot = (node) => engine.internals.selection.attachRoot(node);
+
+    // An event that bubbles from a NESTED editor (one mounted in a UI island of this editor) reaches the root of this editor too:
+    // only the editor whose root is the nearest one handles it.
+    /** @param {Event} e */
+    function mine(e) {
+        const target = e.target;
+        const el = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+        return !el || el.closest('[data-nabu-root]') === e.currentTarget;
+    }
+
     $effect(() => {
         engine.systems.forEach(system => system.start?.());
         return () => engine.systems.forEach(system => system.stop?.());
@@ -54,23 +69,24 @@
     data-enable-grammarly={engine.spellcheck ? undefined : 'false'}
     translate="no"
     data-nabu-root="true"
+    {@attach claimRoot}
     data-nabu-range={engine.selection?.isRange ? '' : undefined}
-    onbeforeinput={(e) => engine.handleBeforeinput(e)}
-    onkeydown={(e) => engine.handleKeydown(e)}
-    onmousedown={(e) => engine.handleMousedown(e)}
+    onbeforeinput={(e) => mine(e) && engine.handleBeforeinput(e)}
+    onkeydown={(e) => mine(e) && engine.handleKeydown(e)}
+    onmousedown={(e) => mine(e) && engine.handleMousedown(e)}
     onfocusout={() => engine.rearmTab()}
-    oncopy={(e) => engine.handleCopy(e)}
-    oncut={(e) => engine.handleCut(e)}
-    onpaste={(e) => engine.handlePaste(e)}
+    oncopy={(e) => mine(e) && engine.handleCopy(e)}
+    oncut={(e) => mine(e) && engine.handleCut(e)}
+    onpaste={(e) => mine(e) && engine.handlePaste(e)}
     ondragstart={(e) => engine.handleDragStart(e)}
     ondragenter={(e) => engine.handleDragOver(e)}
     ondragover={(e) => engine.handleDragOver(e)}
     ondragleave={(e) => engine.handleDragLeave(e)}
     ondragend={(e) => engine.handleDragEnd(e)}
     ondrop={(e) => engine.handleDrop(e)}
-    oncompositionstart={(e) => engine.handleCompositionStart(e)}
-    oncompositionupdate={(e) => engine.handleCompositionUpdate(e)}
-    oncompositionend={(e) => engine.handleCompositionEnd(e)}
+    oncompositionstart={(e) => mine(e) && engine.handleCompositionStart(e)}
+    oncompositionupdate={(e) => mine(e) && engine.handleCompositionUpdate(e)}
+    oncompositionend={(e) => mine(e) && engine.handleCompositionEnd(e)}
 >
     {#each engine.children as block (block.id)}
         <Block {block} />
