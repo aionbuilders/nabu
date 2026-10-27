@@ -8,10 +8,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseMarkdownInline, parseMarkdownSegments } from '$lib/paste/markdown.paste.js';
-import { extractLinkDefinitions } from '$lib/paste/markdown-inline.js';
-import { deltaToMarkdown } from '$lib/behaviors/text/text.behavior.svelte.js';
-import { delimiterFlags } from '$lib/behaviors/text/markdown-syntax.js';
+import { parseMarkdownInline, parseMarkdownSegments } from '#lib/paste/markdown.paste.js';
+import { extractLinkDefinitions } from '#lib/paste/markdown-inline.js';
+import { deltaToMarkdown } from '#lib/behaviors/text/text.behavior.svelte.js';
+import { delimiterFlags } from '#lib/behaviors/text/markdown-syntax.js';
 
 const d = (...parts) => parts.map((p) => (typeof p === 'string' ? { insert: p } : { insert: p[0], attributes: p[1] }));
 const B = { bold: true };
@@ -414,13 +414,13 @@ describe('round trip: markdown → delta → markdown', () => {
 
 import { vi } from 'vitest';
 import { tick } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
-import { PlainTextPasteExtension } from '$lib/paste/plain-text.paste.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
+import { PlainTextPasteExtension } from '#lib/paste/plain-text.paste.js';
 
 const EXTENSIONS = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, ImageExtension, MarkdownPasteExtension, PlainTextPasteExtension];
 

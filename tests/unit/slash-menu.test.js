@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { SlashMenuController, DEFAULT_SLASH_COMMANDS, filterSlashCommands } from '$lib/ui/slash-menu.svelte.js';
+import { SlashMenuController, DEFAULT_SLASH_COMMANDS, filterSlashCommands } from '#lib/ui/slash-menu.svelte.js';
 
 // ── Mock factory ──────────────────────────────────────────────────────────────
 

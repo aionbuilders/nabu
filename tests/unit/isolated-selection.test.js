@@ -13,16 +13,16 @@
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
 import { LoroText } from 'loro-crdt';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { MegaBlock } from '$lib/blocks/megablock.svelte.js';
-import { TextBehavior } from '$lib/behaviors/text';
-import { extension } from '$lib/utils/extensions.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { NabuPasteExtension, PlainTextPasteExtension } from '$lib/paste/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { deleteRange, isolatedRuns, isolationOwnerOf, textBlocksInOrder, handleContainerBeforeInput } from '$lib/blocks/container.utils.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { MegaBlock } from '#lib/blocks/megablock.svelte.js';
+import { TextBehavior } from '#lib/behaviors/text/index.js';
+import { extension } from '#lib/utils/extensions.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { NabuPasteExtension, PlainTextPasteExtension } from '#lib/paste/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { deleteRange, isolatedRuns, isolationOwnerOf, textBlocksInOrder, handleContainerBeforeInput } from '#lib/blocks/container.utils.js';
 
 /** A container with an isolated legend (its text) and a free body. */
 class Fieldset extends MegaBlock {

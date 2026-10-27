@@ -5,12 +5,12 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { Extension } from '$lib/utils/extensions.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension, List, ListItem } from '$lib/blocks/list/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { createEditor } from '$lib/presets.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { Extension } from '#lib/utils/extensions.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List, ListItem } from '#lib/blocks/list/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { createEditor } from '#lib/presets.js';
 
 let warn;
 afterEach(() => { warn?.mockRestore(); warn = undefined; });

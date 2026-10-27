@@ -5,19 +5,19 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { escapeHtml, escapeAttr, sanitizeUrl, sanitizePasteBlocks } from '$lib/utils/html.js';
-import { deltaToHtml } from '$lib/behaviors/text/text.behavior.svelte.js';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { FullPreset, TextPreset } from '$lib/presets.js';
-import { Paragraph as ParagraphBlock } from '$lib/blocks/paragraph/paragraph.svelte.js';
-import { Heading as HeadingBlock } from '$lib/blocks/heading/heading.svelte.js';
-import { Dialogue } from '$lib/blocks/dialogue/dialogue.svelte.js';
-import { CalloutBlock } from '$lib/blocks/callout/callout.svelte.js';
-import { BlockquoteBlock } from '$lib/blocks/blockquote/blockquote.svelte.js';
-import { CodeBlock } from '$lib/blocks/code/code.svelte.js';
-import { ImageBlock } from '$lib/blocks/image/image.svelte.js';
-import { VideoBlock } from '$lib/blocks/video/video.svelte.js';
-import { FileBlock } from '$lib/blocks/file/file.svelte.js';
+import { escapeHtml, escapeAttr, sanitizeUrl, sanitizePasteBlocks } from '#lib/utils/html.js';
+import { deltaToHtml } from '#lib/behaviors/text/text.behavior.svelte.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { FullPreset, TextPreset } from '#lib/presets.js';
+import { Paragraph as ParagraphBlock } from '#lib/blocks/paragraph/paragraph.svelte.js';
+import { Heading as HeadingBlock } from '#lib/blocks/heading/heading.svelte.js';
+import { Dialogue } from '#lib/blocks/dialogue/dialogue.svelte.js';
+import { CalloutBlock } from '#lib/blocks/callout/callout.svelte.js';
+import { BlockquoteBlock } from '#lib/blocks/blockquote/blockquote.svelte.js';
+import { CodeBlock } from '#lib/blocks/code/code.svelte.js';
+import { ImageBlock } from '#lib/blocks/image/image.svelte.js';
+import { VideoBlock } from '#lib/blocks/video/video.svelte.js';
+import { FileBlock } from '#lib/blocks/file/file.svelte.js';
 
 const NASTY = '<img src=x onerror=alert(1)>"\'&';
 const d = (insert, attributes) => ({ insert, ...(attributes ? { attributes } : {}) });

@@ -103,17 +103,17 @@ const TIMEOUT = 60000;
 
 describe('public API', () => {
   it('@aionbuilders/nabu exports exactly the pinned names', async () => {
-    const mod = await import('$lib/index.js');
+    const mod = await import('#lib/index.js');
     expect(Object.keys(mod).sort()).toEqual(ROOT);
   }, TIMEOUT);
 
   it('@aionbuilders/nabu/ui exports exactly the pinned names', async () => {
-    const mod = await import('$lib/ui/index.js');
+    const mod = await import('#lib/ui/index.js');
     expect(Object.keys(mod).sort()).toEqual(UI);
   }, TIMEOUT);
 
   it('@aionbuilders/nabu/extend exports exactly the pinned names', async () => {
-    const mod = await import('$lib/extend.js');
+    const mod = await import('#lib/extend.js');
     expect(Object.keys(mod).sort()).toEqual(EXTEND);
   }, TIMEOUT);
 
@@ -123,14 +123,14 @@ describe('public API', () => {
   });
 
   it('every export is defined', async () => {
-    for (const path of ['$lib/index.js', '$lib/ui/index.js', '$lib/extend.js']) {
+    for (const path of ['#lib/index.js', '#lib/ui/index.js', '#lib/extend.js']) {
       const mod = await import(/* @vite-ignore */ path);
       for (const [name, value] of Object.entries(mod)) expect(value, `${path} → ${name}`).not.toBeUndefined();
     }
   }, TIMEOUT);
 
   it('the root entry builds a working editor', async () => {
-    const { createMinimalEditor } = await import('$lib/index.js');
+    const { createMinimalEditor } = await import('#lib/index.js');
     const engine = createMinimalEditor();
     expect(engine).toBeTruthy();
     expect(typeof engine.exec).toBe('function');

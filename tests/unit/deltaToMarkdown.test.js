@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deltaToMarkdown, deltaToHtml } from '$lib/behaviors/text/text.behavior.svelte.js';
+import { deltaToMarkdown, deltaToHtml } from '#lib/behaviors/text/text.behavior.svelte.js';
 
 // ── deltaToMarkdown ────────────────────────────────────────────────────────
 

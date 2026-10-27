@@ -4,11 +4,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CodeBlock } from '$lib/blocks/code/code.svelte.js';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
+import { CodeBlock } from '#lib/blocks/code/code.svelte.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
 
 describe('CodeBlock statics', () => {
     it('toMarkdown wraps in fenced code block with language', async () => {

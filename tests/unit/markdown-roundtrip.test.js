@@ -5,19 +5,19 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
-import { DividerExtension } from '$lib/blocks/divider/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { CalloutExtension } from '$lib/blocks/callout/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { DialogueExtension } from '$lib/blocks/dialogue/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { BlockquoteExtension } from '#lib/blocks/blockquote/index.js';
+import { DividerExtension } from '#lib/blocks/divider/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { CalloutExtension } from '#lib/blocks/callout/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { DialogueExtension } from '#lib/blocks/dialogue/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
 
 const extensions = [ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension, ImageExtension, DialogueExtension, ListExtension, ListItemExtension, RichTextExtension, MarkdownPasteExtension];
 

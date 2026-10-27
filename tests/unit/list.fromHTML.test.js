@@ -4,8 +4,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { List } from '$lib/blocks/list/list.svelte.js';
-import { ListItem } from '$lib/blocks/list/list-item.svelte.js';
+import { List } from '#lib/blocks/list/list.svelte.js';
+import { ListItem } from '#lib/blocks/list/list-item.svelte.js';
 
 function parseInline(el) {
   return [{ insert: el.textContent || '' }];

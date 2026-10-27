@@ -5,14 +5,14 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { LoroMap } from 'loro-crdt';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { FileExtension } from '$lib/blocks/file/index.js';
-import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '$lib/paste/index.js';
-import { Files, SILENT_ORIGIN } from '$lib/files/files.svelte.js';
-import { MemoryAssetStore } from '$lib/files/store.js';
-import { sha256Id, bytesToBase64 } from '$lib/files/assets.clipboard.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { FileExtension } from '#lib/blocks/file/index.js';
+import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '#lib/paste/index.js';
+import { Files, SILENT_ORIGIN } from '#lib/files/files.svelte.js';
+import { MemoryAssetStore } from '#lib/files/store.js';
+import { sha256Id, bytesToBase64 } from '#lib/files/assets.clipboard.js';
 
 const EXTENSIONS = [ParagraphExtension, ImageExtension, FileExtension, NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension];
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);

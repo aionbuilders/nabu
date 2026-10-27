@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Block } from '$lib/blocks/block.svelte.js';
-import { TextBehavior } from '$lib/behaviors/text/text.behavior.svelte.js';
+import { Block } from '#lib/blocks/block.svelte.js';
+import { TextBehavior } from '#lib/behaviors/text/text.behavior.svelte.js';
 
 // ── Block.split base (warns, returns null) ─────────────────────────────────
 

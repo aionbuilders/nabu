@@ -10,12 +10,12 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { DividerExtension, insertDivider } from '$lib/blocks/divider/divider.extension.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { DividerExtension, insertDivider } from '#lib/blocks/divider/divider.extension.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
 
 async function makeEditor() {
   const engine = new Nabu({

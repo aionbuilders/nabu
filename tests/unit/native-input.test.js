@@ -6,9 +6,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { TextBehavior, prevGraphemeLength, nextGraphemeLength } from '$lib/behaviors/text/text.behavior.svelte.js';
-import { RichTextExtension } from '$lib/behaviors/text/rich-text.extension.js';
-import { handleContainerBeforeInput } from '$lib/blocks/container.utils.js';
+import { TextBehavior, prevGraphemeLength, nextGraphemeLength } from '#lib/behaviors/text/text.behavior.svelte.js';
+import { RichTextExtension } from '#lib/behaviors/text/rich-text.extension.js';
+import { handleContainerBeforeInput } from '#lib/blocks/container.utils.js';
 
 /** Mock LoroText over per-character attributes: insert / delete / mark really edit it, so assertions read the result. */
 function makeContainer(initial = '', marksPerChar = null) {

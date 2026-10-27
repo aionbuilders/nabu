@@ -6,11 +6,11 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { createPersistedEditor } from '$lib/persistence/persistence.js';
-import { openDB, loadRecords, listQuarantined, saveSnapshot, isSnapshotBytes } from '$lib/persistence/indexeddb.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { createPersistedEditor } from '#lib/persistence/persistence.js';
+import { openDB, loadRecords, listQuarantined, saveSnapshot, isSnapshotBytes } from '#lib/persistence/indexeddb.js';
 import { recordStatuses } from './helpers/persistence-status.svelte.js';
-import { writeTail, MAX_TAIL_BYTES } from '$lib/persistence/tail.js';
+import { writeTail, MAX_TAIL_BYTES } from '#lib/persistence/tail.js';
 
 const EXTENSIONS = [ParagraphExtension];
 const tick = async (n = 12) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };

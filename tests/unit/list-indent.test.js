@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension, List, ListItem } from '$lib/blocks/list/index.js';
-import { moveItems, selectedItems, handleTab } from '$lib/blocks/list/indent.js';
-import { liftItemToParagraph, stepBack } from '$lib/blocks/list/step-back.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List, ListItem } from '#lib/blocks/list/index.js';
+import { moveItems, selectedItems, handleTab } from '#lib/blocks/list/indent.js';
+import { liftItemToParagraph, stepBack } from '#lib/blocks/list/step-back.js';
 
 async function makeEditor() {
   const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension] });

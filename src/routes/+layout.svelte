@@ -1,6 +1,6 @@
 <script>
   import '../lib/nabu-theme.css';
-  import { dev } from '$app/environment';
+  import { dev } from '$app/env';
 
   // No analytics in dev, nor in the e2e production build (`build:e2e`): keeps the test pages free of third-party requests.
   const analytics = !dev && import.meta.env.VITE_NABU_E2E !== '1';

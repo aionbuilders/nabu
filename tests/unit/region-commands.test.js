@@ -7,15 +7,15 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { RegionsExtension } from '$lib/blocks/region/index.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { RegionsExtension } from '#lib/blocks/region/index.js';
 
 const BOOK = {
   part: { level: 1, label: 'Part {index}' },

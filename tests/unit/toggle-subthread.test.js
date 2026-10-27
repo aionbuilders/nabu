@@ -10,12 +10,12 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
 
 async function makeEditor() {
   const engine = new Nabu({ extensions: [ParagraphExtension, HeadingExtension, ToggleExtension, RichTextExtension, BlockExtension] });

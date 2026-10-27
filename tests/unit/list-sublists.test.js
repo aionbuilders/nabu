@@ -6,13 +6,13 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension, List, ListItem } from '$lib/blocks/list/index.js';
-import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
-import { PlainTextPasteExtension } from '$lib/paste/plain-text.paste.js';
-import { HtmlPasteExtension } from '$lib/paste/html.paste.js';
-import { NabuPasteExtension } from '$lib/paste/nabu.paste.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List, ListItem } from '#lib/blocks/list/index.js';
+import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
+import { PlainTextPasteExtension } from '#lib/paste/plain-text.paste.js';
+import { HtmlPasteExtension } from '#lib/paste/html.paste.js';
+import { NabuPasteExtension } from '#lib/paste/nabu.paste.js';
 
 const EXTENSIONS = [ParagraphExtension, ListExtension, ListItemExtension, MarkdownPasteExtension, HtmlPasteExtension, NabuPasteExtension, PlainTextPasteExtension];
 

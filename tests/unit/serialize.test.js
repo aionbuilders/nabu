@@ -5,9 +5,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deltaToMarkdown, deltaToHtml } from '$lib/behaviors/text/text.behavior.svelte.js';
-import { ListItem } from '$lib/blocks/list/list-item.svelte.js';
-import { List } from '$lib/blocks/list/list.svelte.js';
+import { deltaToMarkdown, deltaToHtml } from '#lib/behaviors/text/text.behavior.svelte.js';
+import { ListItem } from '#lib/blocks/list/list-item.svelte.js';
+import { List } from '#lib/blocks/list/list.svelte.js';
 
 // Re-use static methods and serializer logic directly (no rune constructors needed)
 

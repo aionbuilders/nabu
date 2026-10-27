@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { TextBehavior } from '$lib/behaviors/text/text.behavior.svelte.js';
+import { TextBehavior } from '#lib/behaviors/text/text.behavior.svelte.js';
 
 // ── Mock LoroText container ────────────────────────────────────────────────
 

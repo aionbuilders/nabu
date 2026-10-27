@@ -5,9 +5,9 @@
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { Extension } from '$lib/utils/extensions.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { Extension } from '#lib/utils/extensions.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
 
 let warn;
 afterEach(() => { warn?.mockRestore(); warn = undefined; vi.restoreAllMocks(); });

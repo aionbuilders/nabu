@@ -1,5 +1,5 @@
 <script>
-  import { TextBehavior } from '$lib/extend';
+  import { TextBehavior } from '#lib/extend.js';
 
   let { engine = null } = $props();
 

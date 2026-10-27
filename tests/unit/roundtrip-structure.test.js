@@ -7,24 +7,24 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Files } from '$lib/files/files.svelte.js';
-import { List } from '$lib/blocks/list/list.svelte.js';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
-import { DividerExtension } from '$lib/blocks/divider/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { CalloutExtension } from '$lib/blocks/callout/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { VideoExtension } from '$lib/blocks/video/index.js';
-import { FileExtension } from '$lib/blocks/file/index.js';
-import { DialogueExtension } from '$lib/blocks/dialogue/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
-import { RegionsExtension } from '$lib/blocks/region/index.js';
+import { Files } from '#lib/files/files.svelte.js';
+import { List } from '#lib/blocks/list/list.svelte.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { BlockquoteExtension } from '#lib/blocks/blockquote/index.js';
+import { DividerExtension } from '#lib/blocks/divider/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { CalloutExtension } from '#lib/blocks/callout/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { VideoExtension } from '#lib/blocks/video/index.js';
+import { FileExtension } from '#lib/blocks/file/index.js';
+import { DialogueExtension } from '#lib/blocks/dialogue/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
+import { RegionsExtension } from '#lib/blocks/region/index.js';
 
 // Regions (ADR 018, containers): every field type, so that the JSON form of a region is checked on the model. The markdown
 // form (title + body, closing comments) is round-tripped with the rest of the sink below, and tested in depth in regions-io.test.js.

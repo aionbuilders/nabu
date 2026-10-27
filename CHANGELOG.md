@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Tooling - SvelteKit 3 / Vite 8 / Vitest 5 toolchain (no behaviour change)
+- Dev toolchain bumped: `svelte` 5.51 -> 5.57.3, `svelte-check` 4.4 -> 4.7.7, `@sveltejs/kit` 2.52 -> 3.1.0, `@sveltejs/package` 2.5 -> 3.0.1, `@sveltejs/vite-plugin-svelte` 6.2 -> 7.3.1, `vite` 7.3 -> 8.3.5, `vitest` + `@vitest/coverage-v8` 3.2 -> 5.0.5, `typescript` 5.9 -> 6.0.3. The demo/e2e app now builds with `@sveltejs/adapter-node` (replaces the Kit-2-only `svelte-adapter-bun`; the unused `@sveltejs/adapter-auto` is dropped).
+- Applied with `sv migrate sveltekit-3`: `svelte.config.js` folded into `vite.config.js` (the adapter is now an option of `sveltekit()`), `jsconfig.json` extends the generated `$app/tsconfig`, `$app/environment` -> `$app/env`, and the `$lib` alias became `#lib` (a `package.json` `imports` entry: `#lib` -> `src/lib/index.js`, `#lib/*` -> `src/lib/*`, resolved natively by Vite/Vitest, so `vitest.config.js` no longer needs an alias). The library code in `src/lib` keeps relative imports.
+- `vitest.config.js`: `svelte({ hot: false })` -> `svelte({ compilerOptions: { hmr: false } })` (`hot` was removed in vite-plugin-svelte 7).
+- Published output unchanged: same 311 files in `dist/`; the only difference is that 14 `.d.ts` files now write `import("../../extend.js")` instead of `import("../../extend")`.
+- Known: `vite-plugin-top-level-await` 1.6 (used by `@aionbuilders/nabu/vite`) still `require`s `rollup` and `esbuild`, which Vite 8 no longer installs: a Vite 8 consumer must install both, or use `vite-plugin-wasm` alone with `build.target: 'esnext'`.
+- Minimum Svelte actually required by `src/lib`: 5.20 (`$props.id()` in `CommandChooser`); `peerDependencies.svelte` is still `^5.0.0`.
+
 ### Breaking: public API reduced to three entry points (C-01)
 - The package root no longer re-exports everything (`export *` through `blocks`, `utils`, `behaviors`, `ui`, `files`, `paste`: 162 names, internals included). The API is now **three entry points**, each with an explicit, pinned list of names (`tests/unit/public-api.test.js`):
   - **`@aionbuilders/nabu`** (54 names): create and mount an editor (`createEditor`, `createMinimalEditor`, `createTextEditor`, `createDocumentEditor`, `createFullEditor`, `createPersistedEditor`, the four presets, `Nabu`, `NabuEditor`), the built-in extensions (blocks, `RegionsExtension` / `createRegionsExtension`, `DialogueExtension` / `createDialogueExtension`, rich text, typography, markdown shortcuts, `BlockExtension`, the four paste extensions), the subsystems (`Files`, `FileRejectedError`, `MemoryOutbox`, `REASON_CODES`, `Regions`, `Region`, `Todos`), `insertImageFromFile`, `insertMediaFromFile`, the format versions, `deltaToMarkdown`, `deltaToHtml`, `sanitizeUrl`, `formatChord`; plus the JSDoc typedefs integrators need (`NabuInit`, `FilesConfig`, `CommandDef`, `RegionTypeInit`, ...).

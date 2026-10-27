@@ -5,8 +5,8 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { makeEditor, interpret, outline, fmtDelta } from './html-paste.helpers.js';
-import { unwrapGoogleRedirect, resolveLinkHref, parseStyle } from '$lib/paste/html.paste.js';
-import { NabuPasteExtension } from '$lib/paste/nabu.paste.js';
+import { unwrapGoogleRedirect, resolveLinkHref, parseStyle } from '#lib/paste/html.paste.js';
+import { NabuPasteExtension } from '#lib/paste/nabu.paste.js';
 
 let engine;
 beforeAll(async () => { engine = await makeEditor(); });

@@ -5,16 +5,16 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
-import { PlainTextPasteExtension } from '$lib/paste/plain-text.paste.js';
-import { HtmlPasteExtension } from '$lib/paste/html.paste.js';
-import { NabuPasteExtension } from '$lib/paste/nabu.paste.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
+import { PlainTextPasteExtension } from '#lib/paste/plain-text.paste.js';
+import { HtmlPasteExtension } from '#lib/paste/html.paste.js';
+import { NabuPasteExtension } from '#lib/paste/nabu.paste.js';
 
 const EXTENSIONS = [
   ParagraphExtension, HeadingExtension, CodeExtension, ToggleExtension, ListExtension, ListItemExtension,

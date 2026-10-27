@@ -6,12 +6,12 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { Block } from '$lib/blocks/block.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { planPaste } from '$lib/blocks/list/paste.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { Block } from '#lib/blocks/block.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { planPaste } from '#lib/blocks/list/paste.js';
 
 const EXTENSIONS = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension];
 

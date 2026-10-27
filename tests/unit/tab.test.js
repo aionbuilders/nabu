@@ -5,10 +5,10 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { resolveTabMode, isTabMode, handleTabKey } from '$lib/utils/tab.js';
-import { MinimalPreset, TextPreset, DocumentPreset, FullPreset, tabDefaultFor, createMinimalEditor, createTextEditor, createDocumentEditor, createFullEditor, createEditor } from '$lib/presets.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { resolveTabMode, isTabMode, handleTabKey } from '#lib/utils/tab.js';
+import { MinimalPreset, TextPreset, DocumentPreset, FullPreset, tabDefaultFor, createMinimalEditor, createTextEditor, createDocumentEditor, createFullEditor, createEditor } from '#lib/presets.js';
 
 const key = (init = {}) => {
   let prevented = false;

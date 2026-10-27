@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseChord, canonicalChord, chordId, eventChord, eventChordId, formatChord, hasCommandModifier,
   isReservedChord, reservedChords, detectPlatform,
-} from '$lib/utils/keys.js';
+} from '#lib/utils/keys.js';
 
 const mac = { platform: 'mac' };
 const other = { platform: 'other' };

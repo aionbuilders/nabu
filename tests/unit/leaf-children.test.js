@@ -7,11 +7,11 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { Block } from '$lib/blocks/block.svelte.js';
-import { MegaBlock } from '$lib/blocks/megablock.svelte.js';
-import { extension } from '$lib/utils/extensions.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { Block } from '#lib/blocks/block.svelte.js';
+import { MegaBlock } from '#lib/blocks/megablock.svelte.js';
+import { extension } from '#lib/utils/extensions.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
 
 class Crate extends MegaBlock {}
 class Pebble extends Block {}

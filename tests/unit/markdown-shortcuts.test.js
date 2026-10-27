@@ -6,9 +6,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { TextBehavior } from '$lib/behaviors/text/text.behavior.svelte.js';
-import { MarkdownShortcutsExtension } from '$lib/behaviors/text/markdown-shortcuts.extension.js';
-import { TypographyExtension } from '$lib/behaviors/text/typography.extension.js';
+import { TextBehavior } from '#lib/behaviors/text/text.behavior.svelte.js';
+import { MarkdownShortcutsExtension } from '#lib/behaviors/text/markdown-shortcuts.extension.js';
+import { TypographyExtension } from '#lib/behaviors/text/typography.extension.js';
 
 // ── Mock LoroText container ────────────────────────────────────────────────
 

@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { BlockquoteBlock } from '$lib/blocks/blockquote/blockquote.svelte.js';
-import { DividerBlock } from '$lib/blocks/divider/divider.svelte.js';
+import { BlockquoteBlock } from '#lib/blocks/blockquote/blockquote.svelte.js';
+import { DividerBlock } from '#lib/blocks/divider/divider.svelte.js';
 
 describe('BlockquoteBlock statics', () => {
   it('toMarkdown produces "> text"', async () => {

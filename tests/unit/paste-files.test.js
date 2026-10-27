@@ -4,16 +4,16 @@
  * into a text block splits it, and web images can be imported through `files.importRemote`.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { VideoExtension } from '$lib/blocks/video/index.js';
-import { FileExtension } from '$lib/blocks/file/index.js';
-import { DividerExtension } from '$lib/blocks/divider/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '$lib/paste/index.js';
-import { Files } from '$lib/files/files.svelte.js';
-import { extension } from '$lib/utils/extensions.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { VideoExtension } from '#lib/blocks/video/index.js';
+import { FileExtension } from '#lib/blocks/file/index.js';
+import { DividerExtension } from '#lib/blocks/divider/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '#lib/paste/index.js';
+import { Files } from '#lib/files/files.svelte.js';
+import { extension } from '#lib/utils/extensions.js';
 
 const EXTENSIONS = [ParagraphExtension, ImageExtension, VideoExtension, FileExtension, DividerExtension, ListExtension, ListItemExtension, NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension];
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);

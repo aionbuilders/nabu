@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Block } from '$lib/blocks/block.svelte.js';
+import { Block } from '#lib/blocks/block.svelte.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

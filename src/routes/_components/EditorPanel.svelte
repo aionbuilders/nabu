@@ -1,6 +1,6 @@
 <script>
-  import { NabuEditor } from '$lib';
-  import { FloatingToolbar, SlashMenu, DragHandle } from '$lib/ui';
+  import { NabuEditor } from '#lib';
+  import { FloatingToolbar, SlashMenu, DragHandle } from '#lib/ui/index.js';
   import EditorToolbar from './EditorToolbar.svelte';
 
   let { engine } = $props();

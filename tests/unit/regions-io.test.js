@@ -9,19 +9,19 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension, Paragraph } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { CalloutExtension } from '$lib/blocks/callout/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { RegionsExtension } from '$lib/blocks/region/index.js';
-import { MarkdownPasteExtension, HtmlPasteExtension, NabuPasteExtension, PlainTextPasteExtension } from '$lib/paste/index.js';
-import { safeJson, encodeTypeId } from '$lib/blocks/region/format.js';
-import { regionBlockToMarkdown } from '$lib/blocks/region/serialize.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension, Paragraph } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { CalloutExtension } from '#lib/blocks/callout/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { RegionsExtension } from '#lib/blocks/region/index.js';
+import { MarkdownPasteExtension, HtmlPasteExtension, NabuPasteExtension, PlainTextPasteExtension } from '#lib/paste/index.js';
+import { safeJson, encodeTypeId } from '#lib/blocks/region/format.js';
+import { regionBlockToMarkdown } from '#lib/blocks/region/serialize.js';
 
 const BOOK = {
   part: { level: 1, label: 'Part {index}' },

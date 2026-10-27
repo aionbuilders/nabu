@@ -5,9 +5,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
 
 const text = (b) => b.node.data.get('text')?.toString() ?? '';
 const roots = (engine) => engine.children.map((b) => `${text(b)}${b.children?.length ? `{${b.children.map(text).join(' ')}}` : ''}`).filter((s) => s !== '').join(' ; ');

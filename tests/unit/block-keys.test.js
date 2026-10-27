@@ -10,18 +10,18 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { Block } from '$lib/blocks/block.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { DialogueExtension, createDialogueExtension, Dialogue } from '$lib/blocks/dialogue/index.js';
-import { CalloutExtension } from '$lib/blocks/callout/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { DividerExtension } from '$lib/blocks/divider/index.js';
-import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { Block } from '#lib/blocks/block.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { DialogueExtension, createDialogueExtension, Dialogue } from '#lib/blocks/dialogue/index.js';
+import { CalloutExtension } from '#lib/blocks/callout/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { DividerExtension } from '#lib/blocks/divider/index.js';
+import { BlockquoteExtension } from '#lib/blocks/blockquote/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
 
 async function makeEditor(extra = [DialogueExtension]) {
   const engine = new Nabu({

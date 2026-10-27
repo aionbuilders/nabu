@@ -11,12 +11,12 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { deleteRange, handleContainerBeforeInput } from '$lib/blocks/container.utils.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { deleteRange, handleContainerBeforeInput } from '#lib/blocks/container.utils.js';
 
 async function makeEditor() {
   const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, ToggleExtension, CodeExtension] });

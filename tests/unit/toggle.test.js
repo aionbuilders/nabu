@@ -4,11 +4,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ToggleBlock } from '$lib/blocks/toggle/toggle.svelte.js';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
+import { ToggleBlock } from '#lib/blocks/toggle/toggle.svelte.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
 
 // ── ToggleBlock.toHtml ──────────────────────────────────────────────────────
 

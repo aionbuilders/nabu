@@ -9,14 +9,14 @@
 
 import { describe, it, expect } from 'vitest';
 import { flushSync } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
-import { normalizePlaceholders, resolvePlaceholderText, getPlaceholder } from '$lib/utils/placeholders.js';
-import { Paragraph } from '$lib/blocks/paragraph/paragraph.svelte.js';
-import { Heading } from '$lib/blocks/heading/heading.svelte.js';
-import { createEditor, createMinimalEditor } from '$lib/presets.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { BlockquoteExtension } from '#lib/blocks/blockquote/index.js';
+import { normalizePlaceholders, resolvePlaceholderText, getPlaceholder } from '#lib/utils/placeholders.js';
+import { Paragraph } from '#lib/blocks/paragraph/paragraph.svelte.js';
+import { Heading } from '#lib/blocks/heading/heading.svelte.js';
+import { createEditor, createMinimalEditor } from '#lib/presets.js';
 
 const extensions = [ParagraphExtension, HeadingExtension, BlockquoteExtension];
 

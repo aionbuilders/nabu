@@ -4,10 +4,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension, List, ListItem, Todos } from '$lib/blocks/list/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List, ListItem, Todos } from '#lib/blocks/list/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
 
 describe('Todos aggregation system', () => {
     it('aggregates 3 todo items, counts done/remaining, and reports progress', async () => {

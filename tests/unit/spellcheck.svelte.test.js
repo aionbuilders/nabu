@@ -1,10 +1,10 @@
 // @ts-nocheck
 /** Unit tests for the `spellcheck` / `lang` editor options: normalization, defaults and runtime changes. */
 import { describe, it, expect } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { createEditor } from '$lib/presets.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { normalizeLang } from '$lib/utils/spellcheck.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { createEditor } from '#lib/presets.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { normalizeLang } from '#lib/utils/spellcheck.js';
 
 const extensions = [ParagraphExtension];
 

@@ -8,13 +8,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { MinimalPreset } from '$lib/presets.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { normalizeLists } from '$lib/blocks/list/normalize.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { MinimalPreset } from '#lib/presets.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { normalizeLists } from '#lib/blocks/list/normalize.js';
 
-vi.mock('$lib/blocks/list/normalize.js', async (importOriginal) => {
+vi.mock('#lib/blocks/list/normalize.js', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, normalizeLists: vi.fn(actual.normalizeLists) };
 });

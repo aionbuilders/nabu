@@ -6,10 +6,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { MegaBlock } from '$lib/blocks/megablock.svelte.js';
-import { extension } from '$lib/utils/extensions.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { MegaBlock } from '#lib/blocks/megablock.svelte.js';
+import { extension } from '#lib/utils/extensions.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
 
 class FoldBlock extends MegaBlock {
   folded = false;

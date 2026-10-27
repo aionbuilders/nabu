@@ -8,11 +8,11 @@
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { flushSync } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { Block } from '$lib/blocks/block.svelte.js';
-import { MegaBlock } from '$lib/blocks/megablock.svelte.js';
-import { extension } from '$lib/utils/extensions.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { Block } from '#lib/blocks/block.svelte.js';
+import { MegaBlock } from '#lib/blocks/megablock.svelte.js';
+import { extension } from '#lib/utils/extensions.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
 
 class VoidBlock extends Block {
   positions = 1;

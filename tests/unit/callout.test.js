@@ -4,11 +4,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CalloutBlock } from '$lib/blocks/callout/callout.svelte.js';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { CalloutExtension } from '$lib/blocks/callout/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
+import { CalloutBlock } from '#lib/blocks/callout/callout.svelte.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { CalloutExtension } from '#lib/blocks/callout/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
 
 describe('CalloutBlock statics', () => {
     it('toMarkdown wraps in callout block with NOTE header', async () => {

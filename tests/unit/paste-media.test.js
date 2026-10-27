@@ -4,14 +4,14 @@
  * `application/x-nabu+json` fragment and are re-created in the target document.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { Files } from '$lib/files/files.svelte.js';
-import { sha256Id } from '$lib/files/assets.clipboard.js';
-import { FileExtension } from '$lib/blocks/file/index.js';
-import { VideoExtension } from '$lib/blocks/video/index.js';
-import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '$lib/paste/index.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { Files } from '#lib/files/files.svelte.js';
+import { sha256Id } from '#lib/files/assets.clipboard.js';
+import { FileExtension } from '#lib/blocks/file/index.js';
+import { VideoExtension } from '#lib/blocks/video/index.js';
+import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '#lib/paste/index.js';
 
 const EXTENSIONS = [ParagraphExtension, ImageExtension, VideoExtension, FileExtension, NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension];
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);

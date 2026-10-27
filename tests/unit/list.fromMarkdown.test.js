@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { List } from '$lib/blocks/list/list.svelte.js';
+import { List } from '#lib/blocks/list/list.svelte.js';
 
 function parseInline(text) {
   return [{ insert: text }];

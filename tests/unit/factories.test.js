@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Paragraph } from '$lib/blocks/paragraph/paragraph.svelte.js';
-import { Heading } from '$lib/blocks/heading/heading.svelte.js';
+import { Paragraph } from '#lib/blocks/paragraph/paragraph.svelte.js';
+import { Heading } from '#lib/blocks/heading/heading.svelte.js';
 
 // Static method and PasteBlock parser tests — no rune construction needed
 

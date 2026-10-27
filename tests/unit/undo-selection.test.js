@@ -8,10 +8,10 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { LoroDoc, UndoManager } from 'loro-crdt';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { makeEndpoint, resolveOffset, restoreSelection } from '$lib/blocks/undo-selection.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { makeEndpoint, resolveOffset, restoreSelection } from '#lib/blocks/undo-selection.js';
 
 /** A text-block stand-in: all makeEndpoint() needs from a Block. */
 const fakeBlock = (text, id = 'b1') => ({ id, parent: null, index: 0, behaviors: new Map([['text', { container: text }]]) });

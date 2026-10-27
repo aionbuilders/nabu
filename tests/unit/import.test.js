@@ -5,13 +5,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
-import { DividerExtension } from '$lib/blocks/divider/index.js';
-import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
-import { jsonToPasteBlocks } from '$lib/utils/extensions.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { BlockquoteExtension } from '#lib/blocks/blockquote/index.js';
+import { DividerExtension } from '#lib/blocks/divider/index.js';
+import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
+import { jsonToPasteBlocks } from '#lib/utils/extensions.js';
 
 function makeEditor() {
   return new Nabu({ extensions: [ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, MarkdownPasteExtension] });

@@ -5,13 +5,13 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { RegionsExtension } from '$lib/blocks/region/index.js';
-import { createMessages } from '$lib/blocks/region/messages.js';
-import { needsEndMarker, endMarkerText } from '$lib/blocks/region/end-marker.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { RegionsExtension } from '#lib/blocks/region/index.js';
+import { createMessages } from '#lib/blocks/region/messages.js';
+import { needsEndMarker, endMarkerText } from '#lib/blocks/region/end-marker.js';
 
 const R = (regionType, title = '', children = []) => ({ type: 'region', regionType, title, children });
 const P = (text = '') => ({ type: 'paragraph', text });

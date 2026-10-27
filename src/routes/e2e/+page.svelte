@@ -1,11 +1,11 @@
 <script>
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { createFullEditor, FullPreset, createPersistedEditor, NabuEditor } from '$lib';
-  import { FloatingToolbar, SlashMenu, DragHandle, CommandInvite, CommandChooser } from '$lib/ui';
+  import { createFullEditor, FullPreset, createPersistedEditor, NabuEditor } from '#lib';
+  import { FloatingToolbar, SlashMenu, DragHandle, CommandInvite, CommandChooser } from '#lib/ui/index.js';
   import { DemoConfirmExtension } from './demo-commands.js';
 
-  /** @type {import('$lib/blocks/nabu.svelte.js').Nabu | null} */
+  /** @type {import('#lib/blocks/nabu.svelte.js').Nabu | null} */
   let engine = $state(null);
 
   // Test-only: the reactive save status of a persisted editor, as a component sees it (`$effect`), in `window.__statusLog`.
@@ -86,7 +86,7 @@
     // paragraph and two sub-sections. In-memory editors only. (Regions can also be added by hand:
     // `nabu.insert('region', { regionType: 'section-1', title: 'X' }, parentId, index)`, `parentId` = null for the root.)
     const seed = page.url.searchParams.get('seed');
-    /** @param {import('$lib/blocks/nabu.svelte.js').Nabu} eng */
+    /** @param {import('#lib/blocks/nabu.svelte.js').Nabu} eng */
     const seedRegions = async (eng) => {
       /** @typedef {[string, Record<string, any>, any[]?]} Spec */
       /** @type {Spec[]} */
@@ -111,7 +111,7 @@
     };
 
     // Test / playground only: `?seed=long` seeds 80 numbered paragraphs ("Long line 00 …") so that the page / a scroll container scrolls.
-    const seedLong = async (/** @type {import('$lib/blocks/nabu.svelte.js').Nabu} */ eng) => {
+    const seedLong = async (/** @type {import('#lib/blocks/nabu.svelte.js').Nabu} */ eng) => {
       for (const child of [...eng.children]) eng.delete(child);
       for (let i = 0; i < 80; i++) eng.insert('paragraph', { text: `Long line ${String(i).padStart(2, '0')} with some words to select` }, null, i);
       await eng.commit();

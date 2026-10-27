@@ -10,21 +10,21 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
-import { DialogueExtension } from '$lib/blocks/dialogue/index.js';
-import { CalloutExtension } from '$lib/blocks/callout/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { DividerExtension } from '$lib/blocks/divider/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '$lib/paste/index.js';
-import { MinimalPreset } from '$lib/presets.js';
-import { degradeUnknownBlocks } from '$lib/utils/extensions.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { BlockquoteExtension } from '#lib/blocks/blockquote/index.js';
+import { DialogueExtension } from '#lib/blocks/dialogue/index.js';
+import { CalloutExtension } from '#lib/blocks/callout/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { DividerExtension } from '#lib/blocks/divider/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '#lib/paste/index.js';
+import { MinimalPreset } from '#lib/presets.js';
+import { degradeUnknownBlocks } from '#lib/utils/extensions.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
 
 const EXTENSIONS = [ParagraphExtension, HeadingExtension, BlockquoteExtension, DialogueExtension, CalloutExtension, CodeExtension, DividerExtension, ToggleExtension, ListExtension, ListItemExtension, RichTextExtension, NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension, BlockExtension];
 

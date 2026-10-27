@@ -6,12 +6,12 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { LoroDoc, LoroMap } from 'loro-crdt';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { RegionsExtension } from '$lib/blocks/region/index.js';
-import { fieldsMap } from '$lib/blocks/region/region.svelte.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { RegionsExtension } from '#lib/blocks/region/index.js';
+import { fieldsMap } from '#lib/blocks/region/region.svelte.js';
 
 /** Two peers sharing one region node whose data has NO `fields` yet. */
 function twoPeers() {

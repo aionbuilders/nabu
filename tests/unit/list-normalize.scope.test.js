@@ -8,11 +8,11 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { LoroText } from 'loro-crdt';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension, Paragraph } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension, List, ListItem } from '$lib/blocks/list/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { normalizeLists } from '$lib/blocks/list/normalize.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension, Paragraph } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List, ListItem } from '#lib/blocks/list/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { normalizeLists } from '#lib/blocks/list/normalize.js';
 
 /** A list extension whose normalizer is the full scan. */
 const FullListExtension = { ...ListExtension, hooks: { ...ListExtension.hooks, onBeforeTransaction: (nabu) => normalizeLists(nabu, { full: true }) } };

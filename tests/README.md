@@ -69,7 +69,7 @@ npx playwright test --project=flaky
 
 | Config file           | Purpose                                    |
 |-----------------------|--------------------------------------------|
-| `vitest.config.js`    | Vitest with happy-dom, Svelte plugin, $lib alias |
+| `vitest.config.js`    | Vitest with happy-dom, Svelte plugin (`#lib` via package.json `imports`) |
 | `playwright.config.js`| Dual project: `core` (normal) + `flaky` (retries: 2) |
 
 ## E2E target: production build

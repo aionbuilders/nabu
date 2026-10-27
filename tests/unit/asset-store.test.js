@@ -7,11 +7,11 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { Blob as NodeBlob } from 'node:buffer';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MemoryAssetStore } from '$lib/files/store.js';
-import { IndexedDBAssetStore } from '$lib/persistence/asset-store.js';
-import { IndexedDBOutbox } from '$lib/persistence/outbox.js';
-import { MemoryOutbox } from '$lib/files/outbox.js';
-import { loadSnapshot, saveSnapshot, deleteSnapshot, openDB } from '$lib/persistence/indexeddb.js';
+import { MemoryAssetStore } from '#lib/files/store.js';
+import { IndexedDBAssetStore } from '#lib/persistence/asset-store.js';
+import { IndexedDBOutbox } from '#lib/persistence/outbox.js';
+import { MemoryOutbox } from '#lib/files/outbox.js';
+import { loadSnapshot, saveSnapshot, deleteSnapshot, openDB } from '#lib/persistence/indexeddb.js';
 
 const H1 = 'sha256-' + '1'.repeat(64);
 const H2 = 'sha256-' + '2'.repeat(64);

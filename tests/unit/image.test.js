@@ -4,11 +4,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ImageBlock } from '$lib/blocks/image/image.svelte.js';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { Files } from '$lib/files/files.svelte.js';
+import { ImageBlock } from '#lib/blocks/image/image.svelte.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { Files } from '#lib/files/files.svelte.js';
 
 describe('ImageBlock statics', () => {
     it('toMarkdown renders ![alt](ref) format', async () => {

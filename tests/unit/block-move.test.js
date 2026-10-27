@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { siblingRun } from '$lib/blocks/move.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { siblingRun } from '#lib/blocks/move.js';
 
 async function make() {
   const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, ToggleExtension], platform: 'other' });

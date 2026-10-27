@@ -7,10 +7,10 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension, Paragraph } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension, List, ListItem } from '$lib/blocks/list/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension, Paragraph } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List, ListItem } from '#lib/blocks/list/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
 
 async function makeEditor() {
   const engine = new Nabu({ extensions: [ParagraphExtension, ListExtension, ListItemExtension, BlockExtension] });

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { findDirectChildOf, findLCA, wrapOrphan } from '$lib/blocks/container.utils.js';
+import { findDirectChildOf, findLCA, wrapOrphan } from '#lib/blocks/container.utils.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { TextBehavior, nextGraphemeLength } from '$lib/behaviors/text/text.behavior.svelte.js';
+import { TextBehavior, nextGraphemeLength } from '#lib/behaviors/text/text.behavior.svelte.js';
 
 /** Mock LoroText over a real string: `delete` really edits it, so assertions read the resulting text. */
 function makeContainer(initial = '') {

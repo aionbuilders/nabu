@@ -5,24 +5,24 @@
  * needs a layout engine and is covered end to end in tests/e2e/drag-drop.spec.ts.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { VideoExtension } from '$lib/blocks/video/index.js';
-import { FileExtension } from '$lib/blocks/file/index.js';
-import { DividerExtension } from '$lib/blocks/divider/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '$lib/paste/index.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { VideoExtension } from '#lib/blocks/video/index.js';
+import { FileExtension } from '#lib/blocks/file/index.js';
+import { DividerExtension } from '#lib/blocks/divider/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '#lib/paste/index.js';
 import {
   transferKind, pickDropEffect, pointerHalf, nearestRect, sameTarget, wantsCopy, compareBlocks, positionInRange, positionAfterRemoval,
   DRAG_MARKER, NABU_FORMAT,
-} from '$lib/utils/drop.js';
+} from '#lib/utils/drop.js';
 
-vi.mock('$lib/utils/drop.js', async (importOriginal) => {
+vi.mock('#lib/utils/drop.js', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, resolveDropPosition: vi.fn() };
 });
-import { resolveDropPosition } from '$lib/utils/drop.js';
+import { resolveDropPosition } from '#lib/utils/drop.js';
 
 const EXTENSIONS = [ParagraphExtension, ImageExtension, VideoExtension, FileExtension, DividerExtension, CodeExtension, NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension];
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);

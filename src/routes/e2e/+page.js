@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { dev } from '$app/environment';
+import { dev } from '$app/env';
 
 // Client-only: the editor relies on WASM, IndexedDB and the DOM.
 export const ssr = false;

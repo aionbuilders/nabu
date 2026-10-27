@@ -4,14 +4,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { VideoBlock } from '$lib/blocks/video/video.svelte.js';
-import { FileBlock } from '$lib/blocks/file/file.svelte.js';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { VideoExtension } from '$lib/blocks/video/index.js';
-import { FileExtension } from '$lib/blocks/file/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { MediaBlock } from '$lib/blocks/media/media-block.svelte.js';
+import { VideoBlock } from '#lib/blocks/video/video.svelte.js';
+import { FileBlock } from '#lib/blocks/file/file.svelte.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { VideoExtension } from '#lib/blocks/video/index.js';
+import { FileExtension } from '#lib/blocks/file/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { MediaBlock } from '#lib/blocks/media/media-block.svelte.js';
 
 // ═══════════════════════════════════════════════════════════
 // VideoBlock statics

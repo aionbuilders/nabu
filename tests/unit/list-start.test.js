@@ -4,12 +4,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension, List } from '$lib/blocks/list/index.js';
-import { ListItem } from '$lib/blocks/list/list-item.svelte.js';
-import { listStart } from '$lib/blocks/list/list.svelte.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List } from '#lib/blocks/list/index.js';
+import { ListItem } from '#lib/blocks/list/list-item.svelte.js';
+import { listStart } from '#lib/blocks/list/list.svelte.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
 
 const parseInline = (text) => [{ insert: text }];
 

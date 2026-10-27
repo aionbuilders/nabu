@@ -8,15 +8,15 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension, Paragraph } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension, List, ListItem } from '$lib/blocks/list/index.js';
-import { ToggleExtension, ToggleBlock } from '$lib/blocks/toggle/index.js';
-import { BlockExtension } from '$lib/blocks/block.extension.js';
-import { RichTextExtension } from '$lib/behaviors/text/index.js';
-import { RegionsExtension, Regions, insertRegion, createRegion, normalizeRegions } from '$lib/blocks/region/index.js';
-import { mergeCrossesRegion } from '$lib/blocks/region/facts.js';
-import { FullPreset } from '$lib/presets.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension, Paragraph } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension, List, ListItem } from '#lib/blocks/list/index.js';
+import { ToggleExtension, ToggleBlock } from '#lib/blocks/toggle/index.js';
+import { BlockExtension } from '#lib/blocks/block.extension.js';
+import { RichTextExtension } from '#lib/behaviors/text/index.js';
+import { RegionsExtension, Regions, insertRegion, createRegion, normalizeRegions } from '#lib/blocks/region/index.js';
+import { mergeCrossesRegion } from '#lib/blocks/region/facts.js';
+import { FullPreset } from '#lib/presets.js';
 
 const BOOK = {
   part: { level: 1, label: 'Part {index}' },

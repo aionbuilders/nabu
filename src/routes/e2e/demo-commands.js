@@ -6,7 +6,7 @@
  * `window.__demoHold = false` makes the hold command unavailable (its `when` turns false) to simulate a key held into a context.
  */
 
-import { Extension } from '$lib/extend';
+import { Extension } from '#lib/extend.js';
 
 /** @param {string} entry */
 const log = (entry) => {
@@ -14,7 +14,7 @@ const log = (entry) => {
   (w.__demoLog ??= []).push(entry);
 };
 
-/** Caret collapsed at the very start of a paragraph. @param {import('$lib/utils/commands.js').CommandContext} ctx */
+/** Caret collapsed at the very start of a paragraph. @param {import('#lib/utils/commands.js').CommandContext} ctx */
 const atParagraphStart = (ctx) => {
   const sel = ctx.block?.behaviors?.get('text')?.selection;
   return ctx.isCollapsed && ctx.block?.type === 'paragraph' && sel?.from === 0;

@@ -10,18 +10,18 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LoroText } from 'loro-crdt';
 import { tick } from 'svelte';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { Paragraph } from '$lib/blocks/paragraph/paragraph.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { BlockquoteExtension } from '$lib/blocks/blockquote/blockquote.extension.js';
-import { DividerExtension } from '$lib/blocks/divider/divider.extension.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { CodeBlock } from '$lib/blocks/code/code.svelte.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { MarkdownPasteExtension } from '$lib/paste/markdown.paste.js';
-import { PlainTextPasteExtension } from '$lib/paste/plain-text.paste.js';
-import { extension } from '$lib/utils/extensions';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { Paragraph } from '#lib/blocks/paragraph/paragraph.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { BlockquoteExtension } from '#lib/blocks/blockquote/blockquote.extension.js';
+import { DividerExtension } from '#lib/blocks/divider/divider.extension.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { CodeBlock } from '#lib/blocks/code/code.svelte.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
+import { PlainTextPasteExtension } from '#lib/paste/plain-text.paste.js';
+import { extension } from '#lib/utils/extensions.js';
 
 /** A made-up text block: no transforms, verbatim paste. */
 class Fiction extends Paragraph {

@@ -9,12 +9,12 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { LoroDoc } from 'loro-crdt';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { createPersistedEditor } from '$lib/persistence/persistence.js';
-import { loadRecords, listQuarantined, openDB } from '$lib/persistence/indexeddb.js';
-import { mergeStored } from '$lib/persistence/merge.js';
-import { startSync, channelName } from '$lib/persistence/sync.js';
-import { readRev, revToken } from '$lib/persistence/tail.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { createPersistedEditor } from '#lib/persistence/persistence.js';
+import { loadRecords, listQuarantined, openDB } from '#lib/persistence/indexeddb.js';
+import { mergeStored } from '#lib/persistence/merge.js';
+import { startSync, channelName } from '#lib/persistence/sync.js';
+import { readRev, revToken } from '#lib/persistence/tail.js';
 
 const EXTENSIONS = [ParagraphExtension];
 const tick = async (n = 12) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };

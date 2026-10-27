@@ -3,19 +3,19 @@
  * Shared helpers of the HTML paste unit tests (corpus + rules): a real Nabu with the block extensions, the HTML
  * interpreter, and a compact textual outline of a PasteFragment.
  */
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { HeadingExtension } from '$lib/blocks/heading/index.js';
-import { BlockquoteExtension } from '$lib/blocks/blockquote/index.js';
-import { DividerExtension } from '$lib/blocks/divider/index.js';
-import { CodeExtension } from '$lib/blocks/code/index.js';
-import { CalloutExtension } from '$lib/blocks/callout/index.js';
-import { ToggleExtension } from '$lib/blocks/toggle/index.js';
-import { ImageExtension } from '$lib/blocks/image/index.js';
-import { VideoExtension } from '$lib/blocks/video/index.js';
-import { FileExtension } from '$lib/blocks/file/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { HtmlPasteExtension } from '$lib/paste/html.paste.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { HeadingExtension } from '#lib/blocks/heading/index.js';
+import { BlockquoteExtension } from '#lib/blocks/blockquote/index.js';
+import { DividerExtension } from '#lib/blocks/divider/index.js';
+import { CodeExtension } from '#lib/blocks/code/index.js';
+import { CalloutExtension } from '#lib/blocks/callout/index.js';
+import { ToggleExtension } from '#lib/blocks/toggle/index.js';
+import { ImageExtension } from '#lib/blocks/image/index.js';
+import { VideoExtension } from '#lib/blocks/video/index.js';
+import { FileExtension } from '#lib/blocks/file/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { HtmlPasteExtension } from '#lib/paste/html.paste.js';
 
 export const EXTENSIONS = [
   ParagraphExtension, HeadingExtension, BlockquoteExtension, DividerExtension, CodeExtension, CalloutExtension, ToggleExtension,

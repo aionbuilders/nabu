@@ -3,8 +3,8 @@
  * ADR 010 (theme 8, P-96): debounce WITH a maximum wait — pure scheduler, fake clock. And the load / recovery decision (P-92), pure.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { createAutosave, resolveMaxWait, DEFAULT_MAX_WAIT } from '$lib/persistence/autosave.js';
-import { resolveLoad, describeRecovery } from '$lib/persistence/recovery.js';
+import { createAutosave, resolveMaxWait, DEFAULT_MAX_WAIT } from '#lib/persistence/autosave.js';
+import { resolveLoad, describeRecovery } from '#lib/persistence/recovery.js';
 
 /** A scheduler driven by a virtual clock. */
 function harness(options) {

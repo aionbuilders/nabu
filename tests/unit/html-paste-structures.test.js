@@ -5,12 +5,12 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { makeEditor, interpret, outline, allText, EXTENSIONS } from './html-paste.helpers.js';
-import { Nabu } from '$lib/blocks/nabu.svelte.js';
-import { ParagraphExtension } from '$lib/blocks/paragraph/index.js';
-import { ListExtension, ListItemExtension } from '$lib/blocks/list/index.js';
-import { HtmlPasteExtension } from '$lib/paste/html.paste.js';
-import { Block } from '$lib/blocks/block.svelte.js';
-import { extension } from '$lib/utils/extensions.js';
+import { Nabu } from '#lib/blocks/nabu.svelte.js';
+import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
+import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
+import { HtmlPasteExtension } from '#lib/paste/html.paste.js';
+import { Block } from '#lib/blocks/block.svelte.js';
+import { extension } from '#lib/utils/extensions.js';
 
 let engine;
 beforeAll(async () => { engine = await makeEditor(); });

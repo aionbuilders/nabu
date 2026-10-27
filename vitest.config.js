@@ -1,9 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import path from 'path';
 
+// `#lib` (-> src/lib) is resolved natively through the `imports` field of package.json (same as SvelteKit 3):
+// no alias needed here.
 export default defineConfig({
-  plugins: [svelte({ hot: false })],
+  plugins: [svelte({ compilerOptions: { hmr: false } })],
   test: {
     environment: 'happy-dom',
     globals: true,
@@ -13,11 +14,6 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: ['src/lib/**'],
-    },
-  },
-  resolve: {
-    alias: {
-      $lib: path.resolve('./src/lib'),
     },
   },
 });
