@@ -12,6 +12,8 @@
         contenteditable="false"
         type="button"
         title="Change callout type ({block.variant})"
+        aria-label="Change callout type ({block.variant})"
+        aria-disabled={block.nabu.readonly ? 'true' : undefined}
         onmousedown={(e) => { e.preventDefault(); block.cycleVariant(); }}
     >{ICONS[block.variant] ?? ICONS.note}</button><div
         class="nabu-callout-body"

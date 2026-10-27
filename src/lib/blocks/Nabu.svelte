@@ -3,8 +3,22 @@
     import Block from "./Block.svelte";
     import { commandTargetElement } from "../utils/command-confirm.svelte.js";
 
-    /** @type {{ engine: Nabu }} */
-    let { engine = new Nabu() } = $props();
+    /**
+     * - `label`: the accessible name of the editor (`aria-label` on the contenteditable root), e.g. "Chapter text".
+     * - `labelledby`: the id of the element that names it (`aria-labelledby`), for a visible `<label>`. Wins over `label` for
+     *   assistive technology when both are set. No `role` is ever set on an editable root: it would flatten the headings inside.
+     * - `readonly`: show the document without letting anyone edit it. Reactive (toggle it live). When omitted, the editor follows
+     *   `engine.readonly` (the `readonly` option of the engine); when given, it sets `engine.readonly`.
+     * @type {{ engine: Nabu, label?: string, labelledby?: string, readonly?: boolean }}
+     */
+    let { engine = new Nabu(), label = undefined, labelledby = undefined, readonly = undefined } = $props();
+
+    // The prop drives the engine (set now, so that the first render and the server render already agree, then kept in sync live):
+    // the engine is where every guard reads it. `isReadonly` is what this component draws.
+    function syncReadonly() { if (readonly !== undefined) engine.readonly = !!readonly; }
+    syncReadonly();
+    $effect.pre(syncReadonly);
+    const isReadonly = $derived(readonly !== undefined ? !!readonly : engine.readonly);
 
     $effect(() => {
         engine.systems.forEach(system => system.start?.());
@@ -26,8 +40,12 @@
 <!-- With spellcheck off, the data-gramm* attributes are the documented opt-out hints of the Grammarly extension (it would
      otherwise inject its own DOM into the editor, which Nabu does not support). Code blocks set spellcheck="false" themselves. -->
 <div
-    contenteditable="true"
+    contenteditable={isReadonly ? 'false' : 'true'}
     class="nabu-editor"
+    aria-label={label}
+    aria-labelledby={labelledby}
+    role={isReadonly ? 'document' : undefined}
+    data-nabu-readonly={isReadonly ? '' : undefined}
     spellcheck={engine.spellcheck ? 'true' : 'false'}
     lang={engine.lang}
     {...(engine.tabDescription ? { 'aria-description': engine.tabDescription } : {})}
@@ -76,11 +94,23 @@
     }
 
     .nabu-editor {
-        outline: none;
+        outline: none; /* replaced by the focus ring below */
         min-height: 100px;
         padding: 1rem;
         white-space: pre-wrap; /* Important pour le comportement éditeur */
         word-break: break-word;
+    }
+
+    /* Focus indicator (WCAG 2.4.7 / 1.4.11): a 2px ring in --nb-focus-ring, defined by the base theme (nabu-theme.css: #0b57d0, 6.4:1 on white,
+       and #8ab4f8, 7.9:1 on #1e1e1e). Without the theme the fallbacks below are the same two colours, picked by prefers-color-scheme.
+       Drawn INSIDE the box (negative offset) so that an `overflow: hidden` ancestor never clips it. A theme that draws its own
+       indicator (Atelier: the border of the pane) overrides this with a more specific rule and sets `outline: none`. */
+    .nabu-editor:focus-visible {
+        outline: var(--nb-focus-ring-width, 2px) solid var(--nb-focus-ring, #0b57d0);
+        outline-offset: calc(var(--nb-focus-ring-width, 2px) * -1);
+    }
+    @media (prefers-color-scheme: dark) {
+        .nabu-editor:focus-visible { outline-color: var(--nb-focus-ring, #8ab4f8); }
     }
 
     /* Target of a pending confirmation (ADR 017): a neutral default, a thin outline + a fill that follows --nb-command-progress

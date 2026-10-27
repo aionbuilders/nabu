@@ -106,7 +106,7 @@ export class SlashMenuController {
     /** @type {number | null} slashStart of a dismissed (Escape) trigger */
     #dismissedKey = $state(null);
 
-    open = $derived(!!this.match && this.filteredItems.length > 0 && this.match.slashStart !== this.#dismissedKey);
+    open = $derived.by(() => !this.#engine.readonly && !!this.match && this.filteredItems.length > 0 && this.match.slashStart !== this.#dismissedKey);
 
     selectedIndex = $state(0);
 

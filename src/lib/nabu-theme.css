@@ -36,6 +36,8 @@
     --nb-danger: rgba(239, 68, 68, 0.4);
     --nb-region-warning: #b45309; /* region seam: tint of a pending merge (4.9:1 on white) */
     --nb-region-rail: #4F46E5; /* region seam: margin rail of the region holding the caret (indigo 600, 6.3:1 on white) */
+    --nb-link: #0b57d0; /* links: 6.4:1 on white, 6.1:1 on #fafafa (WCAG AA text needs 4.5:1; the old #4d9fff was 2.7:1) */
+    --nb-focus-ring: #0b57d0; /* focus indicator of the editor (:focus-visible): 6.4:1 on white (non-text needs 3:1) */
     
     /* Shadows */
     --nb-shadow-lg: 0 16px 32px -12px rgba(0,0,0,0.15);
@@ -70,6 +72,8 @@
         --nb-danger: rgba(239, 68, 68, 0.4);
         --nb-region-warning: #f59e0b; /* amber 500: 8:1 on a dark page (the light #b45309 is 3.7:1) */
         --nb-region-rail: #818CF8; /* indigo 400: 6.4:1 on a dark page (the light #4F46E5 is about 3:1) */
+        --nb-link: #8ab4f8; /* 9.9:1 on #000, 7.9:1 on #1e1e1e, 6.7:1 on #2b2b2b (the light #0b57d0 is 2.6:1 on #1e1e1e) */
+        --nb-focus-ring: #8ab4f8; /* same colour: 7.9:1 on #1e1e1e */
         
         --nb-shadow-lg: 0 16px 32px -12px rgba(0,0,0,0.5);
         --nb-shadow-inset: inset 0 2px 4px rgba(0,0,0,0.2);
@@ -99,6 +103,8 @@
     --nb-danger: rgba(239, 68, 68, 0.4);
     --nb-region-warning: #f59e0b;
     --nb-region-rail: #818CF8;
+    --nb-link: #8ab4f8;
+    --nb-focus-ring: #8ab4f8;
     
     --nb-shadow-lg: 0 16px 32px -12px rgba(0,0,0,0.5);
     --nb-shadow-inset: inset 0 2px 4px rgba(0,0,0,0.2);

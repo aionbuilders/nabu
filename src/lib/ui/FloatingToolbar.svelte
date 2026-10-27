@@ -98,7 +98,7 @@
     onpointerdowncapture={() => { dragging = false; }}
 />
 
-{#if visible && !dragging}
+{#if visible && !dragging && !engine.readonly}
 <div
     bind:this={toolbarEl}
     class="nabu-toolbar"

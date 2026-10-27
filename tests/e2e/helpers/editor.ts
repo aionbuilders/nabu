@@ -180,7 +180,7 @@ async function bootWithRetry(page: Page, navigate: () => Promise<unknown>, timeo
  */
 export async function gotoEditor(
   page: Page,
-  opts: { persist?: string; options?: Record<string, unknown>; seed?: 'regions' | 'long'; commands?: 'demo'; layout?: 'scroll'; theme?: 'dark' | 'dark-attr' | 'light'; vars?: string } = {},
+  opts: { persist?: string; options?: Record<string, unknown>; seed?: 'regions' | 'long'; commands?: 'demo'; layout?: 'scroll'; theme?: 'dark' | 'dark-attr' | 'light'; vars?: string; label?: string } = {},
 ) {
   const params = new URLSearchParams();
   if (opts.persist) params.set('persist', opts.persist);
@@ -193,6 +193,8 @@ export async function gotoEditor(
   if (opts.layout) params.set('layout', opts.layout);
   if (opts.theme) params.set('theme', opts.theme);
   if (opts.vars) params.set('vars', opts.vars);
+  // Dev-only: the `label` prop of NabuEditor (its accessible name).
+  if (opts.label) params.set('label', opts.label);
   // JSON-able Nabu init options (e.g. { placeholders: { show: 'empty' } }), merged into the editor init.
   if (opts.options) params.set('options', JSON.stringify(opts.options));
   const query = params.toString();

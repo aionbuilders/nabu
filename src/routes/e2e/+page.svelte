@@ -19,6 +19,8 @@
   const layout = page.url.searchParams.get('layout');
   const theme = page.url.searchParams.get('theme');
   const vars = page.url.searchParams.get('vars');
+  // Test-only: `?label=…` is the `label` prop of NabuEditor (the accessible name of the editor).
+  const label = page.url.searchParams.get('label') ?? undefined;
 
   onMount(() => {
     let cancelled = false;
@@ -171,7 +173,7 @@
         <DragHandle {engine} />
         <CommandInvite {engine} />
         <CommandChooser {engine} />
-        <NabuEditor {engine} />
+        <NabuEditor {engine} {label} />
       </div>
     </div>
   {/if}

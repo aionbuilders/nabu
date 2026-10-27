@@ -21,6 +21,7 @@
         contenteditable="false"
         type="button"
         aria-pressed={block.checked}
+        aria-disabled={block.nabu.readonly ? 'true' : undefined}
         onmousedown={(e) => { e.preventDefault(); block.toggleChecked(); }}
     >{block.checked ? '☑' : '☐'}</button>{/if}<div bind:this={block.element} class="item-content" class:checked={block.checked}><RichText delta={block.delta} /></div><!--
     -->{#if block.children && block.children.length > 0}

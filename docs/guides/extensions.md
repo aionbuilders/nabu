@@ -371,7 +371,7 @@ A member of the editor or of a block that is in neither list (you can see it in 
 | `isMarkActive` | Whether every selected text run carries a mark |
 | `pendingCommand`, `pendingCommandOn`, `cancelPendingCommand`, `commandAnnouncement` | The command waiting for its confirmation (reactive), and its live-region text |
 | `selection` | The selection, in terms of blocks: see below |
-| `lang`, `spellcheck`, `tab`, `tabHint`, `placeholders` | The resolved options (reactive; assign to change them) |
+| `lang`, `spellcheck`, `tab`, `tabHint`, `placeholders`, `readonly` | The resolved options (reactive; assign to change them). `readonly` closes the user's channels (input, paste, drop, keys, commands) and leaves the host's own calls alone: see [Read-only mode](./accessibility.md#read-only-mode) |
 | `composing`, `composingBlock` | An IME composition is running, and in which block |
 | `debugging` | When true, `warn` logs to the console |
 | `warn` | `warn(...args)`: a diagnostic, silent unless `debugging` |

@@ -132,7 +132,7 @@ The values below are those of the base theme (light, then dark). The Atelier the
 | `--nb-text-secondary` | black 60% / white 60% | Blockquote, slash menu hints, secondary labels |
 | `--nb-text-muted` | black 50% / white 40% | Code language chip, drag handle, empty and error states of media. Meant for glyphs and hints, not for body text (see [Accessibility](./accessibility.md#colour-contrast)) |
 | `--nb-text-placeholder` | none (the text colour at 60%) | The hint shown in an empty block |
-| `--nb-link` | none (`#4d9fff`) | Links |
+| `--nb-link` | `#0b57d0` / `#8ab4f8` (6.4:1 on white, 7.9:1 on `#1e1e1e`) | Links. Without the base theme the same two colours are the fallbacks, chosen by `prefers-color-scheme` |
 | `--nb-error` | none (`#f44`) | A file chip in error |
 
 **Surfaces**
@@ -152,6 +152,8 @@ The values below are those of the base theme (light, then dark). The Atelier the
 | `--nb-border` | black 10% / white 10% | Blockquote bar, divider, code block, toggle body rule, floating UI, empty media |
 | `--nb-border-subtle` | black 5% / white 5% | Code language chip |
 | `--nb-border-focus` | black 15% / white 20% | Defined for hosts and themes; no built-in component reads it |
+| `--nb-focus-ring` | `#0b57d0` / `#8ab4f8` | The focus indicator of the editor (a 2 px outline on `:focus-visible`, drawn inside the box). Fallback without the base theme: the same two colours. The Atelier theme replaces it with the border of the pane |
+| `--nb-focus-ring-width` | `2px` | Its thickness |
 
 **Accent and status**
 

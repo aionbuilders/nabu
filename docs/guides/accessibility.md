@@ -1,6 +1,6 @@
 ---
 title: Accessibility
-description: What Nabu does for keyboard and assistive technology users, what you must add (the accessible name of the editor), the ARIA it exposes, colour contrast of the default and Atelier themes, motion, and the known limits.
+description: What Nabu does for keyboard and assistive technology users, what you should add (the accessible name of the editor), the ARIA it exposes, colour contrast of the default and Atelier themes, motion, and the known limits.
 section: guides
 order: 70
 ---
@@ -11,31 +11,25 @@ Nabu's main accessibility choice is architectural: the editor is **one native `c
 
 This page lists what is in place, what you have to do on your side, and what is not covered.
 
-## What you must do: name the editor
+## What you should do: name the editor
 
-`<NabuEditor>` renders a bare `contenteditable` element and has **no `label` prop** and no engine option for one. Browsers expose such an element as an editable multi-line text region, but without a name a screen reader announces it as an unlabelled edit field. Add the name yourself, on the element marked `data-nabu-root`:
+`<NabuEditor>` renders a `contenteditable` element. Browsers expose it as an editable multi-line text region, but without a name a screen reader announces it as an unlabelled edit field. Name it with the `label` prop (an `aria-label`), or point it at a visible label with `labelledby` (an `aria-labelledby`):
 
 ```svelte
 <script>
   import { NabuEditor, createDocumentEditor } from '@aionbuilders/nabu';
 
   const engine = createDocumentEditor();
-  let wrapper;
-
-  // Name the editor: aria-label here, or aria-labelledby pointing at a visible label.
-  $effect(() => {
-    wrapper.querySelector('[data-nabu-root]')?.setAttribute('aria-label', 'Chapter text');
-  });
 </script>
 
-<div bind:this={wrapper}>
-  <NabuEditor {engine} />
-</div>
+<NabuEditor {engine} label="Chapter text" />
+
+<!-- or, next to a visible label -->
+<label id="body-label">Body</label>
+<NabuEditor {engine} labelledby="body-label" />
 ```
 
-Do **not** add a `role="textbox"` or `aria-multiline` to the element: it would make screen readers flatten the headings, lists and region seams inside it. The name alone is enough. (The website's editor does exactly this, and a browser test checks that it is named in the accessibility tree, is exposed as an editable rich-text region, and that its headings are still headings.)
-
-If the editor is next to a visible `<label>`, give the label an `id` and set `aria-labelledby` the same way.
+Both props are reactive. There is deliberately **no `role` or `aria-multiline`** on the editable element: it would make screen readers flatten the headings, lists and region seams inside it. The name alone is enough. (The website's editor is named this way, and a browser test checks that it is named in the accessibility tree, is exposed as an editable rich-text region, and that its headings are still headings.)
 
 ## Keyboard
 
@@ -131,11 +125,19 @@ A destructive merge can never happen with a single stray key press: it needs a h
 
 - The **toolbar** is a `role="toolbar"` named "Text formatting"; its buttons are named (`aria-label`) and carry `aria-pressed` for the active marks. The icon of the link button is `aria-hidden`.
 - The **command chooser** (the `:::` chooser, the choice between actions) is a `role="listbox"` with `role="option"` items, `aria-selected` and `aria-activedescendant`. Focus stays in the editor while the listbox is driven by the arrow keys.
+- The **slash menu** is a `role="listbox"` named "Insert block", with `role="option"` entries and `aria-selected`; entries of the same group (Text, Lists, Blocks, Media, Structure) sit in a `role="group"` named after it (nothing visible changes). Focus never leaves the editor, so the menu cannot rely on focus: while it is open the editor root carries `aria-controls` (the list) and `aria-activedescendant` (the active option), and a visually hidden polite live region says the active entry and its position ("Heading 1, Large heading, 2 of 15"), because screen readers do not all follow `aria-activedescendant` on an editable host. The name, the group names and the sentence are translatable with the `messages` prop of `<SlashMenu>`: `{ label, groups: { text: 'Texte' }, option: ({ title, subtitle, index, count }) => '...' }`.
+- The **callout's icon button** (it cycles the variant) has an `aria-label` ("Change callout type (note)"), not only a `title`; the language select of a code block has one too.
 - The **drag handle** is a button named "Drag to reorder".
 
 ### Placeholders and decoration
 
 The hint shown in an empty block (`placeholders`) is drawn by CSS (`::after` with `content: attr(data-placeholder)`), so it is **not text** of the document and is not read as such. The icons of the toolbar, the rule of a seam and the end-marker's decorations are hidden from assistive technology.
+
+## Read-only mode
+
+`<NabuEditor readonly>` (or the `readonly` option of the engine, or `engine.readonly = true` at any time) shows a document without letting anyone change it. The root becomes `contenteditable="false"` with `role="document"` and keeps the `label` as its name: a screen reader treats it as content to read, not as an edit field. Text stays selectable and copyable, and links work.
+
+`aria-readonly` is not used: it is only valid on widget roles such as `textbox`, and putting `role="textbox"` on the root would flatten the headings (see above). Not being editable, exposed by `contenteditable="false"`, is what tells assistive technology that the content is read-only. The Escape-then-Tab hint is dropped (nothing traps the focus), the toolbar, slash menu and drag handle hide themselves, and the checkboxes and buttons that edit (the to-do box, the callout icon, the code language select) are `aria-disabled` or `disabled`. A toggle can still be opened to read it: see [the read-only recipe](../recipes/read-only-viewer.md).
 
 ## Language
 
@@ -157,10 +159,12 @@ Computed on pages from pure white, and for dark pages from `#000` to `#1e1e1e`, 
 | `--nb-region-warning` | 4.9:1 | 8:1 | The tint of a pending merge |
 | `--nb-region-rail` | 6.3:1 | 6.4:1 | The margin rail of a region |
 
-Two things to set yourself on a light page:
+The base theme now sets both of the following, for both schemes:
 
-- **Links.** The base theme does not define `--nb-link`, and the fallback is `#4d9fff`, which is **2.7:1 on white**. Set `--nb-link` to a darker blue such as `#0b57d0` (6.4:1). On a dark page the fallback is 6.9:1.
-- **A focus indicator.** The editor element has `outline: none`: the caret is the only indicator that the editor has the focus. If your design needs more (WCAG 2.4.7 is judged on the whole page), style `.nabu-editor:focus-visible`. The Atelier theme does it by strengthening the border of the pane.
+- **Links.** `--nb-link` is `#0b57d0` on a light page (6.4:1 on white, 6.1:1 on `#fafafa`) and `#8ab4f8` on a dark one (9.9:1 on `#000`, 7.9:1 on `#1e1e1e`, 6.7:1 on `#2b2b2b`): 4.5:1 or more on both. (It used to be `#4d9fff`, 2.7:1 on white.) Without the base theme the same two colours are the fallbacks, chosen by `prefers-color-scheme`. Check your own `--nb-link` against your page.
+- **A focus indicator.** The editor element shows a 2 px ring in `--nb-focus-ring` on `:focus-visible` (WCAG 2.4.7 and 1.4.11): `#0b57d0` on a light page, `#8ab4f8` on a dark one, 3:1 or more against the page. It is drawn inside the box, so a clipping ancestor does not cut it. Set `--nb-focus-ring` (colour) and `--nb-focus-ring-width` to restyle it, or `outline: none` on `.nabu-editor` and draw your own. The Atelier theme keeps its own indicator, the stronger border of the pane.
+
+The small buttons inside the document (the to-do box, the toggle arrow, the callout icon, the code language select) still have no ring of their own in the base theme; the Atelier theme gives them one.
 
 ### The Atelier theme
 
@@ -187,8 +191,6 @@ Nabu animates very little. The transitions are 0.1 to 0.15 s fades of a colour, 
 
 - **Screen readers are not systematically tested.** The attributes above are checked in Chromium by unit and browser tests (the accessible name, the editable region, heading exposure, the toolbar and listbox roles, the `aria-description` of the Tab hint), and the behaviours follow the platform. Real use with NVDA, JAWS, VoiceOver and Orca has not been audited.
 - **Mobile screen readers are untested** (VoiceOver on iOS, TalkBack), as are mobile virtual keyboards: see [Language and input methods](./ime-and-languages.md#what-is-tested).
-- **The slash menu has no ARIA roles.** It is a set of buttons driven by the arrow keys, Enter and Escape while focus stays in the editor, so a screen reader is not told that a menu opened or which item is active. The `:::` chooser, built on the same machinery as the command chooser, does have a listbox.
-- **The callout's icon button** (it cycles the variant) is named only by its `title` and an emoji.
+- **The slash menu's announcements are untested with real screen readers.** The roles, `aria-activedescendant` and the live region are checked in Chromium; how NVDA, JAWS and VoiceOver voice them on a `contenteditable` host has not been audited.
 - **The drag handle** is a pointer control; the keyboard path is the move commands above.
-- **No label prop** on `NabuEditor` (above).
 - The editor root carries `translate="no"`: the browser's page translation does not apply to the editor's content.

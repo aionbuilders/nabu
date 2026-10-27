@@ -128,9 +128,10 @@ export class ListItem extends MegaBlock {
     }
 
     /**
-     * Toggle the checked state.
+     * Toggle the checked state (the user's gesture: a click on the box, the key). Does nothing in a read-only editor.
      */
     toggleChecked() {
+        if (this.nabu.readonly) return;
         this.setChecked(!this.checked);
     }
 

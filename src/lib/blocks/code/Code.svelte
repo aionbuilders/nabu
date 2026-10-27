@@ -9,6 +9,8 @@
         data-nabu-ui
         contenteditable="false"
         value={block.language ?? 'plaintext'}
+        disabled={block.nabu.readonly}
+        aria-label="Code language"
         onchange={(e) => block.setLanguage(e.currentTarget.value === 'plaintext' ? null : e.currentTarget.value)}
     >
         {#each LANGS as lang}<option value={lang}>{lang}</option>{/each}

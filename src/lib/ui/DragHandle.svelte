@@ -96,6 +96,7 @@
 
   /** @param {PointerEvent} e */
   function onPointerMove(e) {
+    if (engine.readonly) { handle.visible = false; return; } // nothing to reorder
     if (dragging) { onDragMove(e); return; }
     // The handle lives OUTSIDE the editor; while the pointer is over the handle
     // itself, keep it visible — else moving onto it to grab it would hide it.
@@ -143,7 +144,7 @@
 
   function performDrop() {
     const id = draggedId;
-    if (!dropTarget || !id) return;
+    if (!dropTarget || !id || engine.readonly) return;
     const dragged = engine.blocks.get(id);
     const hit = engine.blocks.get(dropTarget.blockId);
     if (!dragged || !hit) return;
@@ -180,7 +181,7 @@
 
 <svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} />
 
-{#if handle.visible && !dragging}
+{#if handle.visible && !dragging && !engine.readonly}
   <button
     class="nabu-drag-handle"
     data-nabu-ui

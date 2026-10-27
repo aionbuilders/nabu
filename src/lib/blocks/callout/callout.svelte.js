@@ -71,9 +71,10 @@ export class CalloutBlock extends TextBlock {
     }
 
     /**
-     * Cycle to the next callout variant.
+     * Cycle to the next callout variant (the user's gesture: a click on the icon). Does nothing in a read-only editor.
      */
     cycleVariant() {
+        if (this.nabu.readonly) return;
         const i = CALLOUT_VARIANTS.indexOf(this.variant);
         this.setVariant(CALLOUT_VARIANTS[(i + 1) % CALLOUT_VARIANTS.length]);
     }

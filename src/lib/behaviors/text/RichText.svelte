@@ -44,5 +44,8 @@
     :global(.nabu-underline)     { text-decoration: underline; }
     :global(.nabu-strikethrough) { text-decoration: line-through; }
     :global(.nabu-code)          { font-family: monospace; background: rgba(135, 131, 120, 0.15); border-radius: 3px; padding: 0.1em 0.3em; }
-    :global(.nabu-link)          { color: var(--nb-link, #4d9fff); text-decoration: underline; cursor: pointer; }
+    :global(.nabu-link)          { color: var(--nb-link, #0b57d0); text-decoration: underline; cursor: pointer; } /* fallback 6.4:1 on white (AA text: 4.5:1); the base theme sets --nb-link for both schemes */
+    @media (prefers-color-scheme: dark) {
+        :global(.nabu-link)      { color: var(--nb-link, #8ab4f8); } /* fallback 7.9:1 on #1e1e1e, 9.9:1 on black */
+    }
 </style>

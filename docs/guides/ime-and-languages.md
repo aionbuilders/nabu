@@ -79,6 +79,29 @@ expect(createFullEditor().lang).toBeUndefined();
 
 `lang` only describes the editor as a whole. A document that mixes languages (a quote in Latin in a French novel) has no per-span language yet: see the gaps.
 
+## Counting words
+
+`wordCount` (of a text block, a list item, a toggle, a region, and everything that sums them) uses `Intl.Segmenter` with `granularity: 'word'` when the platform has it, counting the segments that are word-like, in the language of the editor (the `lang` option, `nabu.lang`). A sentence in Chinese or Japanese, which has no spaces, therefore counts its words rather than one. Without `Intl.Segmenter` (an old engine), it falls back to splitting on whitespace.
+
+```js test
+import { createDocumentEditor } from '@aionbuilders/nabu';
+
+const count = async (lang, text) => {
+  const engine = createDocumentEditor({ lang });
+  await engine.importMarkdown(text);
+  return engine.children.reduce((sum, block) => sum + block.wordCount, 0);
+};
+
+expect(await count('en', 'The quick brown fox')).toBe(4);
+// an apostrophe keeps a word whole, « » and dashes standing alone are not words
+expect(await count('fr', "L'homme dit « bonjour » — puis part.")).toBe(5);
+// no spaces: segmented by words (the exact number depends on the platform's dictionary)
+expect(await count('zh', '我今天去了北京天安门')).toBeGreaterThan(3);
+expect(await count('ja', '私は昨日東京に行きました')).toBeGreaterThan(3);
+```
+
+It follows the Unicode word-break rules, so it differs from a whitespace count in three ways: a punctuation mark or quotation mark standing alone is not a word, a hyphenated compound counts as several words (`well-known` is two), and a number such as `1,000` or `3.14` is one word. Typing recounts only the block being edited.
+
 ## Typography per language
 
 `TypographyExtension` has **no options**. It does one thing: typing `-- ` (two hyphens and a space, not preceded by another hyphen) becomes `— ` (an em dash). It does not turn straight quotes into curly ones, does not insert non-breaking spaces and knows nothing about languages. Those typographic conventions (guillemets and the narrow space before `;`, `:`, `!`, `?` in French, the quotation marks of German or Japanese) are yours to add.

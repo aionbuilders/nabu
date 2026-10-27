@@ -28,22 +28,23 @@ export class ToggleBlock extends MegaBlock {
 
         // Initialize collapsed from Loro metadata
         this.collapsed = !!data.get('collapsed');
-        // Subscribe to data changes to keep collapsed in sync
+        // Subscribe to data changes to keep collapsed in sync (a change of the document wins over the read-only view state)
         this.node.data.subscribe(() => {
+            this.#viewState = null;
             this.collapsed = !!this.node.data.get('collapsed');
         });
 
-        this.serializers.set('markdown', () => toggleMarkdown(this.collapsed, this.behavior.toMarkdown(), /** @type {any} */ (this.children.map(c => c.serialize('markdown')))));
+        this.serializers.set('markdown', () => toggleMarkdown(this.#stored, this.behavior.toMarkdown(), /** @type {any} */ (this.children.map(c => c.serialize('markdown')))));
         this.serializers.set('json', () => ({
             id: this.id,
             type: 'toggle',
-            props: { collapsed: this.collapsed },
+            props: { collapsed: this.#stored },
             content: this.behavior.toJSON(),
             children: this.children.map(c => c.serialize('json')).filter(Boolean)
         }));
         this.serializers.set('application/x-nabu+json', () => ({
             type: 'toggle',
-            props: { collapsed: this.collapsed },
+            props: { collapsed: this.#stored },
             delta: this.container.sliceDelta(0, this.container.length),
             children: this.children.map(c => c.serialize('application/x-nabu+json')).filter(Boolean)
         }));
@@ -55,8 +56,21 @@ export class ToggleBlock extends MegaBlock {
     // marksEnabled stays true (default) — bold/italic work inside the header
     // splitsOnEnter is not set (defaults true) but Enter is overridden in beforeinput
 
-    /** @type {boolean} */
-    collapsed = $state(false);
+    /** The collapsed state of the DOCUMENT (the `collapsed` prop of the node). */
+    #stored = $state(false);
+
+    /** Read-only editors only: what the reader chose to see, never written to the document (`null`: nothing chosen). */
+    /** @type {boolean | null} */
+    #viewState = $state(null);
+
+    /**
+     * Whether the body is hidden. In a read-only editor a reader may open or close a toggle to read it: that is VIEW STATE
+     * (kept in memory, not in the document: no Loro write, no commit, no undo step, nothing synced or persisted, serializers
+     * keep reporting the document's own state), and it is ignored again as soon as the editor is not read-only.
+     * @type {boolean}
+     */
+    get collapsed() { return this.nabu.readonly && this.#viewState !== null ? this.#viewState : this.#stored; }
+    set collapsed(v) { this.#stored = !!v; }
 
     /** A collapsed toggle does not render its body: navigation must never put the caret in it. */
     get hidesChildren() { return this.collapsed; }
@@ -103,10 +117,12 @@ export class ToggleBlock extends MegaBlock {
     // ── Collapse control ────────────────────────────────────────────────────
 
     /**
-     * Set the collapsed state and persist to Loro.
+     * Set the collapsed state and persist to Loro (in a read-only editor: only what the reader sees, see {@link ToggleBlock#collapsed}).
      * @param {boolean} v
      */
     setCollapsed(v) {
+        if (this.nabu.readonly) { this.#viewState = !!v; return; } // view state only: the document is not touched
+        this.#viewState = null;
         this.collapsed = !!v;
         /** @type {any} */ (this.node.data).set('collapsed', !!v);
         this.commit();

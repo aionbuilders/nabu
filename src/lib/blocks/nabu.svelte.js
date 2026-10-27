@@ -47,6 +47,11 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 *   Object: `{ show?: 'focus' | 'empty', text?: Record<blockType, string | false | ((block) => string | false)> }`.
 * @property {boolean} [spellcheck] - Browser spellcheck on the editor (default `true`). `false` turns it off and adds the opt-out
 *   hints of the Grammarly extension (`data-gramm="false"`, ...). Code blocks are never spellchecked. Reactive: `nabu.spellcheck`.
+* @property {boolean} [readonly] - Show the document without letting the user change it (default `false`). Reactive: `nabu.readonly`,
+*   assign to toggle live (`<NabuEditor readonly>` sets it). The editor root becomes `contenteditable="false"`; the engine ignores
+*   typing, paste, cut, drop, drag moves and every command / shortcut (undo and redo included). Copy, text selection and links
+*   keep working, and the floating UI (toolbar, slash menu, drag handle) hides itself. Code of the host is NOT restricted:
+*   `insert`, `importJSON`, `importMarkdown`, `importRemote`, `transact` still work, which is how a viewer loads its document.
 * @property {string} [lang] - Language of the content, a BCP 47 tag (`'fr'`, `'en-GB'`). Set on the root as `lang`, so the browser's
 *   spellchecker, hyphenation and screen readers use it. Unset: inherits the page language. An invalid tag is ignored (warning).
 *   Reactive: `nabu.lang`.
@@ -275,6 +280,7 @@ export class Nabu {
         this.placeholders = normalizePlaceholders(init.placeholders);
         this.spellcheck = init.spellcheck !== false;
         this.lang = init.lang;
+        this.readonly = !!init.readonly;
         this.#tabDefault = resolveTabMode(init.tabDefault, 'focus', (message) => this.warn(message));
         this.tab = init.tab;
         if (typeof init.tabHint === 'string' || init.tabHint === false) this.tabHint = init.tabHint;
@@ -324,7 +330,7 @@ export class Nabu {
 
                 if (ext.actions) {
                     for (const [topic, handler] of Object.entries(ext.actions)) {
-                        this.#pulse.on(topic, ({ event }) => handler(this, event.data, event.topic));
+                        this.#pulse.on(topic, ({ event }) => { if (this.#readonly) return; return handler(this, event.data, event.topic); }); // read-only: actions are edits, they do nothing
                     }
                 }
 
@@ -546,6 +552,23 @@ export class Nabu {
      */
     spellcheck = $state.raw(true);
 
+    #readonly = $state.raw(false);
+
+    /**
+     * Read-only mode (see the `readonly` option of NabuInit). Reactive: assign to switch it on or off at runtime. While `true`
+     * the user cannot change the document: input, paste, cut, drop, drag moves and commands (shortcuts, `commands.run`,
+     * `exec` of a command, undo / redo) are ignored by the engine, and the UI components hide themselves. Programmatic
+     * edits by the host (`insert`, `importJSON`...) are not blocked. View state that is not part of the document (a toggle
+     * opened to read it) stays possible and is never written to the document.
+     * @type {boolean}
+     * @public
+     */
+    get readonly() { return this.#readonly; }
+    set readonly(value) {
+        this.#readonly = !!value;
+        if (this.#readonly) this.commandConfirm?.cancel('api'); // a hold / invite / chooser in progress is moot
+    }
+
     /** @type {string | undefined} */
     #lang = $state.raw(undefined);
 
@@ -586,7 +609,7 @@ export class Nabu {
     tabHint = $state.raw(DEFAULT_TAB_HINT);
 
     /** What the editor root exposes as `aria-description`: the hint, only while the mode keeps the focus in. */
-    get tabDescription() { return this.#tab !== 'focus' && this.tabHint ? this.tabHint : undefined; }
+    get tabDescription() { return !this.#readonly && this.#tab !== 'focus' && this.tabHint ? this.tabHint : undefined; }
 
     /** An Escape nobody consumed was the previous key: the next Tab / Shift+Tab leaves the editor (see `utils/tab.js`). */
     #tabEscaped = false;
@@ -748,7 +771,7 @@ export class Nabu {
     #registerCommands(owner, commands) {
         for (const [id, def] of Object.entries(commands)) {
             const entry = this.commands.register(id, def, owner);
-            if (entry) this.#pulse.on(id, ({ event }) => this.commands.invoke(entry, event.data));
+            if (entry) this.#pulse.on(id, ({ event }) => (this.#readonly ? undefined : this.commands.invoke(entry, event.data)));
         }
     }
 
@@ -1196,6 +1219,7 @@ export class Nabu {
      */
     handleMousedown(e) {
         this.rearmTab();
+        if (this.#readonly) return;
         if (e.button !== 0 || e.defaultPrevented || e.target !== e.currentTarget) return;
         const last = this.lastVisibleBlock;
         const lastEl = /** @type {HTMLElement | null} */ (last?.element);
@@ -1301,6 +1325,7 @@ export class Nabu {
     
     /** @param {InputEvent} e */
     handleBeforeinput(e) {
+        if (this.#readonly) { e.preventDefault(); return; } // nothing is typed, deleted, pasted or dropped in a read-only editor
         this.selection.sync(); // selectionchange is async: don't act on a stale caret
         // Ne pas interférer avec la composition IME en cours : le navigateur
         // doit pouvoir muter librement le text node (insertCompositionText
@@ -1328,6 +1353,7 @@ export class Nabu {
      * @param {CompositionEvent} e
      */
     handleCompositionStart(e) {
+        if (this.#readonly) return;
         this.selection.sync();
         // A second compositionstart in the SAME block while one runs (Chrome silently restarts a composition when a script
         // rewrites its text node, e.g. a programmatic edit of the block: no compositionend in between): the first start is the
@@ -1393,6 +1419,7 @@ export class Nabu {
      * @param {CompositionEvent} e
      */
     handleCompositionEnd(e) {
+        if (this.#readonly && !this.#composing) return;
         this.#composing = false;
         const composedIn = this.#compositionStartBlock?.behaviors?.get('text');
         const composedBlock = this.#compositionStartBlock;
@@ -1452,6 +1479,8 @@ export class Nabu {
 
     /** @param {KeyboardEvent} e */
     handleKeydown(e) {
+        // Read-only: no command, hook or block sees the key. The browser keeps its own keys (selection, copy, scrolling).
+        if (this.#readonly) return;
         this.selection.sync(); // no-op when the document capture listener already synced
         this.selection.normalize();
         // The Escape-then-Tab way out of the `tab` option (utils/tab.js): any key but a lone modifier closes it, whoever handles the key.
@@ -1670,6 +1699,7 @@ export class Nabu {
         this.selection.sync();
         if (this.selection.isCollapsed) return;
         e.preventDefault();
+        if (this.#readonly) { this.handleCopy(e); return; } // cutting a read-only text copies it and removes nothing
 
         // 1. Copy selection to clipboard
         this.handleCopy(e);
@@ -1686,8 +1716,9 @@ export class Nabu {
 
     /** @param {ClipboardEvent} e */
     handlePaste(e) {
-        this.selection.sync();
         e.preventDefault();
+        if (this.#readonly) return;
+        this.selection.sync();
         const clipboard = e.clipboardData;
         if (!clipboard) return;
         this.#insertTransfer(clipboard, null);
@@ -1889,7 +1920,7 @@ export class Nabu {
         }
         const token = Math.random().toString(36).slice(2) + Date.now().toString(36);
         e.dataTransfer.setData(DRAG_MARKER, token);
-        e.dataTransfer.effectAllowed = 'copyMove';
+        e.dataTransfer.effectAllowed = this.#readonly ? 'copy' : 'copyMove'; // read-only: the text can be dragged out, never moved
         this.#dragSource = { token, range };
     }
 
@@ -1901,6 +1932,7 @@ export class Nabu {
     handleDragOver(e) {
         const dt = e.dataTransfer;
         if (!dt) return;
+        if (this.#readonly) { this.#setDropTarget(null); dt.dropEffect = 'none'; return; } // not cancelled: nothing can be dropped
         if (!this.#ownsDrag(e)) { this.#setDropTarget(null); return; }
         const own = !!this.#dragSource && Array.from(dt.types ?? []).includes(DRAG_MARKER);
         const copy = own && wantsCopy(e);
@@ -1941,7 +1973,8 @@ export class Nabu {
     handleDrop(e) {
         const dt = e.dataTransfer;
         if (!dt || !this.#ownsDrag(e)) return;
-        e.preventDefault();
+        e.preventDefault(); // the browser never navigates to a dropped file, read-only or not
+        if (this.#readonly) { this.#dragSource = null; this.#setDropTarget(null); return; }
         const source = this.#dragSource;
         this.#dragSource = null;
         this.#setDropTarget(null);
@@ -1965,6 +1998,7 @@ export class Nabu {
      * @param {{ source?: { range: import('./container.utils.js').DeletionRange } | null }} [opts]
      */
     dropAt(dt, position, opts = {}) {
+        if (this.#readonly) return;
         const source = opts.source ?? null;
         if (source) {
             const { range } = source;

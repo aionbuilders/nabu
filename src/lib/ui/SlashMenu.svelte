@@ -1,9 +1,43 @@
 <script>
   import { SlashMenuController } from './slash-menu.svelte.js';
   import { anchorRect, placeNear, clipBounds, isOutside } from './anchor.js';
-  /** @type {{ engine: import('../blocks/nabu.svelte.js').Nabu, commands?: import('./slash-menu.svelte.js').SlashCommand[] }} */
-  let { engine, commands = [] } = $props();
+
+  /**
+   * The texts the menu exposes to assistive technology (the visible titles come from the entries themselves):
+   *  - `label`: the accessible name of the listbox, default "Insert block";
+   *  - `groups`: the name of each group of entries (`role="group"`), by `group` id; an unknown id is used as it is;
+   *  - `option`: the sentence announced for the active entry, `({ title, subtitle, index, count }) => string` (`index` from 1),
+   *    default "Heading 1, Large section heading, 2 of 15".
+   * @typedef {Object} SlashMenuMessages
+   * @property {string} [label]
+   * @property {Record<string, string>} [groups]
+   * @property {(info: { title: string, subtitle?: string, index: number, count: number }) => string} [option]
+   */
+
+  /** @type {{ engine: import('../blocks/nabu.svelte.js').Nabu, commands?: import('./slash-menu.svelte.js').SlashCommand[], messages?: SlashMenuMessages }} */
+  let { engine, commands = [], messages = {} } = $props();
   const ctrl = new SlashMenuController(engine, commands);
+  const uid = $props.id();
+  const listId = `${uid}-list`;
+  const optionId = (/** @type {number} */ i) => `${uid}-opt-${i}`;
+
+  const GROUP_NAMES = { text: 'Text', lists: 'Lists', blocks: 'Blocks', media: 'Media', structure: 'Structure' };
+  const label = $derived(messages.label ?? 'Insert block');
+  const groupName = (/** @type {string} */ id) => messages.groups?.[id] ?? /** @type {Record<string, string>} */ (GROUP_NAMES)[id] ?? id;
+
+  // Consecutive entries of the same group share one `role="group"` (the entries are already sorted by group). The group is not
+  // drawn: the menu looks as before, the grouping is for assistive technology. `i` is the position in the whole list.
+  const sections = $derived.by(() => {
+    /** @type {{ group: string | null, items: Array<{ item: import('./slash-menu.svelte.js').SlashCommand, i: number }> }[]} */
+    const out = [];
+    ctrl.filteredItems.forEach((item, i) => {
+      const group = item.group || null;
+      const last = out[out.length - 1];
+      if (last && last.group === group) last.items.push({ item, i });
+      else out.push({ group, items: [{ item, i }] });
+    });
+    return out;
+  });
   /** @type {HTMLElement | null} */
   let menuEl = $state(null);
   /** Viewport coordinates (the menu is `position: fixed`): anchored by `top` (below the caret) or `bottom` (above it). */
@@ -19,6 +53,29 @@
 
   const MAX_HEIGHT = 320; // keep in sync with the CSS max-height
   const MIN_HEIGHT = 100; // never squash the menu below this, even in a tiny viewport
+
+  // What a screen reader hears when the active entry changes. The caret stays in the editor (a contenteditable host: focus can
+  // never move to the menu), so the menu cannot rely on focus; a polite live region says the active entry, and the editor root
+  // points at it with aria-activedescendant (below) for the assistive technologies that follow it.
+  const announcement = $derived.by(() => {
+    if (!ctrl.open || hidden) return '';
+    const item = ctrl.filteredItems[ctrl.selectedIndex];
+    if (!item) return '';
+    const info = { title: item.title, subtitle: item.subtitle, index: ctrl.selectedIndex + 1, count: ctrl.filteredItems.length };
+    return messages.option ? messages.option(info) : `${info.title}${info.subtitle ? `, ${info.subtitle}` : ''}, ${info.index} of ${info.count}`;
+  });
+
+  // The editor root is the element that has the focus: while the menu is open it owns the list (aria-controls) and names the
+  // active entry (aria-activedescendant), like the combobox pattern but without changing the role of the host (which would
+  // flatten the headings inside it). Both are removed when the menu closes.
+  $effect(() => {
+    if (!ctrl.open || hidden || !menuEl) return;
+    const root = ctrl.match?.block?.element?.closest?.('[data-nabu-root]');
+    if (!root) return;
+    root.setAttribute('aria-controls', listId);
+    root.setAttribute('aria-activedescendant', optionId(ctrl.selectedIndex));
+    return () => { root.removeAttribute('aria-controls'); root.removeAttribute('aria-activedescendant'); };
+  });
 
   // Reset the highlighted item whenever the query changes.
   $effect(() => { ctrl.query; ctrl.selectedIndex = 0; });
@@ -72,10 +129,31 @@
   });
 </script>
 
+{#snippet row(/** @type {import('./slash-menu.svelte.js').SlashCommand} */ item, /** @type {number} */ i)}
+    <button
+      id={optionId(i)}
+      type="button"
+      role="option"
+      tabindex="-1"
+      aria-selected={i === ctrl.selectedIndex}
+      class="nabu-slash-item"
+      class:active={i === ctrl.selectedIndex}
+      onmousedown={(e) => { e.preventDefault(); ctrl.select(i); }}
+      onmouseenter={() => ctrl.selectedIndex = i}
+    >
+      <span class="nabu-slash-icon" aria-hidden="true">{item.icon ?? ''}</span>
+      <span class="nabu-slash-title">{item.title}</span>
+      {#if item.subtitle}<span class="nabu-slash-sub">{item.subtitle}</span>{/if}
+    </button>
+{/snippet}
+
 {#if ctrl.open && !hidden}
 <div
   bind:this={menuEl}
+  id={listId}
   class="nabu-slash"
+  role="listbox"
+  aria-label={label}
   data-nabu-ui
   contenteditable="false"
   style:top={pos.top === null ? null : `${pos.top}px`}
@@ -83,20 +161,20 @@
   style:left="{pos.left}px"
   style:max-height="{pos.maxHeight}px"
 >
-  {#each ctrl.filteredItems as item, i (item.title)}
-    <button
-      class="nabu-slash-item"
-      class:active={i === ctrl.selectedIndex}
-      onmousedown={(e) => { e.preventDefault(); ctrl.select(i); }}
-      onmouseenter={() => ctrl.selectedIndex = i}
-    >
-      <span class="nabu-slash-icon">{item.icon ?? ''}</span>
-      <span class="nabu-slash-title">{item.title}</span>
-      {#if item.subtitle}<span class="nabu-slash-sub">{item.subtitle}</span>{/if}
-    </button>
+  {#each sections as section, s (s)}
+    {#if section.group}
+      <div class="nabu-slash-group" role="group" aria-label={groupName(section.group)}>
+        {#each section.items as { item, i } (item.title)}{@render row(item, i)}{/each}
+      </div>
+    {:else}
+      {#each section.items as { item, i } (item.title)}{@render row(item, i)}{/each}
+    {/if}
   {/each}
 </div>
 {/if}
+
+<!-- Always mounted (a live region must exist before its text changes). Visually hidden. -->
+<div class="nabu-slash-live" role="status" aria-live="polite" aria-atomic="true" data-nabu-ui>{announcement}</div>
 
 <style>
 .nabu-slash {
@@ -111,6 +189,10 @@
   border-radius: var(--nb-floating-radius, 8px);
   box-shadow: var(--nb-floating-shadow, 0 8px 24px rgba(0,0,0,0.35));
   pointer-events: all;
+}
+.nabu-slash-live {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 .nabu-slash-item {
   display: flex; align-items: center; gap: 8px;

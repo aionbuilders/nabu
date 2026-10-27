@@ -29,7 +29,7 @@ const NABU = {
     'createPasteBlock', 'debugging', 'defaultBlockType', 'delete', 'doc', 'exec', 'extensions',
     'focus', 'importFragment', 'importJSON', 'importMarkdown', 'importRemote', 'insert',
     'insertPasteBlock', 'internals', 'isEmpty', 'isMarkActive', 'isolateUndoStep', 'lang', 'lastVisibleBlock',
-    'openTrailingCaret', 'pendingCommand', 'pendingCommandOn', 'placeholders', 'positions', 'redo',
+    'openTrailingCaret', 'pendingCommand', 'pendingCommandOn', 'placeholders', 'positions', 'readonly', 'redo',
     'registry', 'resolveDocumentOffset', 'selection', 'serialize', 'serializers', 'shortcut',
     'slashCommands', 'spellcheck', 'systems', 'tab', 'tabHint', 'transact', 'tree', 'trigger',
     'undo', 'warn',

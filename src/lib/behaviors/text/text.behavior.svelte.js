@@ -6,6 +6,7 @@ import { LoroText } from "loro-crdt";
 import { tick } from "svelte";
 import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 import { escapeMarkdownText, escapeBlockStart } from "./markdown-syntax.js";
+import { countWords } from "../../utils/words.js";
 
 /**
  * Converts a Loro text delta to inline HTML.
@@ -208,12 +209,14 @@ export class TextBehavior {
     positions = $derived(this.text.length + 1);
 
     /**
-     * Number of whitespace-separated words in this text.
+     * Number of words in this text: segmented with `Intl.Segmenter` in the language of the editor (`nabu.lang`) when the platform
+     * has it, so Chinese or Japanese text counts its words rather than one per sentence; whitespace-separated otherwise. See
+     * `utils/words.js`. Reactive in the text and in `nabu.lang`.
      * @returns {number}
      * @public
      */
     get wordCount() {
-        return this.text.trim().split(/\s+/).filter(Boolean).length;
+        return countWords(this.text, this.nabu?.lang);
     }
     
     /**

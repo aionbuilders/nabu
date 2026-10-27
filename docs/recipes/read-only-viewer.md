@@ -1,13 +1,72 @@
 ---
 title: A read-only viewer
-description: Show a stored document to readers without an editor, by rendering the JSON export as HTML with the public helpers; Nabu has no read-only mode.
+description: Show a stored document to readers, either with the real editor in read-only mode (same rendering as the editor) or as plain HTML from the JSON export with the public helpers (no editor, no WebAssembly).
 section: recipes
 order: 20
 ---
 
 # A read-only viewer
 
-Nabu has **no read-only mode** in the beta: `NabuEditor` always renders an editable element, and there is no `readonly` prop or engine option. For a page that only displays a document (a published article, a preview, an email), do not mount an editor. Render the **JSON export** yourself. This is also lighter than an editor: no WebAssembly and no Loro on the page, only the JSON you stored.
+There are two ways to show a stored document to people who must not change it:
+
+1. **The editor in read-only mode.** The same rendering and blocks, with selection, copy and links. It needs the editor (WebAssembly and Loro) on the page.
+2. **Plain HTML rendered from the JSON export.** No editor at all: lighter, and available for server-side rendering, search engines and print. See [Option 2](#option-2-html-from-the-json-export).
+
+## Option 1: `readonly`
+
+`<NabuEditor readonly>` (or `createEditor({ readonly: true })`, or `engine.readonly = true`) turns the editor into a viewer. It is reactive: toggle it for an "Edit" button.
+
+```svelte
+<script>
+  import { NabuEditor, createFullEditor } from '@aionbuilders/nabu';
+
+  const engine = createFullEditor({ lang: 'en' });
+  let editing = $state(false);
+
+  // Load the document: the host's own calls are never blocked by read-only mode.
+  export async function load(json) { await engine.importJSON(json); }
+</script>
+
+<button onclick={() => (editing = !editing)}>{editing ? 'Done' : 'Edit'}</button>
+<NabuEditor {engine} label="Release notes" readonly={!editing} />
+```
+
+What read-only mode does:
+
+- The root is `contenteditable="false"` (with `role="document"`, named by `label`): no caret, no typing, no input method.
+- The engine ignores the user's channels, not only the DOM: `beforeinput`, paste, cut (it copies and removes nothing), drop and drag moves, every keyboard shortcut and every command (`commands.run`, `exec` of a command or an action, undo and redo included).
+- **Copy works, text can be selected, links open** as normal links. Dragging a selection out to another application copies it.
+- The floating UI (`FloatingToolbar`, `SlashMenu`, `DragHandle`) hides itself, so there is nothing to condition on your side. The to-do box, the callout icon and the code language select do nothing.
+- **Toggles can be opened and closed to read them.** Collapsing is stored in the document, but in read-only mode it is *view state*: kept in memory only, never written (no Loro change, no undo step, nothing saved or synced), exports keep reporting the document's own state, and it is forgotten when the editor becomes editable again. A reader who opens a toggle changes nothing for the next reader.
+- **Your own code is not restricted.** `importJSON`, `importMarkdown`, `importRemote`, `insert` and `transact` still work, which is how a viewer loads and updates its document (live collaboration keeps flowing into a read-only editor).
+
+```js test
+import { createFullEditor } from '@aionbuilders/nabu';
+
+const engine = createFullEditor({ readonly: true });
+await engine.importMarkdown('first\n\nsecond');
+engine.insert('paragraph', { text: 'third' });
+await engine.commit();
+
+// the user's channels are closed: undo, a mark, a block action do nothing
+await engine.commands.run('undo');
+await engine.exec('mark:toggle', { mark: 'bold' });
+expect(engine.serialize('markdown')).toBe('first\n\nsecond\n\nthird');
+
+// the host still writes
+await engine.importMarkdown('# Updated');
+expect(engine.serialize('markdown')).toBe('# Updated');
+
+engine.readonly = false; // editable again
+await engine.commands.run('undo');
+expect(engine.serialize('markdown')).not.toBe('# Updated');
+```
+
+A custom block component that changes the document on a click should check `block.nabu.readonly` first, as the to-do box and the callout icon of the library do.
+
+## Option 2: HTML from the JSON export
+
+For a page that only displays a document (a published article, a preview, an email), you do not need an editor. Render the **JSON export** yourself. This is lighter than an editor: no WebAssembly and no Loro on the page, only the JSON you stored.
 
 The pieces are public:
 
@@ -130,4 +189,4 @@ Because the output is plain semantic HTML, you style it with your own CSS, and i
 - **Images stored in the document.** A `nabu-asset:` reference points into the asset store of the editor, which a viewer does not have. Serve the files from your own storage with the `files` option (`onBeforePersist` returns a URL that is stored as the block's `ref`), or resolve the references in the renderer (the JSON export embeds the bytes of small files, in `assets`). See [Persistence and sync, Files](../guides/persistence-and-sync.md#files-and-the-asset-store).
 - **Regions.** The viewer above draws a region's title as an `h2`. Use `props.regionType` to choose a level and the numbering yourself, or read the numbers from an editor with `engine.regions.list` (labels, paths) when you have one.
 - **From markdown.** If you store markdown, render it with the markdown renderer of your choice; Nabu does not ship one. Its markdown is standard except for the three constructs in [Clipboard and markdown](../guides/clipboard-and-markdown.md#what-round-trips-exactly) (`<details>`, `-- `, the region comment), which a general renderer shows as raw HTML or text.
-- **The editor's own rendering** needs an editable `NabuEditor`: until a read-only mode exists (see the gaps in the report of this documentation), the renderer above is the way to show content without letting anyone change it.
+- **The editor's own rendering** is [Option 1](#option-1-readonly). Use the renderer above when you want no editor on the page.

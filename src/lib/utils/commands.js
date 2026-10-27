@@ -237,6 +237,7 @@ export class CommandRegistry {
      * @returns {boolean}
      */
     handleKeydown(event) {
+        if (this.nabu.readonly) return false; // a read-only editor has no shortcut
         if (event.isComposing || event.keyCode === 229 || this.nabu.composing) return false;
         const confirmation = this.nabu.commandConfirm;
         if (confirmation?.busy) {
@@ -296,6 +297,7 @@ export class CommandRegistry {
      * @public
      */
     invoke(entry, data) {
+        if (this.nabu.readonly) return undefined; // read-only: commands are edits, they do nothing
         return entry.def.run(this.nabu, this.context(null), data);
     }
 
@@ -330,6 +332,7 @@ export class CommandRegistry {
      * @public
      */
     offer(id, ctx) {
+        if (this.nabu.readonly) return false;
         const entry = this.entries.get(id);
         if (!entry) { this.nabu.warn(`commands.offer: unknown command "${id}"`); return false; }
         if (entry.def.confirm) return this.nabu.commandConfirm.offer(id, ctx);
