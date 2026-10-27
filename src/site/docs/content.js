@@ -4,7 +4,6 @@
  * builds the Nabu document. Kept dependency-free so that it is unit-tested as is (tests/unit/site-docs-content.test.js).
  */
 
-import { posix } from 'node:path';
 
 export const REPO_URL = 'https://github.com/aionbuilders/nabu';
 export const REPO_BRANCH = 'main';
@@ -61,13 +60,33 @@ export function createSlugger() {
 }
 
 /**
- * @typedef {{ section: string, slug: string, title: string, description: string, order: number, href: string, file: string }} DocPage
+ * @typedef {{ section: string, slug: string, title: string, description: string, order: number, href: string, file: string, custom?: boolean }} DocPage
+ * A page of the documentation. `file` is its source in the repo: a Markdown file, or, for a `custom` page, the Svelte page that draws it.
  */
+
+/**
+ * The pages of the documentation that are NOT Markdown: a Svelte page of its own (`src/routes/(site)/docs/<section>/<slug>/+page.svelte`, which
+ * takes precedence over the Markdown route `[section]/[slug]`). They sit in the sidebar, in the previous / next links and in the index of
+ * `/docs` like any other page, at their `order` in their section; they have no Markdown body, so the dynamic route never builds them.
+ * @type {DocPage[]}
+ */
+export const CUSTOM_PAGES = [
+  {
+    section: 'getting-started',
+    slug: 'tour-of-the-blocks',
+    title: 'Tour of the blocks',
+    description: 'One short story written with every block Nabu ships, then a card for each block: what it is, how to make one, and its state, live. What happens as you type and as you paste.',
+    order: 3,
+    href: docHref('getting-started', 'tour-of-the-blocks'),
+    file: 'src/routes/(site)/docs/getting-started/tour-of-the-blocks/+page.svelte',
+    custom: true,
+  },
+];
 
 /**
  * The navigation model of the documentation. `sections` is what `DocsNav` takes; `order` is every page in reading order (the
  * sidebar from top to bottom), which gives the previous / next links. Pages of an unknown section are left out; inside a
- * section they sort by `order`, then by title.
+ * section they sort by `order`, then by title. A `custom` page (see {@link CUSTOM_PAGES}) is a page like the others.
  * @param {DocPage[]} pages
  */
 export function buildNav(pages) {
@@ -99,6 +118,21 @@ const PUBLISHED = new Set(SECTIONS.map((s) => s.id));
 const MD_TARGET = /^(?!(?:[a-z][a-z0-9+.-]*:|\/\/|#))([^?#]*\.md)(#[^\s]*)?$/i;
 
 /**
+ * `posix.normalize(posix.join(dir, rel))` without `node:path`: this module is also imported by client code.
+ * @param {string} dir @param {string} rel
+ */
+function joinPath(dir, rel) {
+  /** @type {string[]} */
+  const out = [];
+  for (const part of `${dir}/${rel}`.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') out.pop();
+    else out.push(part);
+  }
+  return out.join('/');
+}
+
+/**
  * Where a relative `.md` link found in `fromDir` (a repo-relative directory, `docs/guides` or `` for the root) points on the site:
  * a published page becomes its route, anything else in the repo (an ADR, the README, a design note) its page on GitHub.
  * @param {string} target the href as written, e.g. `../recipes/read-only-viewer.md#option-1`
@@ -108,7 +142,7 @@ const MD_TARGET = /^(?!(?:[a-z][a-z0-9+.-]*:|\/\/|#))([^?#]*\.md)(#[^\s]*)?$/i;
 export function resolveMdLink(target, fromDir) {
   const m = MD_TARGET.exec(target);
   if (!m) return null;
-  const path = posix.normalize(posix.join(fromDir, m[1]));
+  const path = joinPath(fromDir, m[1]);
   const hash = m[2] ?? '';
   const parts = path.split('/');
   if (parts[0] === 'docs' && parts.length === 3 && PUBLISHED.has(parts[1])) {

@@ -1,4 +1,5 @@
 <script>
+  import GitHubIcon from './GitHubIcon.svelte';
   import { page } from '$app/state';
   import Logo from './Logo.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
@@ -41,7 +42,7 @@
         <div class="actions">
           <!-- TODO: open the docs search palette (⌘K). No behaviour yet. -->
           <button type="button" class="search">Search docs <kbd>⌘K</kbd></button>
-          <a class="github" href={GITHUB_URL}>GitHub <span aria-hidden="true">★</span></a>
+          <a class="github" href={GITHUB_URL}><GitHubIcon />GitHub</a>
         </div>
       </div>
 
@@ -141,6 +142,9 @@
     color: var(--site-text);
   }
   .github {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
     padding-block: 6px;
     font-size: var(--site-fs-small);
     text-decoration: none;

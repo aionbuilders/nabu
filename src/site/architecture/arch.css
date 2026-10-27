@@ -1,0 +1,109 @@
+/*
+ * The Architecture section (landing, chapters, decision records, limits, "the others"): the colours the boards use beyond the site tokens
+ * (a green for "yes" and "what it buys us", an amber for planned things), and the reading styles of the two pages that are Nabu documents,
+ * a chapter and a decision record. Only `--site-*` and `--arch-*` tokens. Imported by the pages of the section.
+ *
+ *   --arch-ok    green   (dark #7EE787 on #0B0B0C 12.6:1, light #1A7F37 on #FAFAF8 5.0:1)
+ *   --arch-warn  amber   (dark #E3B341 9.7:1,                light #8A6100 on #FAFAF8 5.4:1)
+ *   coral = --site-accent, blue = --site-peer
+ * The light values appear twice (explicit choice, and system preference when no choice is stored), like tokens.css: keep them identical.
+ */
+
+.site {
+  --arch-ok: #7EE787;
+  --arch-warn: #E3B341;
+}
+:root[data-theme='light'] .site {
+  --arch-ok: #1A7F37;
+  --arch-warn: #8A6100;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .site {
+    --arch-ok: #1A7F37;
+    --arch-warn: #8A6100;
+  }
+}
+
+/* ── A chapter: the lead paragraph, the body, "what it buys us" / "what it costs us" ─────────────────────────────────────────── */
+
+/* The lead: the first paragraph, drawn a size up. */
+.site .arch-lead .doc-article .nabu-editor [data-block-type='paragraph'] {
+  max-width: 680px;
+  margin: 0;
+  color: var(--site-text-muted);
+  font-size: 18px;
+  line-height: 1.7;
+}
+.site .arch-body .doc-article .nabu-editor [data-block-type='paragraph'],
+.site .arch-body .doc-article .nabu-editor [data-block-type='list-item'] {
+  max-width: 680px;
+  font-size: 17px;
+  line-height: 1.75;
+}
+.site .arch-body .doc-article .nabu-editor [data-block-type='paragraph'] { margin-bottom: var(--site-space-4); }
+.site .arch-body .doc-article .nabu-editor h2[data-block-type='heading'] {
+  margin: var(--site-space-10) 0 var(--site-space-3);
+  font-size: 28px;
+  letter-spacing: var(--site-ls-heading);
+}
+.site .arch-body .doc-article .nabu-editor > h2[data-block-type='heading']:first-child { margin-top: var(--site-space-8); }
+
+/* The two callouts of a chapter, as the board draws them: a label, a hairline box; the cost on the coral tint. Chapters only. */
+.site .arch-body .doc-article .nabu-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--site-space-4); }
+.site .arch-body .doc-article .nabu-editor > * { grid-column: 1 / -1; min-width: 0; }
+.site .arch-body .doc-article .nabu-editor > .nabu-callout.callout-tip:has(+ .nabu-callout.callout-warning) { grid-column: 1; }
+.site .arch-body .doc-article .nabu-editor > .nabu-callout.callout-tip + .nabu-callout.callout-warning { grid-column: 2; }
+
+.site .arch-body .doc-article .nabu-editor .nabu-callout:is(.callout-tip, .callout-warning) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0 0 var(--site-space-4);
+  padding: 18px 20px;
+  border: 1px solid var(--site-border);
+  border-radius: 14px;
+  background: none;
+}
+.site .arch-body .doc-article .nabu-editor .nabu-callout:is(.callout-tip, .callout-warning) .nabu-callout-icon { display: none; }
+.site .arch-body .doc-article .nabu-editor .nabu-callout:is(.callout-tip, .callout-warning)::before {
+  font: 500 var(--site-fs-label) / var(--site-lh-label) var(--site-font-mono);
+  letter-spacing: 0.08em;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.site .arch-body .doc-article .nabu-editor .nabu-callout.callout-tip::before { content: 'WHAT IT BUYS US'; color: var(--arch-ok); }
+.site .arch-body .doc-article .nabu-editor .nabu-callout.callout-warning {
+  border-color: var(--site-note-border);
+  background: var(--site-note-bg);
+}
+.site .arch-body .doc-article .nabu-editor .nabu-callout.callout-warning::before { content: 'WHAT IT COSTS US'; color: var(--site-accent); }
+.site .arch-body .doc-article .nabu-editor .nabu-callout:is(.callout-tip, .callout-warning) .nabu-callout-body {
+  min-height: 0;
+  color: var(--site-text);
+  font-size: 15px;
+  line-height: 1.55;
+}
+@media (max-width: 759.98px) {
+  .site .arch-body .doc-article .nabu-editor > .nabu-callout.callout-tip:has(+ .nabu-callout.callout-warning),
+  .site .arch-body .doc-article .nabu-editor > .nabu-callout.callout-tip + .nabu-callout.callout-warning { grid-column: 1 / -1; }
+  .site .arch-lead .doc-article .nabu-editor [data-block-type='paragraph'] { font-size: 17px; }
+}
+
+/* ── A decision record ───────────────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/* The sections of a record (Context, Decision, Consequences…) are labels, not titles: the H1 of the page is the title. */
+.site .arch-record .doc-article .nabu-editor h2[data-block-type='heading'] {
+  margin: var(--site-space-8) 0 var(--site-space-2);
+  color: var(--site-text-subtle);
+  font: 600 13px / 1.4 var(--site-font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.site .arch-record .doc-article .nabu-editor > h2[data-block-type='heading']:first-child { margin-top: 0; }
+.site .arch-record .doc-article .nabu-editor h3[data-block-type='heading'] {
+  margin: var(--site-space-6) 0 var(--site-space-2);
+  font-size: 18px;
+}
+.site .arch-record .doc-article .nabu-editor [data-block-type='paragraph'],
+.site .arch-record .doc-article .nabu-editor [data-block-type='list-item'] { line-height: 1.7; }

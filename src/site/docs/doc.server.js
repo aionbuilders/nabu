@@ -19,7 +19,7 @@ const FOREGROUND = '--shiki-foreground';
  * @param {string | null} language
  * @returns {Array<[string, string?]> | null}
  */
-function tokensOf(h, code, language) {
+export function tokensOf(h, code, language) {
   const lang = ALIASES[language ?? ''] ?? language ?? '';
   if (!LANGS.includes(lang) || !code) return null;
   const lines = h.codeToTokens(code, { lang, theme: 'site' }).tokens;
@@ -44,12 +44,13 @@ function tokensOf(h, code, language) {
 
 /**
  * @param {string} markdown the body of a page
- * @param {{ dir: string, tocLevels?: number[] }} options `dir`: the repo directory of the file, for its relative links
+ * @param {{ dir: string, tocLevels?: number[], peer?: number }} options `dir`: the repo directory of the file, for its relative links; `peer`: the Loro
+ *   peer id (1 by default), different for each document of a page that has several, so that no two blocks of the page share an id
  */
-export async function buildDoc(markdown, { dir, tocLevels = [2, 3] }) {
+export async function buildDoc(markdown, { dir, tocLevels = [2, 3], peer = 1 }) {
   const engine = createDocEngine();
   // One author, one peer: the block ids (`counter@peer`) are the same at every build, so is the prerendered markup.
-  engine.doc.setPeerId(1);
+  engine.doc.setPeerId(peer);
   await engine.importMarkdown(prepareMarkdown(markdown, dir));
   const h = await getHighlighter();
   const slug = createSlugger();

@@ -4,7 +4,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { SECTIONS, buildNav, docHref, editUrl, parseFrontmatter } from './content.js';
+import { CUSTOM_PAGES, SECTIONS, buildNav, docHref, editUrl, parseFrontmatter } from './content.js';
 
 const ROOT = process.cwd();
 
@@ -43,9 +43,10 @@ function load() {
   return cache;
 }
 
-export const docsNav = () => buildNav(load().pages);
+/** The whole documentation, in sidebar order: the Markdown pages and the custom (Svelte) ones. */
+export const docsNav = () => buildNav([...load().pages, ...CUSTOM_PAGES]);
 
-/** Every `{ section, slug }` that has a page: what `entries()` hands to the prerenderer. */
+/** Every `{ section, slug }` that has a MARKDOWN page: what `entries()` of the dynamic route hands to the prerenderer (custom pages have their own route). */
 export const allDocPages = () => load().pages.map((p) => ({ section: p.section, slug: p.slug }));
 
 /**

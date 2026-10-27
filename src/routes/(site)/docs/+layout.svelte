@@ -10,6 +10,7 @@
   sections={data.nav}
   pinned={[{ label: 'Overview', href: '/docs' }]}
   toc={page.data.toc ?? []}
+  wide={!!page.data.wide}
   menuLabel="Browse the docs"
 >
   {@render children()}

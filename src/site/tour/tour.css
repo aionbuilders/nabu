@@ -1,0 +1,103 @@
+/*
+ * The editors of the Tour of the blocks: Nabu documents, read-only (and editable on a card, on request), drawn with the Atelier theme. As doc.css does for a
+ * documentation page, this makes them sit in the page: no pane (the page draws the frame), the theme's palette pointed at the SITE tokens (so dark / light follow the
+ * site, with no JavaScript and no `data-nb-scheme`), a type scale per place (`data-variant`: story, card, more). Scoped by `.tour-doc`; only `--site-*` tokens.
+ */
+
+.site .tour-doc.nb-theme-atelier {
+  min-width: 0;
+  color-scheme: inherit;
+
+  /* The theme's palette -> the site's */
+  --atelier-pane: transparent;
+  --atelier-pane-padding: 0;
+  --atelier-pane-radius: 0;
+  --atelier-line-pane: transparent;
+  --atelier-line-pane-focus: transparent;
+  --atelier-font-size: var(--tour-fs, 16px);
+  --atelier-text: var(--site-text);
+  --atelier-text-2: var(--site-text-muted);
+  --atelier-text-3: var(--site-text-subtle);
+  --atelier-accent: var(--site-accent);
+  --atelier-accent-fill: var(--site-accent-fill);
+  --atelier-line: var(--site-border);
+  --atelier-line-soft: var(--site-border-subtle);
+  --atelier-sunken: var(--site-surface-2);
+  --atelier-code: var(--site-hover-bg);
+  --atelier-selection: color-mix(in srgb, var(--site-accent) 28%, transparent);
+  --nb-font-text: var(--site-font-body);
+  --nb-font-heading: var(--site-font-display);
+  --nb-font-mono: var(--site-font-mono);
+  --atelier-rail-offset: 0px;
+  --nb-region-rail: transparent; /* the margin rail of the region that holds the caret: an editing cue, not for a tour */
+}
+
+.site .tour-doc .nabu-editor[data-nabu-root] {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: var(--tour-lh, 1.6);
+  overflow-wrap: anywhere;
+}
+.site .tour-doc .nabu-editor[data-nabu-root]:focus-visible { outline: none; }
+.site .tour-doc .nabu-editor > :first-child { margin-top: 0; }
+.site .tour-doc .nabu-editor > :last-child { margin-bottom: 0; }
+
+/* Code: the code block of the docs without its header (the language and the copy button are chrome the cards do not need) */
+.site .tour-doc .cb { margin: 0.5em 0; border: 1px solid var(--site-border); border-radius: 10px; background: var(--site-surface-2); }
+.site .tour-doc .cb-head { display: none; }
+.site .tour-doc .cb pre.nabu-code {
+  display: block;
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  background: transparent;
+  color: var(--site-text);
+  font: 400 13px / 1.6 var(--site-font-mono);
+  white-space: pre;
+}
+.site .tour-doc .cb pre.nabu-code code { font: inherit; background: none; padding: 0; white-space: inherit; }
+
+/* Inline code and links */
+.site .tour-doc .nabu-editor span.nabu-code { font: 500 0.875em / 1.4 var(--site-font-mono); background: var(--site-hover-bg); color: var(--site-text); }
+.site .tour-doc .nabu-editor .nabu-bold { font-weight: 600; }
+
+/* Media: a fixed ratio, so that the box is the same before and after the file has loaded (no shift) */
+.site .tour-doc :is(.nabu-image, .nabu-video) { margin: 0.5em 0; }
+.site .tour-doc :is(.nabu-image img, .nabu-video video) {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: var(--tour-media-ratio, 16 / 9);
+  object-fit: cover;
+  border: 1px solid var(--site-border);
+  border-radius: 10px;
+  background: var(--site-surface-2);
+}
+.site .tour-doc .nabu-file { margin: 0.5em 0; }
+.site .tour-doc .nabu-file-chip { padding: 0.4em 0.9em; border-color: var(--site-border-strong); background: var(--site-surface-2); color: var(--site-text); font: 500 14px / 1.4 var(--site-font-body); }
+
+/* The story: the page's reading size, a title that stands out */
+.site .tour-doc[data-variant='story'] { --tour-fs: 18px; --tour-lh: 1.7; --tour-media-ratio: 16 / 6; }
+.site .tour-doc[data-variant='story'] h3[data-block-type='heading'] { margin: 22px 0 8px; font-size: 30px; line-height: 1.2; }
+.site .tour-doc[data-variant='story'] .nabu-region-body > [data-block-type='heading']:first-child { margin-top: 18px; }
+/* room above a block for the label of the X-ray (it sits just over the box) */
+.site .tour-doc[data-variant='story'] :is(blockquote, .nabu-callout, .nabu-toggle, .cb, figure, ul, hr) { margin-top: 22px; }
+
+/* A card of the wall: a specimen */
+.site .tour-doc[data-variant='card'] { --tour-fs: 16px; --tour-lh: 1.6; --tour-media-ratio: 16 / 7; }
+.site .tour-doc[data-variant='card'] [data-block-type='paragraph'] { margin-bottom: 0; }
+.site .tour-doc[data-variant='card'] [data-block-type='heading'] { margin: 0; font-size: 24px; }
+.site .tour-doc[data-variant='card'] [data-block-type='divider'] { margin: 0; }
+
+/* The example of an open card: larger */
+.site .tour-doc[data-variant='open'] { --tour-fs: 17px; --tour-lh: 1.7; --tour-media-ratio: 16 / 8; }
+.site .tour-doc[data-variant='open'] [data-block-type='paragraph'] { margin-bottom: 0.4em; }
+.site .tour-doc[data-variant='open'] [data-block-type='heading'] { margin: 0; font-size: 28px; }
+.site .tour-doc[data-variant='open'] [data-block-type='divider'] { margin: 14px 0; }
+
+/* The "after" of what happens as you type or paste */
+.site .tour-doc[data-variant='after'] { --tour-fs: 16px; --tour-lh: 1.55; }
+.site .tour-doc[data-variant='after'] [data-block-type='paragraph'] { margin-bottom: 0; }
+.site .tour-doc[data-variant='after'] [data-block-type='heading'] { margin: 0 0 4px; font-size: 20px; }

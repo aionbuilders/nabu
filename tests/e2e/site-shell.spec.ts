@@ -61,13 +61,13 @@ test.describe('site shell', () => {
       expect(res?.status(), href).toBe(200);
       // The API reference is a real page now (tests/e2e/site-api.spec.ts): its H1 and title say "API reference".
       const title = href === '/api' ? 'API reference' : label;
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
-      // Labs, the API reference, the docs (tests/e2e/site-docs.spec.ts) and the changelog are real pages (Labs lists the Performance lab); the others are still stubs.
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(href === '/architecture' ? /How Nabu works,\s*and why it works that way\./ : title);
+      // Labs, the API reference, the docs (tests/e2e/site-docs.spec.ts) and the changelog and the architecture section (tests/e2e/site-architecture.spec.ts) are real pages (Labs lists the Performance lab).
       if (href === '/labs') await expect(page.getByRole('link', { name: /Performance/ })).toBeVisible();
       else if (href === '/api') await expect(page.getByRole('navigation', { name: 'API reference' })).toBeVisible();
       else if (href === '/docs') await expect(page.getByRole('navigation', { name: 'Documentation' })).toBeVisible();
       else if (href === '/changelog') await expect(page.getByRole('heading', { level: 2, name: 'Unreleased' })).toBeVisible();
-      else await expect(page.getByText('Coming soon')).toBeVisible();
+      else if (href === '/architecture') await expect(page.getByRole('heading', { level: 2, name: 'Should you switch?' })).toBeVisible();
       await expect(page.getByRole('banner')).toBeVisible();
       await expect(page.locator('footer')).toBeVisible();
       await expect(page).toHaveTitle(`${title} — Nabu`);
@@ -92,7 +92,7 @@ test.describe('site shell', () => {
     await expect(footer).toContainText('MIT licensed. Built with Nabu.');
     for (const [col, links] of [
       ['Learn', ['Getting started', 'Guides', 'API reference']],
-      ['Explore', ['Labs', 'Architecture', 'Roadmap']],
+      ['Explore', ['Labs', 'Architecture', 'Limits', 'Decision records']],
       ['Project', ['Changelog', 'GitHub', 'License']],
     ] as const) {
       const nav = footer.getByRole('navigation', { name: col });

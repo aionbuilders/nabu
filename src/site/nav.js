@@ -1,4 +1,4 @@
-/** Main navigation, shared by the header (and mirrored by the footer columns). Docs, API and Changelog are real pages; the others are stubs for now. */
+/** Main navigation, shared by the header (and mirrored by the footer columns). Every entry is a real page. Active on its own route and below it (`/architecture/*`). */
 export const NAV = [
   { href: '/docs', label: 'Docs' },
   { href: '/api', label: 'API' },
@@ -10,7 +10,7 @@ export const NAV = [
 export const GITHUB_URL = 'https://github.com/aionbuilders/nabu';
 export const LICENSE_URL = 'https://opensource.org/licenses/MIT';
 
-/** Footer columns (HomeB). Learn/Explore targets that have no page of their own yet point at the nearest stub. */
+/** Footer columns (HomeB). */
 export const FOOTER_COLUMNS = [
   {
     title: 'Learn',
@@ -25,13 +25,15 @@ export const FOOTER_COLUMNS = [
     links: [
       { href: '/labs', label: 'Labs' },
       { href: '/architecture', label: 'Architecture' },
-      { href: '/architecture#roadmap', label: 'Roadmap' } // TODO: own page / anchor once the architecture page exists
+      { href: '/architecture/limits', label: 'Limits' },
+      { href: '/architecture/decisions', label: 'Decision records' }
     ]
   },
   {
     title: 'Project',
     links: [
       { href: '/changelog', label: 'Changelog' },
+      { href: '/brand', label: 'Brand' },
       { href: GITHUB_URL, label: 'GitHub' },
       { href: LICENSE_URL, label: 'License' }
     ]

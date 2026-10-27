@@ -48,7 +48,7 @@ const toBase64 = (bytes) => {
   return btoa(s);
 };
 /** @param {string} b64 */
-const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+export const fromBase64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
 /** A read-only engine for a page, EMPTY (the build fills it with `importMarkdown`). */
 export const createDocEngine = () => createEditor({ preset: docPreset(), lang: 'en', readonly: true });

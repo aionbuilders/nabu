@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540" role="img" aria-label="A quay at dusk: a lantern on a post, a boat on the river">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1330"/>
+      <stop offset="0.55" stop-color="#6a3a52"/>
+      <stop offset="1" stop-color="#ff8f76"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a2b45"/>
+      <stop offset="1" stop-color="#140f22"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd9a0" stop-opacity="0.95"/>
+      <stop offset="0.35" stop-color="#ff9a6a" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ff6f61" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="960" height="540" fill="url(#sky)"/>
+  <circle cx="300" cy="300" r="46" fill="#ffc48a" opacity="0.55"/>
+  <rect y="300" width="960" height="240" fill="url(#river)"/>
+  <g stroke="#ffb48a" stroke-opacity="0.35" stroke-width="3" stroke-linecap="round">
+    <path d="M220 322h160M250 340h110M236 360h138M262 382h90M280 410h60"/>
+  </g>
+  <g stroke="#7a4a6a" stroke-opacity="0.5" stroke-width="2" stroke-linecap="round">
+    <path d="M560 330h140M600 352h90M540 376h120M640 404h70M500 440h140M700 470h120M120 450h150"/>
+  </g>
+  <path d="M0 300c120-14 200 10 320 0s220-12 340-2 200 8 300-4v6H0z" fill="#2a1a3a" opacity="0.7"/>
+  <g fill="#0e0a18">
+    <path d="M520 316c40 14 120 14 170 0l-14 20c-44 12-100 12-142 0z"/>
+    <rect x="598" y="268" width="3" height="50"/>
+    <path d="M601 272l36 36h-36z" opacity="0.85"/>
+  </g>
+  <rect x="0" y="372" width="400" height="168" fill="#150f1f"/>
+  <g stroke="#2b1f3a" stroke-width="2">
+    <path d="M0 400h400M0 432h400M0 468h400M0 510h400"/>
+    <path d="M70 372v168M150 372v168M240 372v168M330 372v168"/>
+  </g>
+  <rect x="318" y="300" width="10" height="80" fill="#0e0a18"/>
+  <circle cx="323" cy="286" r="64" fill="url(#glow)"/>
+  <rect x="308" y="268" width="30" height="36" rx="4" fill="#ffe0b0"/>
+  <rect x="308" y="268" width="30" height="36" rx="4" fill="none" stroke="#0e0a18" stroke-width="4"/>
+  <path d="M308 268l15-14 15 14z" fill="#0e0a18"/>
+  <path d="M323 304v0" stroke="#0e0a18"/>
+</svg>

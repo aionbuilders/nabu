@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
-  parseFrontmatter, slugify, createSlugger, buildNav, resolveMdLink, prepareMarkdown, docHref, editUrl, SECTIONS, REPO_URL,
+  parseFrontmatter, slugify, createSlugger, buildNav, resolveMdLink, prepareMarkdown, docHref, editUrl, SECTIONS, REPO_URL, CUSTOM_PAGES,
 } from '../../src/site/docs/content.js';
 import { docsNav, allDocPages, getDocPage, getChangelog } from '../../src/site/docs/content.server.js';
 
@@ -117,10 +119,23 @@ describe('the real sources', () => {
 
   it('publish the three sections and nothing else of docs/', () => {
     expect(nav.sections.map((s) => s.id)).toEqual(SECTIONS.map((s) => s.id));
-    const files = nav.order.map((p) => p.file);
+    const files = nav.order.filter((p) => !p.custom).map((p) => p.file);
     expect(files.length).toBeGreaterThanOrEqual(14);
     expect(files.every((f) => /^docs\/(getting-started|guides|recipes)\/[\w-]+\.md$/.test(f))).toBe(true);
-    expect(allDocPages()).toHaveLength(files.length);
+    expect(allDocPages()).toHaveLength(files.length); // the custom pages have their own route: the dynamic one never builds them
+  });
+
+  it('put the custom (Svelte) pages in the sidebar and in previous / next, at their place', () => {
+    expect(CUSTOM_PAGES.length).toBeGreaterThan(0);
+    for (const c of CUSTOM_PAGES) {
+      expect(nav.order.some((p) => p.href === c.href && p.custom)).toBe(true);
+      expect(getDocPage(c.section, c.slug), `${c.href} is not a Markdown page`).toBeNull();
+      expect(allDocPages().some((p) => p.section === c.section && p.slug === c.slug)).toBe(false);
+      expect(existsSync(join(process.cwd(), c.file)), c.file).toBe(true);
+    }
+    // "Tour of the blocks": Getting started, after "Your first editor", before "Presets"
+    const { prev, next } = nav.neighbours('/docs/getting-started/tour-of-the-blocks');
+    expect([prev?.href, next?.href]).toEqual(['/docs/getting-started/first-editor', '/docs/getting-started/presets']);
   });
 
   it('every page has a title, a description and a unique route', () => {
@@ -137,7 +152,7 @@ describe('the real sources', () => {
 
   it('every internal link of every page resolves to a published page', () => {
     const routes = new Set(nav.order.map((p) => p.href));
-    for (const p of nav.order) {
+    for (const p of nav.order.filter((x) => !x.custom)) { // (a custom page has no Markdown: tour-page.test.js holds its links)
       const found = getDocPage(p.section, p.slug);
       const md = prepareMarkdown(found.body, found.dir);
       expect(md).not.toMatch(/\]\((?:\.{1,2}\/)[^)]*\.md/); // no relative .md link left (outside code, where they would be examples)

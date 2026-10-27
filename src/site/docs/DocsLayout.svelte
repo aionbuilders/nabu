@@ -7,18 +7,47 @@
   /**
    * The documentation frame (DocsRead): left navigation, the article, "On this page" on the right. Shared by the API reference
    * and (soon) the guides. Below 900px the navigation folds behind a button; below 1100px the right column is dropped.
+   * `wide` (a page drawn on the full width of the site, like the Tour of the blocks): no "On this page", and the navigation is folded
+   * behind its button at every width, a menu that drops down from the top right of the page instead of a column that takes 278px
+   * of it.
    * @type {{
    *   navLabel: string,
    *   sections: any[],
    *   pinned?: Array<{ label: string, href: string, flag?: string }>,
    *   toc?: Array<{ id: string, label: string, level?: 1 | 2 }>,
    *   menuLabel?: string,
+   *   wide?: boolean,
    *   children: import('svelte').Snippet
    * }}
    */
-  let { navLabel, sections, pinned = [], toc = [], menuLabel = 'Browse', children } = $props();
+  let { navLabel, sections, pinned = [], toc = [], menuLabel = 'Browse', wide = false, children } = $props();
 
   let open = $state(false);
+  /** @type {HTMLElement | undefined} */
+  let side = $state();
+  /** @type {HTMLButtonElement | undefined} */
+  let button = $state();
+
+  // The drop-down menu of a wide page: Escape or a click elsewhere closes it (focus goes back to the button on Escape).
+  $effect(() => {
+    if (!wide || !open) return;
+    /** @param {KeyboardEvent} e */
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      open = false;
+      button?.focus();
+    };
+    /** @param {PointerEvent} e */
+    const onPointer = (e) => {
+      if (side && e.target instanceof Node && !side.contains(e.target)) open = false;
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  });
 
   // Close the folded navigation on navigation.
   $effect(() => {
@@ -27,9 +56,9 @@
   });
 </script>
 
-<div class="container docs">
-  <div class="side">
-    <button type="button" class="menu" aria-expanded={open} aria-controls="docs-nav-panel" onclick={() => (open = !open)}>
+<div class="container docs" class:wide>
+  <div class="side" bind:this={side}>
+    <button type="button" class="menu" bind:this={button} aria-expanded={open} aria-controls="docs-nav-panel" onclick={() => (open = !open)}>
       {menuLabel}
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d={open ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} /></svg>
     </button>
@@ -42,9 +71,11 @@
     {@render children()}
   </article>
 
-  <aside class="aside">
-    <Toc items={toc} />
-  </aside>
+  {#if !wide}
+    <aside class="aside">
+      <Toc items={toc} />
+    </aside>
+  {/if}
 </div>
 
 <style>
@@ -87,6 +118,60 @@
   @media (max-width: 1099.98px) {
     .aside {
       display: none;
+    }
+  }
+
+  /* A wide page: the article takes the whole column; the navigation is a menu, top right, level with the breadcrumb. */
+  @media (min-width: 900px) {
+    .docs.wide {
+      position: relative;
+      display: block;
+      padding-block: 36px 120px;
+    }
+    .wide .side {
+      position: absolute;
+      top: 30px;
+      right: var(--site-gutter);
+      z-index: 20;
+      width: auto;
+      max-height: none;
+      overflow: visible;
+      padding-top: 0;
+    }
+    .wide .menu {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--site-space-2);
+      min-height: 32px;
+      padding: 0 var(--site-space-3);
+      border: 1px solid var(--site-border-strong);
+      border-radius: var(--site-radius-control);
+      background: var(--site-surface);
+      color: var(--site-text-muted);
+      font: 500 13px var(--site-font-body);
+      cursor: pointer;
+    }
+    .wide .menu:hover,
+    .wide .menu[aria-expanded='true'] {
+      color: var(--site-text);
+      border-color: var(--site-text-subtle);
+    }
+    .wide .panel {
+      display: none;
+      position: absolute;
+      top: 40px;
+      right: 0;
+      width: 260px;
+      max-height: min(70dvh, 560px);
+      overflow-y: auto;
+      padding: var(--site-space-4);
+      border: 1px solid var(--site-border);
+      border-radius: var(--site-radius-card-sm);
+      background: var(--site-surface);
+      box-shadow: var(--site-shadow-floating);
+    }
+    .wide .panel[data-open='true'] {
+      display: block;
     }
   }
 

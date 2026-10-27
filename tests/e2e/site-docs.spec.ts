@@ -39,11 +39,17 @@ const DOCS: Doc[] = SECTION_ORDER.flatMap((section) =>
     })
     .sort((a: Doc, b: Doc) => a.order - b.order || a.title.localeCompare(b.title)),
 );
+// The pages that are NOT markdown (src/site/docs/content.js, CUSTOM_PAGES: a Svelte page of its own) sit in the sidebar and in previous / next at their place.
+// Their own page is tested in site-tour.spec.ts.
+const TOUR = { section: 'getting-started', slug: 'tour-of-the-blocks', path: '/docs/getting-started/tour-of-the-blocks', title: 'Tour of the blocks', description: '', order: 3, file: '' };
+const NAV_DOCS: Doc[] = SECTION_ORDER.flatMap((section) =>
+  [...DOCS.filter((d) => d.section === section), ...(section === TOUR.section ? [TOUR] : [])].sort((a: Doc, b: Doc) => a.order - b.order || a.title.localeCompare(b.title)),
+);
 const ALL = [...DOCS.map((d) => d.path), '/changelog'];
 const REPO = 'https://github.com/aionbuilders/nabu';
 
-/** The article has been hydrated: the page is interactive (DocBody.svelte sets the attribute once the server markup was adopted). */
-const hydrated = (page: Page) => page.locator(`${ARTICLE}[data-hydrated]`).waitFor();
+/** The article has been hydrated: the page is interactive (DocBody.svelte sets the attribute once the server markup was adopted; the tour page sets its own). */
+const hydrated = (page: Page) => page.locator(`${ARTICLE}[data-hydrated], [data-testid="tour-page"][data-hydrated]`).waitFor();
 
 /** Console errors and uncaught exceptions of a page (a hydration failure shows up as one). */
 function watchErrors(page: Page) {
@@ -82,8 +88,9 @@ test.describe('the documentation pages', () => {
       await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', d.description);
       await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow');
 
-      // one h1, the first block of the document, with text
-      const h1 = page.getByRole('heading', { level: 1 });
+      // one h1, the first block of the document, with text (`h1` the element: the seam of a region is announced as a level 1 heading too, and the
+      // Blocks reference has live regions in it)
+      const h1 = page.locator('h1');
       await expect(h1).toHaveCount(1);
       expect(norm(await h1.innerText()).length).toBeGreaterThan(2);
       expect(await h1.evaluate((el) => !!el.closest('[data-nabu-root]'))).toBe(true);
@@ -292,7 +299,7 @@ test.describe('navigation', () => {
     await page.goto(DOCS[0].path);
     await hydrated(page);
     const side = page.getByRole('navigation', { name: 'Documentation' });
-    expect(await side.locator('a[href^="/docs/"]').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(DOCS.map((d) => d.path));
+    expect(await side.locator('a[href^="/docs/"]').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual(NAV_DOCS.map((d) => d.path));
     // grouped under its three sections
     await expect(side.locator('.label')).toHaveText(['Getting started', 'Guides', 'Recipes']);
 
@@ -308,26 +315,26 @@ test.describe('navigation', () => {
     await expect(page).toHaveURL(/\/docs$/);
   });
 
-  test('previous / next follow the sidebar order, from the first page to the last', async ({ page }) => {
-    await page.goto(DOCS[0].path);
+  test('previous / next follow the sidebar order, from the first page to the last (the tour page included)', async ({ page }) => {
+    await page.goto(NAV_DOCS[0].path);
     await hydrated(page);
     const pager = page.getByRole('navigation', { name: 'Previous and next pages' });
     await expect(pager.getByRole('link', { name: /Previous/ })).toHaveCount(0); // nothing before the first page
-    for (let i = 0; i < DOCS.length - 1; i++) {
+    for (let i = 0; i < NAV_DOCS.length - 1; i++) {
       const next = pager.getByRole('link', { name: /Next/ });
-      await expect(next).toHaveAttribute('href', DOCS[i + 1].path);
-      await expect(next).toContainText(DOCS[i + 1].title);
+      await expect(next).toHaveAttribute('href', NAV_DOCS[i + 1].path);
+      await expect(next).toContainText(NAV_DOCS[i + 1].title);
       await next.click();
-      await expect(page).toHaveURL(new RegExp(`${DOCS[i + 1].path}$`));
+      await expect(page).toHaveURL(new RegExp(`${NAV_DOCS[i + 1].path}$`));
       await hydrated(page);
-      await expect(page.getByRole('heading', { level: 1 })).toContainText(/\S/);
+      await expect(page.locator('h1').first()).toContainText(/\S/);
       const prev = pager.getByRole('link', { name: /Previous/ });
-      await expect(prev).toHaveAttribute('href', DOCS[i].path);
-      await expect(prev).toContainText(DOCS[i].title);
+      await expect(prev).toHaveAttribute('href', NAV_DOCS[i].path);
+      await expect(prev).toContainText(NAV_DOCS[i].title);
     }
     await expect(pager.getByRole('link', { name: /Next/ })).toHaveCount(0); // nothing after the last one
     await pager.getByRole('link', { name: /Previous/ }).click();
-    await expect(page).toHaveURL(new RegExp(`${DOCS[DOCS.length - 2].path}$`));
+    await expect(page).toHaveURL(new RegExp(`${NAV_DOCS[NAV_DOCS.length - 2].path}$`));
   });
 
   test('links between pages stay in the tab; a link to a heading scrolls to it; external links open elsewhere', async ({ page, context }) => {

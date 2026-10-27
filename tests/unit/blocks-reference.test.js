@@ -1,6 +1,7 @@
 // @ts-nocheck — mocks intentionally implement only the surface the hooks use
 /**
- * Guard of docs/getting-started/tour-of-the-blocks.md: the page is a tour of EVERY extension of `FullPreset`, and it states facts.
+ * Guard of docs/guides/blocks-reference.md (the "Blocks reference"): the page documents EVERY extension of `FullPreset`, and it states facts.
+ * The visual "Tour of the blocks" (src/site/tour) is guarded by tour-page.test.js, which reads this page for the facts it repeats.
  *
  *  1. Exhaustive: each extension of `FullPreset` (by `.name`) has its section (a heading that carries `` `name` ``), and a section
  *     names an extension that exists. The slash entries, the action topics and the keys of every extension are all in its section.
@@ -24,9 +25,10 @@ import { buildModel } from '../../scripts/api-model.js';
 import { buildDoc } from '../../src/site/docs/doc.server.js';
 import { loadDocEngine, createDocEngine } from '../../src/site/docs/doc-preset.js';
 import { slugify, createSlugger, parseFrontmatter } from '../../src/site/docs/content.js';
+import { flush, setCaret, outline, typeBlockShortcut, typeInline, marksOf } from './helpers/typing.js';
 
 const ROOT = process.cwd();
-const PAGE = 'docs/getting-started/tour-of-the-blocks.md';
+const PAGE = 'docs/guides/blocks-reference.md';
 const raw = readFileSync(join(ROOT, PAGE), 'utf8');
 const { body } = parseFrontmatter(raw);
 const lines = body.split('\n');
@@ -112,73 +114,15 @@ const sectionOf = (name) => sections.find((s) => s.name === name);
 
 const byName = new Map(FullPreset.map((extension) => [extension.name, extension]));
 
-// ─── the engine side ──────────────────────────────────────────────────────────
+// ─── the engine side: typing without a browser (helpers/typing.js) ────────────
 
-const flush = async () => { await Promise.resolve(); await new Promise((r) => setTimeout(r, 20)); };
-
-/** Puts the (stubbed) caret in `block` at `from`: the text block's `selection` reads it. */
-function setCaret(engine, block, from, to = from) {
-  const read = () => ({ from, to, isCollapsed: from === to, direction: 'none' });
-  Object.defineProperty(block, 'selection', { configurable: true, get: read });
-  const behavior = block.behaviors?.get('text');
-  if (behavior) Object.defineProperty(behavior, 'selection', { configurable: true, get: read });
-  const setCursor = engine.selection?.setCursor ?? vi.fn();
-  engine.selection = { anchorBlock: block, focusBlock: block, startBlock: block, endBlock: block, blocks: new Set([block]), isCollapsed: from === to, sync: vi.fn(), normalize: vi.fn(), setCursor };
-}
-
-/** A block as the outline of its JSON export: type, props, children. */
-const outline = (b) => ({ type: b.type, ...(b.props ? { props: b.props } : {}), ...(b.children?.length ? { children: b.children.map(outline) } : {}) });
-
-/**
- * Types `prefix` into an empty paragraph, then the trigger (a Space, or an Enter), the way the engine does it: the `onBeforeInput`
- * hooks of the extensions, in order, until one takes the event. Returns the document that results.
- */
-async function typeBlockShortcut(prefix, trigger = 'space') {
-  const engine = createFullEditor();
-  await engine.commit();
-  const block = engine.children[0];
-  block.insert(0, prefix);
-  await engine.commit();
-  setCaret(engine, block, prefix.length);
-  engine.undoManager.clear();
-  const event = trigger === 'enter'
-    ? { inputType: 'insertParagraph', data: null, preventDefault: vi.fn() }
-    : { inputType: 'insertText', data: ' ', preventDefault: vi.fn() };
-  let took = false;
-  for (const hook of engine.hooks.get('onBeforeInput')) {
-    if (hook(engine, event, block) === engine.BREAK) { took = true; break; }
-  }
-  await flush();
-  return { engine, took, blocks: engine.serialize('json').blocks.map(outline) };
-}
-
-/**
- * Types `typed` (already in `md`'s first text block, at its end), then the character `data`, through the text behavior and the input
- * rules of the editor (typography, markdown shortcuts). Returns the delta that results.
- */
-async function typeInline(md, typed, data, { engine = createFullEditor() } = {}) {
-  await engine.importMarkdown(md);
-  const top = engine.children[0];
-  const block = top.type === 'list' ? top.children[0] : top;
-  const behavior = block.behaviors.get('text');
-  block.insert(behavior.text.length, typed);
-  await engine.commit();
-  const from = behavior.text.length;
-  const selection = { from, to: from, isCollapsed: true };
-  Object.defineProperty(behavior, 'selection', { configurable: true, get: () => selection });
-  behavior.handleBeforeInput({ inputType: 'insertText', data, preventDefault: vi.fn(), getTargetRanges: () => [] }, selection);
-  await flush();
-  return { delta: behavior.container.toDelta(), text: behavior.text };
-}
-
-const marksOf = (delta) => delta.filter((run) => run.attributes).map((run) => ({ text: run.insert, marks: Object.keys(run.attributes).sort() }));
 
 // ─── 1. exhaustive ────────────────────────────────────────────────────────────
 
 describe('the page covers every extension of FullPreset', () => {
   it('has the frontmatter the site needs', () => {
     const { data } = parseFrontmatter(raw);
-    expect(data).toMatchObject({ title: 'Tour of the blocks', section: 'getting-started', order: 3 });
+    expect(data).toMatchObject({ title: 'Blocks reference', section: 'guides', order: 90 });
     expect(String(data.description).length).toBeGreaterThan(20);
   });
 
@@ -200,18 +144,18 @@ describe('the page covers every extension of FullPreset', () => {
 
   it('the groups of the page are there', () => {
     const groups = headings.filter((h) => h.level === 2).map((h) => h.raw);
-    for (const group of ['How to read this page', 'The tour at a glance', 'Blocks', 'Text behaviours', 'Paste', 'Make your own']) expect(groups).toContain(group);
+    for (const group of ['How to read this page', 'At a glance', 'Blocks', 'Text behaviours', 'Paste', 'Make your own']) expect(groups).toContain(group);
     expect(groups.some((g) => /block/i.test(g) && g !== 'Blocks')).toBe(true); // the group of the `block` extension
   });
 
   it('closes on "make your own", with a link to the extensions guide', () => {
     const tail = lines.slice(headings.find((h) => h.raw === 'Make your own').line).join('\n');
-    expect(tail).toContain('(../guides/extensions.md)');
+    expect(tail).toContain('(./extensions.md)');
   });
 
   it('the mini table of contents links every section, and only anchors that exist', async () => {
-    const glance = lines.slice(headings.find((h) => h.raw === 'The tour at a glance').line, headings.find((h) => h.raw === 'Blocks').line).join('\n');
-    const doc = await buildDoc(body, { dir: 'docs/getting-started' });
+    const glance = lines.slice(headings.find((h) => h.raw === 'At a glance').line, headings.find((h) => h.raw === 'Blocks').line).join('\n');
+    const doc = await buildDoc(body, { dir: 'docs/guides' });
     const anchors = new Set(Object.values(doc.ids));
     for (const s of sections) {
       const slug = createSlugger()(`${s.title} · ${s.name}`);
@@ -625,7 +569,7 @@ describe('the page goes through the site pipeline', () => {
   let doc;
   let engine;
   beforeAll(async () => {
-    doc = await buildDoc(body, { dir: 'docs/getting-started' });
+    doc = await buildDoc(body, { dir: 'docs/guides' });
     engine = loadDocEngine(doc.snapshot);
   }, 60000);
 

@@ -1,17 +1,17 @@
 ---
-title: Tour of the blocks
-description: Every extension Nabu ships, one by one: what it does, how to summon it, what it contains, the keys it owns, what it becomes in markdown and HTML, and which presets include it. Followed on a short story.
-section: getting-started
-order: 3
+title: Blocks reference
+description: Every extension Nabu ships, one section each: what it does, how to summon it, what it contains, the keys it owns, what it becomes in markdown and HTML, and which presets include it. The examples follow a short story.
+section: guides
+order: 90
 ---
 
-# Tour of the blocks
+# Blocks reference
 
-Somewhere there is a river, a ferryman and a traveller who is late. They will guide you through every extension Nabu ships.
+The facts about every extension Nabu ships, one section each. The examples follow a short story: a river, a ferryman and a traveller who is late.
 
-Each section puts one piece to work on a line of their story. Then it tells you, always in the same order, how to summon the piece, what it holds, which keys it owns and what it turns into when it leaves the editor.
+Each section puts one piece to work on a line of the story. Then it tells you, always in the same order, how to summon the piece, what it holds, which keys it owns and what it turns into when it leaves the editor.
 
-[Presets](./presets.md) answers "which bundle do I pick?". This page answers the other question: "what can each piece do?".
+[Presets](../getting-started/presets.md) answers "which bundle do I pick?". This page answers the other question: "what can each piece do?". For a visual walk through the same blocks, one story and one card each, see the [Tour of the blocks](/docs/getting-started/tour-of-the-blocks).
 
 ## How to read this page
 
@@ -33,7 +33,7 @@ expect(Object.keys(toggle.actions)).toEqual(['toggle']);
 expect(toggle.block.name).toBe('ToggleBlock');
 ```
 
-## The tour at a glance
+## At a glance
 
 - **Blocks:** [Paragraph](#paragraph--paragraph), [Heading](#heading--heading), [Blockquote](#blockquote--blockquote), [Divider](#divider--divider), [Code](#code--code), [Callout](#callout--callout), [Toggle](#toggle--toggle), [Image](#image--image), [Video](#video--video), [File](#file--file), [List](#list--list), [List item](#list-item--list-item), [Dialogue](#dialogue--dialogue), [Regions](#regions--region).
 - **Text behaviours:** [Rich text](#rich-text--rich-text), [Typography](#typography--typography), [Markdown shortcuts](#markdown-shortcuts--markdown-shortcuts).
@@ -278,7 +278,7 @@ A picture, as a block of its own.
 
 - **Type.** Nothing: images come from the picker, a paste, a drop or code.
 - **Slash menu.** Image (`/image`). It opens the file picker.
-- **Contains.** Nothing to type: a void block. Props: `ref` (where the file is), `alt`, `name` and `status` (`ready`, `pending`, `error`, `missing` or `rejected`). A picked, pasted or dropped file is stored by the [file system of the editor](../guides/persistence-and-sync.md#files-and-the-asset-store) and `ref` points to it.
+- **Contains.** Nothing to type: a void block. Props: `ref` (where the file is), `alt`, `name` and `status` (`ready`, `pending`, `error`, `missing` or `rejected`). A picked, pasted or dropped file is stored by the [file system of the editor](./persistence-and-sync.md#files-and-the-asset-store) and `ref` points to it.
 - **Keys.** None of its own: it holds no text.
 - **From code.** `image:pick` opens the picker. `image:insert` inserts from a URL or a stored reference, with `{ ref, alt }`.
 - **Markdown and HTML.** `![alt](url)`, and `<img src alt>`. Reading HTML, an `<img>` inside a paragraph is lifted out as a block and the text around it stays.
@@ -446,7 +446,7 @@ A line of speech, with a dash in front. For novels, plays and chats.
 - **Contains.** Text, with marks. No props.
 - **Keys.** `Enter` starts the next line of dialogue. `Enter` on an empty line leaves the dialogue (a paragraph). `Backspace` at the start turns the line into a paragraph.
 - **Markdown and HTML.** `-- text`, always, whatever dash is drawn. HTML is a plain `<p>`: pasted back, it is a paragraph. A line that starts with `–` or `—` is a paragraph, not a dialogue.
-- **Good to know.** The dash on screen is a choice of display: `createDialogueExtension({ dash })`, or `--nb-dialogue-dash` in CSS. See [Language and dialogue](../guides/ime-and-languages.md#the-dialogue-dash).
+- **Good to know.** The dash on screen is a choice of display: `createDialogueExtension({ dash })`, or `--nb-dialogue-dash` in CSS. See [Language and dialogue](./ime-and-languages.md#the-dialogue-dash).
 - **Presets.** Full only.
 - **API.** [`DialogueExtension`](/api/root/DialogueExtension), [`createDialogueExtension`](/api/root/createDialogueExtension).
 
@@ -506,7 +506,7 @@ That was one region (a "Section") holding another (a "Subsection"). The two clos
 - **Keys.** `Mod-Enter` cuts the region at the caret: a sibling of the same type takes the rest. `Mod-Shift-Enter` leaves the region: a paragraph right after it, one level up each time. `Tab` and `Shift-Tab` in a title demote and promote the region. `Backspace` at the start of a region, held for 0.7 seconds, merges it into the previous one (`Shift-Backspace` does the same); `Delete` held at the end merges the next one in. Released early, nothing happens. `Enter` in a title goes to the start of the body.
 - **From code.** `region:split`, `region:insert`, `region:create`, `region:close`, `region:merge-previous`, `region:merge-next`, `region:exit`, `region:demote`, `region:promote`, `region:unwrap`, `region:move`, `region:move-up`, `region:move-down`, `region:next`, `region:prev` and `region:parent`.
 - **Markdown and HTML.** A data comment, `<!-- region:section-1 {} -->`, then the title as a heading, then the body. HTML is `<section data-nabu-region="section-1" data-nabu-fields>` with the title as `<h1>` to `<h6>`.
-- **Good to know.** The title is a field, not a heading: a text selection only touches text, never the structure. Regions are never inferred from headings. The types, labels, numbering and fields are yours to declare: see the [Regions guide](../guides/regions.md).
+- **Good to know.** The title is a field, not a heading: a text selection only touches text, never the structure. Regions are never inferred from headings. The types, labels, numbering and fields are yours to declare: see the [Regions guide](./regions.md).
 - **Presets.** Full only. `RegionsExtension()` is a function; filter it out of a preset by the name `region`.
 - **API.** [`RegionsExtension`](/api/root/RegionsExtension), [`createRegionsExtension`](/api/root/createRegionsExtension), [`Regions`](/api/root/Regions), [`Region`](/api/root/Region).
 
@@ -576,7 +576,7 @@ becomes
 
 - **Type.** `-- ` (two hyphens, then Space) in the middle of a line.
 - **Contains.** One input rule, no options.
-- **Good to know.** The rule fires when the space is typed, so `--help` keeps its dashes. A longer run (`---`) is left alone. At the very start of an empty paragraph `-- ` is the [dialogue](#dialogue--dialogue) shortcut instead, and the rule does not run inside code blocks, callouts or toggle headers. No smart quotes, no languages: see [Language and dialogue](../guides/ime-and-languages.md#typography-per-language) to add your own rules.
+- **Good to know.** The rule fires when the space is typed, so `--help` keeps its dashes. A longer run (`---`) is left alone. At the very start of an empty paragraph `-- ` is the [dialogue](#dialogue--dialogue) shortcut instead, and the rule does not run inside code blocks, callouts or toggle headers. No smart quotes, no languages: see [Language and dialogue](./ime-and-languages.md#typography-per-language) to add your own rules.
 - **Presets.** Text, Document, Full.
 - **API.** [`TypographyExtension`](/api/root/TypographyExtension).
 
@@ -616,7 +616,7 @@ The toggle, the image, the video and the file have no typed shortcut.
 
 ## Paste
 
-A paste is read in a fixed order, and the first reader that applies wins. Files first (see [Image](#image--image), [Video](#video--video) and [File](#file--file)), then the readers below, from the highest priority down. The whole story, with the sanitizing rules, is in the [Clipboard and markdown guide](../guides/clipboard-and-markdown.md). Here is each reader, in the order it is asked.
+A paste is read in a fixed order, and the first reader that applies wins. Files first (see [Image](#image--image), [Video](#video--video) and [File](#file--file)), then the readers below, from the highest priority down. The whole story, with the sanitizing rules, is in the [Clipboard and markdown guide](./clipboard-and-markdown.md). Here is each reader, in the order it is asked.
 
 ### Nabu paste · `nabu-paste`
 
@@ -756,8 +756,8 @@ expect(engine.serialize('markdown')).toBe('## The last ferry');
 
 You have met all the pieces. A block of your own is the same kind of object: a class, a component, a few rules, and an `extension()` to bundle them. The model is the ferryman's: one job each, well done.
 
-- [Extensions](../guides/extensions.md) shows how to write one, from the smallest (one action) to a full block with a component, input rules, hooks and slash entries.
-- [Commands and keymap](../guides/commands-and-keymap.md) lists every topic of `nabu.exec` and every key, and how to rebind them.
-- [Presets](./presets.md) shows how to put your extension in a bundle.
+- [Extensions](./extensions.md) shows how to write one, from the smallest (one action) to a full block with a component, input rules, hooks and slash entries.
+- [Commands and keymap](./commands-and-keymap.md) lists every topic of `nabu.exec` and every key, and how to rebind them.
+- [Presets](../getting-started/presets.md) shows how to put your extension in a bundle.
 
 The river is still there. Nobody has crossed since noon.

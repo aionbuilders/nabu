@@ -30,6 +30,7 @@
   --site-accent-fill: #FF6F61; /* primary fill, mark (same as accent in dark) */
   --site-on-accent: #0B0B0C; /* text on accent fill */
   --site-peer: #7AA2F7; /* second collaborator, 7.8:1 */
+  --site-ok: #7EE787; /* "live" and strings of a JSON state (the tour), 12.8:1 */
   --site-note-bg: #1A1312; /* callout background */
   --site-note-border: #3A2A28;
   --site-code-bg: #0F0F11; /* inline code */
@@ -110,6 +111,7 @@
   --site-accent-fill: #F04E31; /* fills and the mark (dark text on it) */
   --site-on-accent: #0B0B0C; /* 5.5:1 on the fill */
   --site-peer: #2F62CC; /* 5.4:1 */
+  --site-ok: #15803D; /* 5.0:1 */
   --site-note-bg: #FDF1EE;
   --site-note-border: #F5CFC6;
   --site-code-bg: #EFEFEB;
@@ -137,6 +139,7 @@
     --site-accent-fill: #F04E31;
     --site-on-accent: #0B0B0C;
     --site-peer: #2F62CC;
+    --site-ok: #15803D;
     --site-note-bg: #FDF1EE;
     --site-note-border: #F5CFC6;
     --site-code-bg: #EFEFEB;
