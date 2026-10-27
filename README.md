@@ -106,6 +106,18 @@ Without this setup, Nabu will fail to load.
 <NabuEditor {engine} />
 ```
 
+## Entry points
+
+The public API is three entry points; everything else is internal and may change without notice.
+
+| Import | What it is for |
+|---|---|
+| `@aionbuilders/nabu` | Using the editor: factories and presets (`createFullEditor`, `FullPreset`…), `NabuEditor`, the built-in extensions, `Files`, `Regions`, `Todos`, `deltaToMarkdown`… |
+| `@aionbuilders/nabu/ui` | The optional UI: `FloatingToolbar`, `SlashMenu`, `DragHandle`, `CommandInvite`, `CommandChooser` |
+| `@aionbuilders/nabu/extend` | Writing your own blocks and extensions: `extension`, `Extension`, `Block`, `TextBlock`, `MegaBlock`, `TextBehavior`, `RichText`, key-chord helpers |
+
+Region operations (split, merge, move…) are reached through commands: `engine.exec('region:…')`.
+
 ## Presets
 
 Nabu ships with ready-to-use presets for common use cases.
@@ -309,7 +321,8 @@ A ready-made formatting toolbar that floats above the current selection:
 
 ```svelte
 <script>
-  import { NabuEditor, FloatingToolbar, createDocumentEditor } from '@aionbuilders/nabu';
+  import { NabuEditor, createDocumentEditor } from '@aionbuilders/nabu';
+  import { FloatingToolbar } from '@aionbuilders/nabu/ui';
   const engine = createDocumentEditor();
 </script>
 
@@ -325,7 +338,8 @@ An opt-in command palette, similar to `FloatingToolbar`. Type `/` in any block t
 
 ```svelte
 <script>
-  import { NabuEditor, SlashMenu, createFullEditor } from '@aionbuilders/nabu';
+  import { NabuEditor, createFullEditor } from '@aionbuilders/nabu';
+  import { SlashMenu } from '@aionbuilders/nabu/ui';
   const engine = createFullEditor();
 </script>
 
@@ -349,7 +363,8 @@ An opt-in overlay for reordering blocks by dragging. On hover, a `⠿` grip appe
 
 ```svelte
 <script>
-  import { NabuEditor, DragHandle, createFullEditor } from '@aionbuilders/nabu';
+  import { NabuEditor, createFullEditor } from '@aionbuilders/nabu';
+  import { DragHandle } from '@aionbuilders/nabu/ui';
   const engine = createFullEditor();
 </script>
 
@@ -542,7 +557,7 @@ todos.goTo(item);   // move the editor cursor to a specific to-do
 Keyboard shortcuts are **commands** that extensions declare (design: `docs/adr/017-commands-keymap-confirmations.md`). The engine resolves the keys, so conflicts are reported, shortcuts can be rebound, and a help sheet can list them.
 
 ```js
-import { extension } from '@aionbuilders/nabu';
+import { extension } from '@aionbuilders/nabu/extend';
 
 const MyExtension = extension('my-ext', {
   commands: {
@@ -590,7 +605,7 @@ A command that is risky to run from a single key press declares how it asks for 
 Regions divide one continuous text into parts, chapters, scenes… with **markers** (design: `docs/adr/016-regions.md`). The document stays flat; a `region` marker is a void block (the caret steps over it, like a divider) and a region runs from its marker to the next marker of the same or a higher level. Nabu stores and exposes the structure; what a division *means* (synopsis, status, views) is up to your app. The default rendering is a discreet seam (label + hairline, announced to screen readers as a heading of the region's level, themable with `--nb-region-*` CSS variables); there is no editing UI. A marker exports as markdown in two lines, a data comment plus a readable heading (`<!-- region:chapter {"title":"The ferryman"} -->` then `## Chapter 1 - The ferryman`), which Nabu reads back exactly (see "Regions in markdown, HTML and the clipboard" below).
 
 ```js
-import { RegionsExtension, insertRegion } from '@aionbuilders/nabu';
+import { createEditor, RegionsExtension } from '@aionbuilders/nabu';
 
 const engine = createEditor({
   extensions: [RegionsExtension({
@@ -604,7 +619,7 @@ const engine = createEditor({
 // `FullPreset` already includes `RegionsExtension()`: without options, a generic section division over
 // three levels, the types `section-1`, `section-2`, `section-3` (labels "1.", "1.1", "1.1.1").
 
-await insertRegion(engine, { type: 'chapter', at: 'end', title: 'The ferryman' });
+await engine.exec('region:create', { type: 'chapter' });   // a chapter at the caret block (region operations are commands: see below)
 
 engine.regions.list;            // every region, in document order (also: Regions.get(engine))
 engine.regions.tree;            // top-level regions, each with `children`
@@ -675,7 +690,7 @@ All state is stored in a [Loro](https://loro.dev) document — a WASM-based CRDT
 - **Rich text**: native delta/mark support via `LoroText`
 
 ### Extension System
-Every block type is an extension. You can build custom block types by extending the `Block` or `MegaBlock` base classes and registering them via the `extension()` helper.
+Every block type is an extension. You can build custom block types by extending the `Block`, `TextBlock` or `MegaBlock` base classes and registering them via the `extension()` helper, all from `@aionbuilders/nabu/extend`.
 
 ### Svelte 5 Runes
 Nabu uses `$state` and `$derived` throughout for fine-grained reactivity — only modified blocks re-render.

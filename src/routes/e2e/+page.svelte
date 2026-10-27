@@ -1,9 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { createFullEditor, FullPreset } from '$lib/presets.js';
-  import { createPersistedEditor } from '$lib/persistence/persistence.js';
-  import { NabuEditor } from '$lib/blocks';
+  import { createFullEditor, FullPreset, createPersistedEditor, NabuEditor } from '$lib';
   import { FloatingToolbar, SlashMenu, DragHandle, CommandInvite, CommandChooser } from '$lib/ui';
   import { DemoConfirmExtension } from './demo-commands.js';
 

@@ -1,7 +1,6 @@
 <script>
   import { untrack } from 'svelte';
-  import { createPersistedEditor } from '$lib/persistence/persistence.js';
-  import { FullPreset } from '$lib/presets.js';
+  import { createPersistedEditor, FullPreset } from '$lib';
   import PitchPanel from './_components/PitchPanel.svelte';
   import EditorPanel from './_components/EditorPanel.svelte';
   import DebugPanel from './_components/DebugPanel.svelte';

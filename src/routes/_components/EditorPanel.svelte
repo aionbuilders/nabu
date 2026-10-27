@@ -1,5 +1,5 @@
 <script>
-  import { NabuEditor } from '$lib/blocks';
+  import { NabuEditor } from '$lib';
   import { FloatingToolbar, SlashMenu, DragHandle } from '$lib/ui';
   import EditorToolbar from './EditorToolbar.svelte';
 

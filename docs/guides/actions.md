@@ -80,7 +80,7 @@ nabu.exec('redo')
 ## Déclarer des actions dans une extension
 
 ```js
-import { Extension } from '@aionbuilders/nabu';
+import { Extension } from '@aionbuilders/nabu/extend';
 
 const MyExtension = new Extension('my-ext', {
     actions: {

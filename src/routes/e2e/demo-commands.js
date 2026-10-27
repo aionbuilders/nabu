@@ -6,7 +6,7 @@
  * `window.__demoHold = false` makes the hold command unavailable (its `when` turns false) to simulate a key held into a context.
  */
 
-import { Extension } from '$lib/utils/extensions.js';
+import { Extension } from '$lib/extend';
 
 /** @param {string} entry */
 const log = (entry) => {

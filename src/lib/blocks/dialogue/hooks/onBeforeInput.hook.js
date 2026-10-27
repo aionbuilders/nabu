@@ -3,7 +3,7 @@ import { TextBehavior } from "../../../behaviors/text";
 import { Dialogue } from "../dialogue.svelte.js";
 
 /**
- * @import { Nabu, Block } from "../../..";
+ * @import { Nabu, Block } from "../..";
  */
 
 /** @param {Nabu} nabu @param {InputEvent} event @param {Block} block */

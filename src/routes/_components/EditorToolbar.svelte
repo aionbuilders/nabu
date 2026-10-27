@@ -1,5 +1,5 @@
 <script>
-  import { TextBehavior } from '$lib/behaviors/text/text.behavior.svelte.js';
+  import { TextBehavior } from '$lib/extend';
 
   let { engine = null } = $props();
 

@@ -277,22 +277,9 @@ const engine = await createPersistedEditor({
 
 ## Accès direct à la couche IndexedDB
 
-Pour des usages avancés (export, import, nettoyage en batch), les fonctions bas niveau sont exportées :
+Les fonctions bas niveau (`loadSnapshot`, `saveSnapshot`, `deleteSnapshot`, `loadRecords`, `listQuarantined`) sont **internes** : elles ne font partie d'aucun des trois points d'entrée publics (`@aionbuilders/nabu`, `/ui`, `/extend`). Passez par `createPersistedEditor` et `engine.persistence` ; le format de stockage ci-dessous est documenté à titre de référence (export, outillage de diagnostic).
 
-```js
-import { loadSnapshot, saveSnapshot, deleteSnapshot } from '@aionbuilders/nabu';
-
-// Charger un snapshot brut
-const snapshot = await loadSnapshot('my-document'); // Uint8Array | null
-
-// Sauvegarder manuellement un snapshot brut
-await saveSnapshot('my-document', snapshot);
-
-// Supprimer un snapshot
-await deleteSnapshot('my-document');
-```
-
-> **Note :** Ces fonctions opèrent sur la base `nabu` (version 4), object store `snapshots`. Le record stocké a la forme `{ docId: string, snapshot: Uint8Array, savedAt: number }`. `saveSnapshot` fait aussi tourner le secours (object store `backups`, même forme). `loadRecords(docId)` renvoie `{ current, backup }` bruts, `listQuarantined(docId)` les enregistrements mis de côté. La version 4 de la base AJOUTE les object stores `backups` et `quarantine` ; une base plus ancienne se charge comme avant (sans secours).
+> **Note :** Elles opèrent sur la base `nabu` (version 4), object store `snapshots`. Le record stocké a la forme `{ docId: string, snapshot: Uint8Array, savedAt: number }`. `saveSnapshot` fait aussi tourner le secours (object store `backups`, même forme). `loadRecords(docId)` renvoie `{ current, backup }` bruts, `listQuarantined(docId)` les enregistrements mis de côté. La version 4 de la base AJOUTE les object stores `backups` et `quarantine` ; une base plus ancienne se charge comme avant (sans secours).
 
 ---
 
