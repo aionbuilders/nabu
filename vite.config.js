@@ -25,7 +25,9 @@ export default defineConfig({
 	server: {
 		allowedHosts: ALLOWED_HOSTS,
 		// Other slots' builds and test runs write into the repo: without this the dev server reloads the page on every one of their files.
-		watch: { ignored: ['**/build-*/**', '**/.svelte-kit-*/**', '**/test-results*/**'] }
+		// The API model too: every build regenerates it (identical content) and a reload re-renders every open page server-side.
+		// Restart the dev server (or `bun run api:model`) to see JSDoc changes in /api.
+		watch: { ignored: ['**/build-*/**', '**/.svelte-kit-*/**', '**/test-results*/**', '**/src/site/api/model.json'] }
 	},
 	preview: { allowedHosts: ALLOWED_HOSTS },
 	build: {
