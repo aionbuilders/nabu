@@ -436,6 +436,7 @@ export class NabuSelection extends SvelteSelection {
      * Selects exactly the text of `block` (Select All inside an isolated field).
      * @param {Block} block
      * @returns {boolean} False when the block has no DOM point to select
+     * @public
      */
     selectBlockText(block) {
         const text = block.behaviors?.get('text');
@@ -450,6 +451,7 @@ export class NabuSelection extends SvelteSelection {
      * Selects the text of the document between two blocks (first block start -> last block end).
      * @param {Block} first @param {Block} last
      * @returns {boolean}
+     * @public
      */
     selectBetween(first, last) {
         const lastText = last.behaviors?.get('text');
@@ -536,35 +538,41 @@ export class NabuSelection extends SvelteSelection {
         this.nabu.openTrailingCaret();
     }
 
+    /** @public */
     anchorBlock = $derived.by(() => {
         this.anchorNode;
         const id = this.anchorNode?.parentElement?.closest("[data-block-id]")?.getAttribute("data-block-id");
         return id ? this.nabu.blocks.get(id) : null;
     });
     
+    /** @public */
     focusBlock = $derived.by(() => {
         this.focusNode;
         const id = this.focusNode?.parentElement?.closest("[data-block-id]")?.getAttribute("data-block-id");
         return id ? this.nabu.blocks.get(id) : null;
     });
     
+    /** @public */
     startBlock = $derived.by(() => {
         this.range;
         const id = this.range?.startContainer?.parentElement?.closest("[data-block-id]")?.getAttribute("data-block-id");
         return id ? this.nabu.blocks.get(id) : null;
     });
     
+    /** @public */
     endBlock = $derived.by(() => {
         this.range;
         const id = this.range?.endContainer?.parentElement?.closest("[data-block-id]")?.getAttribute("data-block-id");
         return id ? this.nabu.blocks.get(id) : null;
     });
 
+    /** @public */
     start = $derived(this.startBlock?.selection && {
         block: this.startBlock,
         ...this.startBlock.selection
     });
 
+    /** @public */
     end = $derived(this.endBlock?.selection && {
         block: this.endBlock,
         ...this.endBlock.selection
@@ -574,6 +582,7 @@ export class NabuSelection extends SvelteSelection {
      * Définit le curseur à un endroit précis du document (Modèle -> DOM)
      * @param {Block} block 
      * @param {number} offset 
+     * @public
      */
     setCursor(block, offset) {
         if (!block.element) return;
@@ -596,6 +605,7 @@ export class NabuSelection extends SvelteSelection {
      * a mark or a highlight never reaches text nobody sees (P-112). Deleting a range still removes such a body with its owner:
      * the deletion walks the tree itself (`container.utils.js`), it does not read this set.
      * @type {Set<Block>}
+     * @public
      */
     blocks = $derived.by(() => {
         const range = this.startBlock !== this.endBlock;
@@ -615,6 +625,7 @@ export class NabuSelection extends SvelteSelection {
     /**
      * True while the selection is a non-collapsed range across several blocks. The editor mirrors it as `data-nabu-range` on its
      * root, which the stylesheet uses to not highlight isolated blocks (the model leaves them out of the range, see `blocks`).
+     * @public
      */
     isRange = $derived(!this.isCollapsed && !!this.startBlock && !!this.endBlock && this.startBlock !== this.endBlock);
     

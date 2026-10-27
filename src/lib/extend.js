@@ -5,6 +5,11 @@
  * helpers a block needs (keyboard chords, HTML escaping). Mount-time pieces (editor, presets, built-in extensions) are in
  * `@aionbuilders/nabu`.
  *
+ * Stability (audit P-119): the members of `Nabu`, `Block`, `TextBlock`, `MegaBlock`, `TextBehavior`, the selection and the
+ * command registry tagged `@public` in their JSDoc are the stable contract of a third-party block or extension (pinned by
+ * `tests/unit/extend-contract.test.js`). `nabu.internals` exposes the rest of the machinery and is UNSTABLE: it may change in
+ * any minor version. See `docs/guides/extensions.md`, "Stability".
+ *
  * @example
  * import { extension, TextBlock, TextBehavior, RichText } from '@aionbuilders/nabu/extend';
  */
@@ -71,6 +76,12 @@ export { escapeHtml, escapeAttr } from './utils/html.js';
 /** @typedef {import('./utils/extensions.js').PasteInterpreter} PasteInterpreter */
 /** @typedef {import('./utils/extensions.js').PasteInterpretOptions} PasteInterpretOptions */
 /** @typedef {import('./utils/extensions.js').PasteFileHandler} PasteFileHandler */
+/** @typedef {import('./utils/extensions.js').HtmlRule} HtmlRule A rule of a block's `static htmlRules`. */
+/** @typedef {import('./utils/extensions.js').HtmlHelpers} HtmlHelpers What a block's `static fromHTML` receives. */
+/** @typedef {import('./utils/extensions.js').MarkdownRule} MarkdownRule A rule of a block's `static markdownRules`. */
+/** @typedef {import('./utils/extensions.js').MarkdownHelpers} MarkdownHelpers What a block's `static fromMarkdown` receives. */
+/** @typedef {import('./utils/extensions.js').SerializeContext} SerializeContext The second argument of a block's `static toMarkdown` / `toHtml`. */
+/** @typedef {import('./blocks/nabu.svelte.js').NabuInternals} NabuInternals The shape of `nabu.internals`. UNSTABLE: may change in any minor version. */
 /** @typedef {import('./utils/commands.js').CommandDef} CommandDef */
 /** @typedef {import('./utils/commands.js').CommandContext} CommandContext */
 /** @typedef {import('./utils/keys.js').Chord} Chord */

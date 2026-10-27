@@ -56,16 +56,22 @@ export class SvelteSelection {
     * @type {SelectionObject?}
     */
     #sel = $state(null);
+    /** @public */
     is = $derived(!!this.#sel);
     
     /** @type {Range[]} */
     #ranges = $state([]);
     
     // Propriétés réactives de base
+    /** @public */
     anchorNode = $derived(this.#sel?.anchorNode ?? null);
+    /** @public */
     anchorOffset = $derived(this.#sel?.anchorOffset ?? 0);
+    /** @public */
     focusNode = $derived(this.#sel?.focusNode ?? null);
+    /** @public */
     focusOffset = $derived(this.#sel?.focusOffset ?? 0);
+    /** @public */
     isCollapsed = $derived(this.#sel?.isCollapsed ?? true);
     rangeCount = $derived(this.#sel?.rangeCount ?? 0);
     type = $derived(this.#sel?.type ?? '');
@@ -73,12 +79,15 @@ export class SvelteSelection {
 
     startNode = $derived(this.#sel?.startNode ?? null);
     endNode = $derived(this.#sel?.endNode ?? null);
+    /** @public */
     startOffset = $derived(this.#sel?.startOffset ?? 0);
+    /** @public */
     endOffset = $derived(this.#sel?.endOffset ?? 0);
 
     // Propriétés des ranges
     ranges = $derived(this.#ranges);
     firstRange = $derived(this.#ranges[0] ?? null);
+    /** @public */
     get range() {
         // Retourne la première range si elle existe, sinon null
         return this.firstRange;
@@ -86,6 +95,7 @@ export class SvelteSelection {
     lastRange = $derived(this.#ranges[this.#ranges.length - 1] ?? null);
     
     // Propriétés dérivées utiles
+    /** @public */
     text = $derived(this.#sel?.text ?? '');
     html = $derived(this.#sel?.html ?? '');
     hasSelection = $derived(!this.isCollapsed && this.rangeCount > 0);
@@ -212,6 +222,7 @@ export class SvelteSelection {
     * un état périmé. À appeler au tout début de ces handlers. Ne touche à l'état
     * que si les points de la sélection ont réellement changé (pas de churn réactif).
     * @returns {boolean} True si l'état a été mis à jour
+     * @public
     */
     sync = () => {
         if (typeof window === 'undefined' || !window.getSelection) return false;
@@ -382,7 +393,7 @@ export class SvelteSelection {
     * @param {Node} focusNode - Le nœud de focus.
     * @param {number} focusOffset - L'offset de focus.
     * @returns {boolean} True si l'opération a réussi
-    
+     * @public
     */
     setBaseAndExtent = (anchorNode, anchorOffset, focusNode, focusOffset) => {
         try {

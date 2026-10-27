@@ -448,14 +448,14 @@ expect(ran).toEqual([]);
 
 // The first key again confirms (a fake key press, as the editor would receive it).
 const press = { key: 'w', code: 'KeyW', ctrlKey: true, altKey: true, shiftKey: false, metaKey: false, repeat: false, preventDefault() {} };
-engine.handleKeydown(press);
+engine.internals.handleKeydown(press); // the key pipeline is engine machinery: `nabu.internals` (unstable), see the Stability section of the extensions guide
 expect(ran).toEqual(['wipe']);
 expect(engine.pendingCommand).toBeNull();
 
 // A chooser opens at the caret; the choice runs the command with the option.
 expect(engine.commands.offer('wipe:some')).toBe(true);
 expect(engine.pendingCommand.options.map((option) => option.id)).toEqual(['a', 'b']);
-engine.commandConfirm.choose(1);
+engine.internals.commandConfirm.choose(1);
 expect(ran).toEqual(['wipe', 'b']);
 
 // A command without confirmation simply runs; an unknown one does nothing.

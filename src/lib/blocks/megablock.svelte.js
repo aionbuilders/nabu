@@ -13,15 +13,21 @@ export class MegaBlock extends Block {
         this.updateChildren();
 	}
 
-    /** @type {Block[]} */
+    /**
+     * @type {Block[]}
+     * @public
+     */
     children = $state([]);
+    /** @public */
     positions = $derived(this.children.reduce((sum, child) => sum + (child.positions ?? 0), 0));
+    /** @public */
     wordCount = $derived(this.children.reduce((sum, c) => sum + (c.wordCount ?? 0), 0));
 
     /**
      * Pure container: no own text, delegate entirely to children.
      * @param {number} localOffset
      * @returns {{ block: Block, offset: number } | null}
+     * @public
      */
     resolveOffset(localOffset) {
         let remaining = localOffset;
@@ -35,7 +41,10 @@ export class MegaBlock extends Block {
         return last ? last.resolveOffset(Math.max(0, (last.positions ?? 1) - 1)) : null;
     }
 
-    /** @param {Set<string>} [retyped]  ids whose `type` just changed; without it, the type of every child is checked */
+    /**
+     * @param {Set<string>} [retyped]  ids whose `type` just changed; without it, the type of every child is checked
+     * @public
+     */
     updateChildren(retyped) {
         const childrenNodes = this.node.children();
         if (!childrenNodes) return;
@@ -60,7 +69,11 @@ export class MegaBlock extends Block {
     }
 
 
-    /** @param {Block[]} children @param {number | null} [index] */
+    /**
+     * @param {Block[]} children
+     * @param {number | null} [index]
+     * @public
+     */
     adoptChildren(children, index = null) {
         // Reverse so that when index is specified, children are inserted in original
         // order (each insert at the same position pushes others down, so reverse of
@@ -73,7 +86,10 @@ export class MegaBlock extends Block {
     }
 
 
-    /** @param {InputEvent} event */
+    /**
+     * @param {InputEvent} event
+     * @public
+     */
     beforeinput(event) {
         return handleContainerBeforeInput(this, this.nabu, event);
     }
@@ -83,6 +99,7 @@ export class MegaBlock extends Block {
      * Override in subclasses that carry structural props (e.g. List -> { listType }, ListItem -> { checked },
      * Toggle -> { collapsed }).
      * @returns {Record<string, any>}
+     * @public
      */
     get clipboardProps() { return {}; }
 
@@ -91,6 +108,7 @@ export class MegaBlock extends Block {
      * Containers whose props depend on their first copied child (an ordered list's `start`) override this.
      * @param {number} firstChildIndex
      * @returns {Record<string, any>}
+     * @public
      */
     clipboardPropsFrom(firstChildIndex) { return this.clipboardProps; }
 
@@ -113,6 +131,7 @@ export class MegaBlock extends Block {
      *
      * @param {{ startBlock?: Block|null, startFrom?: number, endBlock?: Block|null, endTo?: number|null, textOnly?: boolean }} [ctx]
      * @returns {import('../utils/extensions.js').PasteBlock | import('../utils/extensions.js').PasteBlock[] | null}
+     * @public
      */
     serializeForClipboard({ startBlock = null, startFrom = 0, endBlock = null, endTo = null, textOnly = false } = {}) {
         const tb = this.behaviors?.get('text');

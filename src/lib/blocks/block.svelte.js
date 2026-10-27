@@ -29,11 +29,30 @@ function findInDescendants(block, predicate) {
 export class Block {
     /** @param {Nabu} nabu @param {NabuNode} node */
     constructor(nabu, node) {
+        /**
+         * The editor this block belongs to.
+         * @type {Nabu}
+         * @public
+         */
         this.nabu = nabu;
+        /**
+         * The block's node in the document tree (Loro): `node.data` holds its `type` and props, `node.parent()` / `node.children()` the structure.
+         * @type {NabuNode}
+         * @public
+         */
         this.node = node;
         const metadata = node.data;
-        /** The Loro tree id of the node (also the key in `nabu.blocks`). @type {import('loro-crdt').TreeID} */
+        /**
+         * The Loro tree id of the node (also the key in `nabu.blocks`).
+         * @type {import('loro-crdt').TreeID}
+         * @public
+         */
         this.id = /** @type {import('loro-crdt').TreeID} */ (node.id.toString());
+        /**
+         * The block type, as registered by its extension (`'paragraph'`, `'callout'`...). Read from the node when the block is built; `retype()` changes the node, and the engine builds a new block.
+         * @type {string}
+         * @public
+         */
         this.type = metadata.get("type") || "block";
         this.nabu.blocks.set(this.id, this);
         const blocksOfType = this.nabu.blocksByType.get(this.type) || new SvelteSet();
@@ -48,25 +67,44 @@ export class Block {
         }
     }
 
-    /** @type {SvelteMap<string, function(any): void>} */
+    /**
+     * Serializers of this block by format: `'markdown'`, `'json'`, `'application/x-nabu+json'` (the clipboard) or one of your own.
+     * Each receives the context of the call (`{ from, to, partial }` for the clipboard) and returns the serialized block.
+     * @type {SvelteMap<string, function(any): any>}
+     * @public
+     */
     serializers = new SvelteMap();
+    /**
+     * The behaviors of the block by name; a text block has `'text'` (a `TextBehavior`).
+     * @type {SvelteMap<string, any>}
+     * @public
+     */
     behaviors = new SvelteMap();
 
 
+    /** The selection covers this block (reactive). @public */
     selected = $state(false);
+    /** The selection starts in this block (reactive). @public */
     isSelectionStart = $state(false);
+    /** The selection ends in this block (reactive). @public */
     isSelectionEnd = $state(false);
+    /** The selection covers this block and neither starts nor ends in it (reactive). @public */
     isIntermediate = $derived(this.selected && !this.isSelectionStart && !this.isSelectionEnd);
     
+    /** @public */
     clearSelection() {
         this.selected = false;
         this.isSelectionStart = false;
         this.isSelectionEnd = false;
     }
 
-    /** @type {{from: number, to: number, direction: "forward" | "backward" | "none"} | null} */
+    /**
+     * @type {{from: number, to: number, direction: "forward" | "backward" | "none"} | null}
+     * @public
+     */
     selection = $derived(null);
 
+    /** @public */
     positions = $derived(0);
 
     /**
@@ -74,23 +112,37 @@ export class Block {
      * (own text) and containers (sum of children) so that parents can
      * aggregate without re-traversing the whole subtree.
      * @type {number}
+     * @public
      */
     wordCount = $derived(0);
 
     // ── Capability flags ─────────────────────────────────────────────────────
     // Declarative opt-outs respected centrally by the engine. Default true;
     // override to false in a subclass (e.g. CodeBlock) to disable a behavior.
-    /** When false, Enter inserts a literal "\n" in place instead of splitting the block. @type {boolean} */
+    /**
+     * When false, Enter inserts a literal "\n" in place instead of splitting the block.
+     * @type {boolean}
+     * @public
+     */
     splitsOnEnter = true;
-    /** When false, onBeforeInput markdown-shortcut hooks and inputRules are skipped in this block. @type {boolean} */
+    /**
+     * When false, onBeforeInput markdown-shortcut hooks and inputRules are skipped in this block.
+     * @type {boolean}
+     * @public
+     */
     transformsEnabled = true;
-    /** When false, inline marks (bold/italic/...) are never applied to this block. @type {boolean} */
+    /**
+     * When false, inline marks (bold/italic/...) are never applied to this block.
+     * @type {boolean}
+     * @public
+     */
     marksEnabled = true;
     /**
      * True when the block currently hides its children (they are not rendered, e.g. a collapsed
      * foldable block): navigation (`findForward` / `findBackward` / `findLastDescendant`, caret
      * normalisation) never enters them. Override with a getter in a subclass.
      * @type {boolean}
+     * @public
      */
     get hidesChildren() { return false; }
     /**
@@ -105,9 +157,14 @@ export class Block {
      *    land in it is moved past it, in the direction of travel; a selection that STARTS in it stays bounded to it;
      *  - the caret enters it at its start going down / right, at its end going up / left; Select All inside it selects its text.
      * @type {boolean}
+     * @public
      */
     isolatesSelection = false;
-    /** When true, pasting inside this block inserts the clipboard's text/plain verbatim (replacing the selection), skipping every paste interpreter: no blocks created, no markdown/HTML interpretation. @type {boolean} */
+    /**
+     * When true, pasting inside this block inserts the clipboard's text/plain verbatim (replacing the selection), skipping every paste interpreter: no blocks created, no markdown/HTML interpretation.
+     * @type {boolean}
+     * @public
+     */
     pastesAsPlainText = false;
 
     /**
@@ -116,19 +173,31 @@ export class Block {
      * Override in MegaBlock (pure containers) and mixed blocks (e.g. ListItem).
      * @param {number} localOffset
      * @returns {{ block: Block, offset: number } | null}
+     * @public
      */
     resolveOffset(localOffset) {
         return { block: this, offset: localOffset };
     }
 
-    /** @type {MegaBlock | null} */
+    /**
+     * @type {MegaBlock | null}
+     * @public
+     */
     parent = $state(null);
+    /** @public */
     index = $state(0);
-    /** @type {Block?} */
+    /**
+     * @type {Block?}
+     * @public
+     */
     previous = $derived(this.index > 0 && this.parent ? this.parent.children[this.index - 1] : null);
-    /** @type {Block?} */
+    /**
+     * @type {Block?}
+     * @public
+     */
     next = $derived(this.parent && this.index < this.parent.children.length - 1 ? this.parent.children[this.index + 1] : null);
 
+    /** @public */
     parents = $derived.by(() => {
         const parents = [];
         let current = this.parent;
@@ -139,6 +208,7 @@ export class Block {
         return parents;
     });
 
+    /** @public */
     component = $derived(this.nabu.components.get(this.type) || null);
 
     /**
@@ -152,6 +222,7 @@ export class Block {
      * (No `static placeholder` is declared here: Svelte forbids a static and a
      * reactive field with the same name in one class.)
      * @type {string}
+     * @public
      */
     placeholder = $derived.by(() => {
         const config = this.nabu.placeholders;
@@ -167,7 +238,10 @@ export class Block {
         return resolvePlaceholderText(/** @type {any} */ (this), config.text);
     });
 
-    /** @type {HTMLElement | null} */
+    /**
+     * @type {HTMLElement | null}
+     * @public
+     */
     element = $state(null);
 
     /**
@@ -176,6 +250,7 @@ export class Block {
      * LINEAR: every block is visited at most once (the following siblings are only DESCENDED into, never searched
      * "forward" again, which would revisit everything after them).
      * @param {(block: Block) => boolean} predicate @returns {Block | null}
+     * @public
      */
     findForward(predicate) {
         // 1. Descendre dans nos propres enfants
@@ -201,7 +276,11 @@ export class Block {
         return null;
     }
 
-    /** @param {(block: Block) => boolean} predicate @returns {Block | null} */
+    /**
+     * @param {(block: Block) => boolean} predicate
+     * @returns {Block | null}
+     * @public
+     */
     findBackward(predicate) {
         /** @type {Block | null} */
         let current = this;
@@ -239,6 +318,7 @@ export class Block {
 
     /**
      * Returns real, uncommitted siblings, which is useful for extensions that want to check the document structure before the transaction is committed.
+     * @public
      */
     getAdjacentSiblings() {
         const parent = this.node.parent();
@@ -265,6 +345,7 @@ export class Block {
      * Helper pour trouver le dernier descendant profond qui matche
      * @param {(block: Block) => boolean} predicate 
      * @returns {Block | null} 
+     * @public
      */
     findLastDescendant(predicate) {
         // @ts-ignore
@@ -278,6 +359,7 @@ export class Block {
         return null;
     }
 
+    /** @public */
     destroy() {
         this.nabu.delete(this);
     }
@@ -286,6 +368,7 @@ export class Block {
      * Transforme ce bloc en un autre type de bloc.
      * @param {string} newType 
      * @param {Record<string, any>} [props={}] 
+     * @public
      */
     transformTo(newType, props = {}) {
         this.retype(newType, props);
@@ -299,6 +382,7 @@ export class Block {
      * stands (e.g. because its parent only accepts some children): do the same job with Loro mutations only.
      * @param {string} newType
      * @param {Record<string, any>} [props={}]
+     * @public
      */
     retype(newType, props = {}) {
         const data = this.node.data;
@@ -308,24 +392,39 @@ export class Block {
         }
     }
 
-    /** @param {number} index @param {string} text */
+    /**
+     * @param {number} index
+     * @param {string} text
+     * @public
+     */
     insert(index, text) {
         this.nabu.warn("Not implemented: insert text", text, "at index", index, "in block", this.id);
     }
 
-    /** @param {{from?: number, to?: number, index?: number, length?: number}} [deletion] */
+    /**
+     * @param {{from?: number, to?: number, index?: number, length?: number}} [deletion]
+     * @public
+     */
     delete(deletion) {
         this.nabu.warn("Not implemented: delete block", this.id, "with deletion range", deletion);
     }
 
-    /** @param {Block} block @returns {any} */
+    /**
+     * @param {Block} block
+     * @returns {any}
+     * @public
+     */
     absorbs(block) {
         this.nabu.warn("Not implemented: check if block", this.id, "absorbs block", block.id);
         return false;
     }
 
 
-    /** @param {Block} block @returns {any} */
+    /**
+     * @param {Block} block
+     * @returns {any}
+     * @public
+     */
     mergeWith(block) {
         const success = this.absorbs(block);
         if (success) {
@@ -340,6 +439,7 @@ export class Block {
      * @param {Block} otherBlock - The block to consume or be consumed by
      * @param {'into' | 'from'} direction - 'into' = this merges into other, 'from' = other merges into this
      * @returns {Block} The surviving block
+     * @public
      */
     consume(otherBlock, direction = 'from') {
         const [survivor, victim] = direction === 'into'
@@ -380,6 +480,7 @@ export class Block {
      * Override in subclasses (e.g. ListItem requires a "list" parent).
      * Used by wrapOrphan() after block relocations.
      * @returns {{ type: string, props: () => Record<string, any> } | null}
+     * @public
      */
     get requiredParent() { return null; }
 
@@ -388,6 +489,7 @@ export class Block {
      * into an empty paragraph makes it a heading). Always true for root blocks; a container with structural
      * rules about its children (a list) keeps it `false`, a container with a free-form body (a toggle) opts in.
      * @returns {boolean}
+     * @public
      */
     get adoptsPastedTypes() { return false; }
 
@@ -405,6 +507,7 @@ export class Block {
      * @param {import('../utils/extensions.js').PasteBlock[]} blocks  the sanitized fragment
      * @param {{ offset: number }} ctx  the caret offset in this block's text
      * @returns {{ block: Block | null, offset: number } | null}  `block: null` leaves the caret to the engine
+     * @public
      */
     acceptPaste(blocks, ctx) { return null; }
 
@@ -413,16 +516,25 @@ export class Block {
      * with it, in document order, all in the same parent. The default is the block alone (a container carries its own children:
      * they are its tree children). A block whose "extent" is not its subtree overrides it (an extension may widen the range). The drop rules are the same for any range: it cannot land inside itself.
      * @returns {Block[]}
+     * @public
      */
     dragRange() { return [this]; }
 
-    /** @param {{from?: number, to?: number, index?: number, length?: number, offset?: number}} options @returns {{block: Block} | null} */
+    /**
+     * @param {{from?: number, to?: number, index?: number, length?: number, offset?: number}} options
+     * @returns {{block: Block} | null}
+     * @public
+     */
     split(options) {
         this.nabu.warn("Not implemented: split block", this.id, "with options", options);
         return null;
     }
 
-    /** @param {{start?: number, end?: number, offset?: number} | null } options @param {boolean} [passive=false] */
+    /**
+     * @param {{start?: number, end?: number, offset?: number} | null } options
+     * @param {boolean} [passive=false]
+     * @public
+     */
     focus(options = {}, passive = false) {
         let start = options?.start ?? options?.offset ?? this.selection?.from ?? 0;
         let end = options?.end ?? options?.offset ?? this.selection?.to ?? 0;
@@ -440,6 +552,7 @@ export class Block {
     /** 
      * @param {number} offset
      * @returns {{node: Node, offset: number} | null}
+     * @public
      */
     getDOMPoint(offset) {
         this.nabu.warn("getDOMPoint not implemented for block", this.type, this.id);
@@ -448,7 +561,12 @@ export class Block {
 
     // -- Event Handling --
 
-    /** @param {string} eventName @param {Event | null} event @param {Object} [data={}] */
+    /**
+     * @param {string} eventName
+     * @param {Event | null} event
+     * @param {Object} [data={}]
+     * @public
+     */
     ascend(eventName, event, data = {}) {
         //@ts-ignore
         if (this.parent && typeof this.parent[eventName] === "function") {
@@ -482,24 +600,37 @@ export class Block {
         return false;
     }
 
-    /** @param {InputEvent} event @returns {any} */
+    /**
+     * @param {InputEvent} event
+     * @returns {any}
+     * @public
+     */
     beforeinput(event) {
         // On peut intercepter les événements d'input ici pour faire des choses comme :
     }
 
-    /** @param {KeyboardEvent} event @returns {any} */
+    /**
+     * @param {KeyboardEvent} event
+     * @returns {any}
+     * @public
+     */
     keydown(event) {
         // Intercepter les touches spéciales (Tab, Enter, flèches)
     }
 
     // -- UTILS --
 
+    /** @public */
     commit() {
         return this.nabu.commit();
     }
 
 
-    /** @param {string} format @param {Record<string, any>} [context] */
+    /**
+     * @param {string} format
+     * @param {Record<string, any>} [context]
+     * @public
+     */
     serialize(format, context = {}) {
         const serializer = this.serializers.get(format);
         if (serializer) {
@@ -511,7 +642,11 @@ export class Block {
     }
 
 
-    /** @param {Nabu} nabu @param {NabuNode} node */
+    /**
+     * @param {Nabu} nabu
+     * @param {NabuNode} node
+     * @public
+     */
     static load(nabu, node) {
         const metadata = node.data;
         const type = metadata.get("type") || "block";
@@ -520,7 +655,14 @@ export class Block {
         return block;
     }
 
-    /** @param {Nabu} nabu @param {string} type @param {Record<string, any>} [props={}] @param {string|null} [parentId=null] @param {number|null} [index=null] */
+    /**
+     * @param {Nabu} nabu
+     * @param {string} type
+     * @param {Record<string, any>} [props={}]
+     * @param {string|null} [parentId=null]
+     * @param {number|null} [index=null]
+     * @public
+     */
     static create(nabu, type, props = {}, parentId = null, index = null) {
         const node = nabu.tree.createNode(/** @type {import('loro-crdt').TreeID | undefined} */ (parentId || undefined), index ?? undefined);
         node.data.set("type", type);
@@ -528,4 +670,58 @@ export class Block {
         return block;
     }
 
+    // ── Static contract: clipboard, markdown and HTML ────────────────────────────────────────────────────────────────
+    // Optional members a block class declares to take part in paste, `importMarkdown` and the clipboard / `serialize` output. Not
+    // defined here (they default to `undefined`); the engine looks them up on the registered class. The built-ins (`Blockquote`,
+    // `Divider`, `Heading`...) are the model. They work on `PasteBlock`s (plain data), never on live blocks.
+
+    /**
+     * Which HTML elements this block reads on paste (see {@link HtmlRule}). Declare it together with `fromHTML`.
+     * @type {import('../utils/extensions.js').HtmlRule[] | undefined}
+     * @public
+     */
+    static htmlRules = undefined;
+
+    /**
+     * Make the block(s) of an element matched by one of `htmlRules`; `null` / `[]` declines. `siblings` are the following
+     * elements `htmlSiblings` claimed.
+     * @type {((el: Element, helpers: import('../utils/extensions.js').HtmlHelpers, rule: import('../utils/extensions.js').HtmlRule, siblings: Element[]) => import('../utils/extensions.js').PasteBlock | import('../utils/extensions.js').PasteBlock[] | null) | undefined}
+     * @public
+     */
+    static fromHTML = undefined;
+
+    /**
+     * Ask to absorb the elements that follow `el` (a structure that spans several elements, a list in Google Docs); returns them in order.
+     * @type {((el: Element, rule: import('../utils/extensions.js').HtmlRule, helpers: import('../utils/extensions.js').HtmlHelpers) => Element[]) | undefined}
+     * @public
+     */
+    static htmlSiblings = undefined;
+
+    /**
+     * How this block starts and how many lines it takes in markdown (see {@link MarkdownRule}). Declare it together with `fromMarkdown`.
+     * @type {import('../utils/extensions.js').MarkdownRule[] | undefined}
+     * @public
+     */
+    static markdownRules = undefined;
+
+    /**
+     * Make the block(s) of the lines a `markdownRules` rule consumed; `null` declines (the next rule is tried).
+     * @type {((lines: string[], helpers: import('../utils/extensions.js').MarkdownHelpers, rule: import('../utils/extensions.js').MarkdownRule) => import('../utils/extensions.js').PasteBlock | import('../utils/extensions.js').PasteBlock[] | null) | undefined}
+     * @public
+     */
+    static fromMarkdown = undefined;
+
+    /**
+     * The markdown of a block of this type, for the clipboard's `text/plain` and for containers that serialize their children.
+     * @type {((pb: import('../utils/extensions.js').PasteBlock, ctx: import('../utils/extensions.js').SerializeContext) => string) | undefined}
+     * @public
+     */
+    static toMarkdown = undefined;
+
+    /**
+     * The HTML of a block of this type, for the clipboard's `text/html`.
+     * @type {((pb: import('../utils/extensions.js').PasteBlock, ctx: import('../utils/extensions.js').SerializeContext) => string) | undefined}
+     * @public
+     */
+    static toHtml = undefined;
 }

@@ -181,12 +181,18 @@ export function prevGraphemeLength(text, index) {
 export class TextBehavior {
     /** @param {Block} block @param {LoroText} [container] */
     constructor(block, container) {
+        /** @public */
         this.block = block;
         this.nabu = block.nabu;
         const node = /** @type {TextNode} */ (block.node);
-        /** @type {LoroText} */
+        /**
+         * @type {LoroText}
+         * @public
+         */
         this.container = container ?? node.data.get("text") ?? node.data.setContainer("text", new LoroText());
+        /** @public */
         this.text = $state(this.container.toString());
+        /** @public */
         this.delta = $state(this.container.toDelta());
         this.container.subscribe(() => {
             this.text = this.container.toString();
@@ -195,13 +201,16 @@ export class TextBehavior {
         });
     }
     
+    /** @public */
     selection = $derived(this.block.element && this.block.nabu.selection && this.getSelection(this.block.element, this.block.nabu.selection));
 
+    /** @public */
     positions = $derived(this.text.length + 1);
 
     /**
      * Number of whitespace-separated words in this text.
      * @returns {number}
+     * @public
      */
     get wordCount() {
         return this.text.trim().split(/\s+/).filter(Boolean).length;
@@ -324,7 +333,11 @@ export class TextBehavior {
         }
     }
 
-    /** @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [selection] */
+    /**
+     * @param {InputEvent} event
+     * @param {ReturnType<TextBehavior["getSelection"]>} [selection]
+     * @public
+     */
     handleBeforeInput(event, selection = this.selection) {
         // Hook system (Markdown shortcuts, de-transformation, structural guards…).
         // `transformsEnabled: false` (e.g. code blocks) only suppresses transforms,
@@ -803,6 +816,7 @@ export class TextBehavior {
     * Retrouve le nœud texte et l'offset DOM pour un offset Modèle donné
     * @param {number} targetOffset 
     * @param {HTMLElement?} [element]
+     * @public
     */
     getDOMPoint(targetOffset, element = this.block.element) {
         if (!element) return null;
@@ -824,13 +838,21 @@ export class TextBehavior {
         return { node: element, offset: element.childNodes.length };
     }
     
-    /** @param {number} index @param {string} text */
+    /**
+     * @param {number} index
+     * @param {string} text
+     * @public
+     */
     insert(index, text) {
         // Never past the end of the text, whatever the caller computed (a stale DOM offset would panic Loro).
         this.container.insert(Math.max(0, Math.min(index, this.container.length)), text);
     }
     
-    /** @param {Parameters<Block["delete"]>[0]} [deletion] @param {ReturnType<TextBehavior["getSelection"]>} [selection] */
+    /**
+     * @param {Parameters<Block["delete"]>[0]} [deletion]
+     * @param {ReturnType<TextBehavior["getSelection"]>} [selection]
+     * @public
+     */
     delete(deletion, selection = this.selection) {
         const l = this.container.length;
         let from = deletion?.from ?? selection?.from ?? 0;
@@ -842,7 +864,10 @@ export class TextBehavior {
         this.container.delete(index, length);
     }
     
-    /** @param {import('loro-crdt').Delta<string>[]} data */
+    /**
+     * @param {import('loro-crdt').Delta<string>[]} data
+     * @public
+     */
     applyDelta(data = []) {
         this.container.applyDelta(data);
     }
@@ -851,6 +876,7 @@ export class TextBehavior {
     * @param {Parameters<Block["split"]>[0]} [options] 
     * @param {ReturnType<TextBehavior["getSelection"]>} [selection] 
     * @returns {ReturnType<Block["split"]>} 
+     * @public
     */
     split(options, selection = this.selection) {
         const sel = selection;
@@ -861,7 +887,12 @@ export class TextBehavior {
         return this.block.ascend("onSplit", null, { offset: from, delta: this.container.sliceDelta(from, to)});
     }
     
-    /** @param {string} markName @param {any} value @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel */
+    /**
+     * @param {string} markName
+     * @param {any} value
+     * @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel
+     * @public
+     */
     applyMark(markName, value, sel) {
         if (!sel || sel.isCollapsed) return;
         // Model guard: an unsafe link (javascript:…) never enters the document through any mark API.
@@ -872,13 +903,21 @@ export class TextBehavior {
         this.container.mark({ start: sel.from, end: sel.to }, markName, value);
     }
 
-    /** @param {string} markName @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel */
+    /**
+     * @param {string} markName
+     * @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel
+     * @public
+     */
     removeMark(markName, sel) {
         if (!sel || sel.isCollapsed) return;
         this.container.unmark({ start: sel.from, end: sel.to }, markName);
     }
 
-    /** @param {string} markName @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel */
+    /**
+     * @param {string} markName
+     * @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel
+     * @public
+     */
     isMarkActive(markName, sel) {
         if (!sel || sel.isCollapsed) return false;
         const delta = this.container.toDelta();
@@ -894,7 +933,12 @@ export class TextBehavior {
         return true;
     }
 
-    /** @param {string} markName @param {any} value @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel */
+    /**
+     * @param {string} markName
+     * @param {any} value
+     * @param {Pick<NonNullable<ReturnType<TextBehavior["getSelection"]>>, 'from' | 'to' | 'isCollapsed'> | null} sel
+     * @public
+     */
     toggleMark(markName, value, sel) {
         if (!sel || sel.isCollapsed) return;
         if (this.isMarkActive(markName, sel)) {
@@ -905,6 +949,7 @@ export class TextBehavior {
     }
 
     /** @param {{ rawBreaks?: boolean }} [options]  see {@link deltaToMarkdown}
+     * @public
      * @returns {string} */
     toMarkdown(options) {
         return deltaToMarkdown(this.delta, options);
@@ -913,6 +958,7 @@ export class TextBehavior {
     /**
      * Converts the text delta to a Slate-like JSON format.
      * @returns {{text: string, [mark: string]: any}[]}
+     * @public
      */
     toJSON() {
         return this.delta
@@ -928,6 +974,7 @@ export class TextBehavior {
      * Serializes a (partial) range of this block's text as a PasteBlock.
      * @param {{ from?: number, to?: number | null, partial?: 'start'|'end'|'both'|false, props?: Record<string,any> }} [context]
      * @returns {import('../../utils/extensions.js').PasteBlock}
+     * @public
      */
     toClipboardBlock({ from = 0, to = null, partial = false, props = {} } = {}) {
         const end = to ?? this.container.length;
@@ -939,7 +986,10 @@ export class TextBehavior {
         };
     }
 
-    /** @param {Block} other */
+    /**
+     * @param {Block} other
+     * @public
+     */
     absorbs(other) {
         const otherBehavior = other.behaviors.get("text");
         if (!otherBehavior || !(otherBehavior instanceof TextBehavior)) return false;

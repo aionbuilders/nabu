@@ -106,7 +106,7 @@ export class Heading extends TextBlock {
     /**
      * @param {string[]} lines
      * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[] }} helpers
-     * @param {{ setext?: boolean }} [rule]
+     * @param {import('../../utils/extensions.js').MarkdownRule} [rule]
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromMarkdown(lines, { parseInline }, rule) {

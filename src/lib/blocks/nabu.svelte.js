@@ -101,6 +101,52 @@ export const isTransformInput = (e) => {
     return type === 'insertText' || type === 'insertParagraph' || type === 'insertLineBreak' || type === 'insertSoftLineBreak';
 };
 
+/**
+ * The engine machinery behind {@link Nabu#internals}. **Unstable**: may change in any minor version (see `docs/guides/extensions.md`,
+ * "Stability"). Methods are bound to the editor; their signatures are those of the `Nabu` methods of the same name.
+ * @typedef {Object} NabuInternals
+ * @property {Pulse} pulse The action bus behind `exec()`: `pulse.on(topic, handler)` observes or adds a topic at runtime.
+ * @property {CommandConfirmation} commandConfirm The confirmation controller of commands (hold / invite / choose): `start`, `stop`, `offer`, `choose`, `cancel`, `pending`.
+ * @property {Map<string, Array<(nabu: Nabu, ...args: any[]) => any>>} hooks Extension hooks by name, in registration order (the normalizers of `onBeforeTransaction`, the `onBeforeInput` handlers...).
+ * @property {WeakMap<Function, string>} hookOwners Hook function to the name of the extension that registered it.
+ * @property {import('../utils/extensions.js').InputRule[]} inputRules The input rules collected from the extensions.
+ * @property {import('../utils/extensions.js').PasteInterpreter[]} pasteInterpreters The paste interpreters collected from the extensions.
+ * @property {import('../utils/extensions.js').PasteFileHandler[]} pasteFileHandlers The paste file handlers, by priority.
+ * @property {UndoManager} undoManager The Loro undo manager (undo steps, merge window).
+ * @property {import('loro-crdt').LoroMap} content The free-form `content` map of the document.
+ * @property {import('../files/files.svelte.js').FilesConfig} fileConfig The resolved `files` option.
+ * @property {Record<string, boolean> | null} storedMarks Pending inline marks for the next typed character (reactive; assignable).
+ * @property {Nabu['toggleStoredMark']} toggleStoredMark
+ * @property {Nabu['clearStoredMarks']} clearStoredMarks
+ * @property {Nabu['noteTextChange']} noteTextChange
+ * @property {Nabu['captureUndoSelection']} captureUndoSelection Remember the selection for the undo step now being recorded.
+ * @property {Nabu['sealUndoEnd']} sealUndoEnd Close the "where did the last action end" mark of the undo history.
+ * @property {Nabu['updateRoots']} updateRoots Re-read the root blocks from the tree.
+ * @property {Nabu['deleteNode']} deleteNode Delete a block by node id (no commit).
+ * @property {Nabu['rearmTab']} rearmTab
+ * @property {string | undefined} tabDescription The `aria-description` the root carries while `tab` traps the focus.
+ * @property {Nabu['dispatchEventToSelection']} dispatchEventToSelection Route a native event to the block that holds the selection.
+ * @property {Nabu['handleKeydown']} handleKeydown The keydown pipeline (commands first, then hooks, then the block).
+ * @property {Nabu['handleBeforeinput']} handleBeforeinput
+ * @property {Nabu['beforeinput']} beforeinput
+ * @property {Nabu['handleCompositionStart']} handleCompositionStart
+ * @property {Nabu['handleCompositionUpdate']} handleCompositionUpdate
+ * @property {Nabu['handleCompositionEnd']} handleCompositionEnd
+ * @property {Nabu['handleMousedown']} handleMousedown
+ * @property {Nabu['handleCopy']} handleCopy Write the selection to a clipboard (every format).
+ * @property {Nabu['handleCut']} handleCut
+ * @property {Nabu['handlePaste']} handlePaste The paste pipeline (interpreters, files, `acceptPaste`).
+ * @property {Nabu['insertFragment']} insertFragment Insert a `PasteFragment` at the selection (what a paste does after interpreting).
+ * @property {Nabu['handleDragStart']} handleDragStart
+ * @property {Nabu['handleDragOver']} handleDragOver
+ * @property {Nabu['handleDragLeave']} handleDragLeave
+ * @property {Nabu['handleDragEnd']} handleDragEnd
+ * @property {Nabu['handleDrop']} handleDrop
+ * @property {Nabu['dropAt']} dropAt Drop a `DataTransfer` at a position, as the drag and drop does.
+ * @property {DropTarget | null} dropTarget The drop indicator being shown (reactive).
+ * @property {{ normalize: NabuSelection['normalize'], scheduleRepair: NabuSelection['scheduleRepair'], repairAfterRemoval: NabuSelection['repairAfterRemoval'], placements: number }} selection The selection's own repair machinery.
+ */
+
 export class Nabu {
     /** @type {Pulse} */
     #pulse = new Pulse();
@@ -115,7 +161,10 @@ export class Nabu {
     // for the duration of the composition and sync the result into Loro at
     // compositionend. See issue #6.
     #composing = false;
-    /** True during an IME composition: the browser owns the DOM, the caret must not be touched. */
+    /**
+     * True during an IME composition: the browser owns the DOM, the caret must not be touched.
+     * @public
+     */
     get composing() { return this.#composing; }
     /** @type {number | null} offset modèle au début de la composition (repli si le curseur Loro ne se résout pas) */
     #compositionStartOffset = null;
@@ -127,7 +176,10 @@ export class Nabu {
     #compositionAnchor = null;
     /** The block a composition runs in, reactive: its placeholder is hidden meanwhile (P-103). @type {Block | null} */
     #composingBlock = $state.raw(null);
-    /** The block holding the running composition, or null. Reactive. */
+    /**
+     * The block holding the running composition, or null. Reactive.
+     * @public
+     */
     get composingBlock() { return this.#composingBlock; }
     /** An undo group is open: the deletion of a selection replaced by a composition and the composed text are ONE undo step. */
     #compositionGroup = false;
@@ -174,7 +226,16 @@ export class Nabu {
             this.doc.import(init.snapshot);
         }
         
+        /**
+         * The text selection of the editor (a reactive wrapper of the DOM selection, in terms of blocks).
+         * @type {NabuSelection}
+         * @public
+         */
         this.selection = new NabuSelection(this);
+        /**
+         * The document tree (Loro): one node per block, `node.data` holds the block's `type` and props.
+         * @public
+         */
         this.tree = /** @type {LoroTree<NabuNodeData>} */ (this.doc.getTree("blocks"));
         this.content = this.doc.getMap("content");
 
@@ -204,6 +265,11 @@ export class Nabu {
             }
         });
 
+        /**
+         * The extensions the editor was built with, in order.
+         * @type {Extension[]}
+         * @public
+         */
         this.extensions = init.extensions || [];
         this.fileConfig = init.files || {};
         this.placeholders = normalizePlaceholders(init.placeholders);
@@ -219,6 +285,12 @@ export class Nabu {
          */
         this.commandConfirm = new CommandConfirmation(this, init.commandConfirm);
         this.systems.set('command-confirm', { start: () => this.commandConfirm.start(), stop: () => this.commandConfirm.stop() });
+        /**
+         * Commands and keyboard shortcuts (ADR 017): `list()`, `get(id)`, `has(id)`, `run(id, data)`, `offer(id)`. A plain
+         * snapshot API; the set of commands is fixed once the editor is built.
+         * @type {CommandRegistry}
+         * @public
+         */
         this.commands = new CommandRegistry(this, { keymap: init.keymap, platform: init.platform });
         // Engine commands first: they win a tie with an extension's command on the same chord.
         this.#registerCommands('core', {
@@ -360,28 +432,64 @@ export class Nabu {
         this.init();
     }
     
+    /**
+     * What a hook or an `onBeforeInput` handler returns to stop the engine (and the hooks after it).
+     * @type {symbol}
+     * @public
+     */
     static BREAK = Symbol("BREAK");
+    /**
+     * What a hook returns to let the engine go on (same as returning nothing).
+     * @type {symbol}
+     * @public
+     */
     static CONTINUE = Symbol("CONTINUE");
+    /**
+     * `Nabu.BREAK`, reachable from the instance a hook receives.
+     * @type {symbol}
+     * @public
+     */
     BREAK = Nabu.BREAK;
+    /**
+     * `Nabu.CONTINUE`, reachable from the instance a hook receives.
+     * @type {symbol}
+     * @public
+     */
     CONTINUE = Nabu.CONTINUE;
     
-    /** @type {LoroDoc} */
+    /**
+     * @type {LoroDoc}
+     * @public
+     */
     doc;
-    /** @type {SvelteMap<string, typeof Block>} */
+    /**
+     * @type {SvelteMap<string, typeof Block>}
+     * @public
+     */
     registry = new SvelteMap();
 
     /**
      * Type of the default text block (declared by an extension with `defaultBlock: true`): created by the
      * engine when it needs an empty text block of its own, e.g. a caret after a trailing void block.
      * @type {string | null}
+     * @public
      */
     defaultBlockType = null;
-    /** @type {SvelteMap<string, Component>} */
+    /**
+     * @type {SvelteMap<string, Component>}
+     * @public
+     */
     components = new SvelteMap();
-    /** @type {SvelteMap<string, Block>} */
+    /**
+     * @type {SvelteMap<string, Block>}
+     * @public
+     */
     blocks = new SvelteMap();
 
-    /** @type {SvelteMap<string, SvelteSet<Block>>} */
+    /**
+     * @type {SvelteMap<string, SvelteSet<Block>>}
+     * @public
+     */
     blocksByType = new SvelteMap();
 
     /**
@@ -389,6 +497,7 @@ export class Nabu {
      *   - `start(): void` — called when the editor mounts
      *   - `stop(): void`  — called when the editor unmounts
      * @type {SvelteMap<string, { start?: () => void, stop?: () => void, [key: string]: any }>}
+     * @public
      */
     systems = new SvelteMap();
     
@@ -416,6 +525,7 @@ export class Nabu {
      * Slash-menu entries contributed by extensions (`Extension#slashCommands`); the slash menu lists ONLY these (plus the
      * integrator's extras), sorted by `group` / `order`, keeping those whose `when(engine, block)` holds at the caret.
      * @type {import('../ui/slash-menu.svelte.js').SlashCommand[]}
+     * @public
      */
     slashCommands = [];
 
@@ -425,12 +535,14 @@ export class Nabu {
     /**
      * Resolved `placeholders` option (see NabuInit). Reassign to change it at runtime.
      * @type {import('../utils/placeholders.js').ResolvedPlaceholders}
+     * @public
      */
     placeholders = $state.raw(normalizePlaceholders());
 
     /**
      * Resolved `spellcheck` option (see NabuInit). Reactive: assign to change it at runtime.
      * @type {boolean}
+     * @public
      */
     spellcheck = $state.raw(true);
 
@@ -441,6 +553,7 @@ export class Nabu {
      * Resolved `lang` option (see NabuInit): a valid BCP 47 tag, or `undefined` (inherit the page language).
      * Reactive: assign to change it at runtime; an invalid value is ignored (warning) and leaves it unchanged.
      * @type {string | undefined}
+     * @public
      */
     get lang() { return this.#lang; }
     set lang(value) {
@@ -459,6 +572,7 @@ export class Nabu {
      * Resolved `tab` option (see NabuInit): what Tab / Shift+Tab do in a plain text block. Reactive: assign to change it at runtime;
      * an unknown value warns and gives the default of the editor (its preset).
      * @type {import('../utils/tab.js').TabMode}
+     * @public
      */
     get tab() { return this.#tab; }
     /** @param {unknown} value */
@@ -467,6 +581,7 @@ export class Nabu {
     /**
      * Announcement of the Escape-then-Tab way out (option `tabHint`), `false` for none. Reactive.
      * @type {string | false}
+     * @public
      */
     tabHint = $state.raw(DEFAULT_TAB_HINT);
 
@@ -486,11 +601,16 @@ export class Nabu {
      */
     storedMarks = $state(null);
 
+    /**
+     * When true, `nabu.warn()` logs to the console (`[Nabu]`).
+     * @public
+     */
     debugging = $state(false);
 
     /**
      * Root-level serializers. Each function receives the Nabu instance and returns the serialized document.
      * @type {Map<string, (nabu: Nabu) => any>}
+     * @public
      */
     serializers = new Map(/** @type {Array<[string, (nabu: Nabu) => any]>} */ ([
         ['markdown', (nabu) =>
@@ -507,16 +627,33 @@ export class Nabu {
         }]
     ]));
 
-    /** @type {Block[]} */
+    /**
+     * @type {Block[]}
+     * @public
+     */
     children = $state([]);
 
+    /**
+     * Number of caret positions in the document (the sum of the root blocks').
+     * @public
+     */
     positions = $derived(this.children.reduce((sum, child) => sum + (child.positions ?? 0), 0));
     
+    /**
+     * True when the document has no block.
+     * @public
+     */
     get isEmpty() {
         return this.children.length === 0;
     }
 
-    /** @param {string} format */
+    /**
+     * Serialize the document with the root serializer registered for `format` (`'markdown'`, `'json'`, or one an extension
+     * adds with `serializers`); `null` (and a warning) for an unknown format.
+     * @param {string} format
+     * @returns {any}
+     * @public
+     */
     serialize(format) {
         const fn = this.serializers.get(format);
         if (!fn) {
@@ -565,6 +702,7 @@ export class Nabu {
      * @param {string} topic
      * @param {any} [data]
      * @returns {Promise<import('@aionbuilders/pulse').PulseEvent>}
+     * @public
      */
     exec(topic, data) {
         this.selection.sync();
@@ -576,10 +714,14 @@ export class Nabu {
      * `{ id, strategy: 'hold' | 'invite' | 'choose', label, display, message, target?, progress, options?, selectedIndex }`.
      * `progress` (hold, 0 → 1) and `selectedIndex` (choose) are reactive fields of that object.
      * @returns {import('../utils/command-confirm.svelte.js').PendingCommand | null}
+     * @public
      */
     get pendingCommand() { return this.commandConfirm.pending; }
 
-    /** Cancel the pending confirmation, if any: nothing runs. */
+    /**
+     * Cancel the pending confirmation, if any: nothing runs.
+     * @public
+     */
     cancelPendingCommand() { this.commandConfirm.cancel('api'); }
 
     /**
@@ -587,12 +729,14 @@ export class Nabu {
      * Reactive: a block that draws its own hold progress reads `nabu.pendingCommandOn(block)?.progress`.
      * @param {any} target
      * @returns {import('../utils/command-confirm.svelte.js').PendingCommand | null}
+     * @public
      */
     pendingCommandOn(target) { return this.commandConfirm.pendingOn(target); }
 
     /**
      * Text of the polite live region of the editor (prompts and outcomes of confirmations). Reactive.
      * @returns {string}
+     * @public
      */
     get commandAnnouncement() { return this.commandConfirm.announcement; }
 
@@ -612,6 +756,7 @@ export class Nabu {
      * Run the `hookName` hooks of every extension, in order, until one returns `BREAK`. Each is called as `hook(nabu, ...args)`.
      * @param {string} hookName
      * @param {...any} args
+     * @public
      */
     trigger(hookName, ...args) {
         const hooks = this.hooks.get(hookName) || [];
@@ -629,6 +774,7 @@ export class Nabu {
      * Commit the pending changes as one Loro transaction.
      * @param {{ origin?: string }} [options] `origin` tags the transaction; an origin starting with `nabu:silent` is
      *   not recorded as an undo step (background completions that must not be undone on their own).
+     * @public
      */
     async commit({ origin } = {}) {
         this.#evictChildrenOfLeaves();
@@ -757,6 +903,7 @@ export class Nabu {
      * Make the NEXT commit its own undo step (and the typing right after it another one), even though it
      * holds no structural op: for a non-structural change that must undo on its own, e.g. a flag toggled
      * from the keyboard, which would otherwise merge with the typing around it. Call it just before commit().
+     * @public
      */
     isolateUndoStep() {
         this.#isolateNextCommits();
@@ -768,6 +915,7 @@ export class Nabu {
      * @param {() => void} mutateFn  - Mutations Loro ici. Ne PAS appeler commit() dedans.
      * @param {{ block: Block, offset: number } | null} [cursorIntent]
      * @returns {Promise<void>}
+     * @public
      */
     async transact(mutateFn, cursorIntent = null) {
         mutateFn();
@@ -794,6 +942,7 @@ export class Nabu {
      * @param {string} trigger  text of the trigger key, inserted before transforming ('' = none)
      * @param {(behavior: any) => void} transform  mutations only (it may commit itself, e.g. via transformTo)
      * @returns {Promise<void>}  resolves immediately, doing nothing, when `block.transformsEnabled === false`
+     * @public
      */
     async shortcut(block, trigger, transform) {
         // Defence in depth: a block that opts out of transforms (`transformsEnabled === false`) never
@@ -821,6 +970,7 @@ export class Nabu {
      * so it can be used directly in component templates (e.g. FloatingToolbar).
      * @param {string} markName
      * @returns {boolean}
+     * @public
      */
     isMarkActive(markName) {
         let found = false;
@@ -848,6 +998,7 @@ export class Nabu {
      * holds the updates it receives while composing, which keeps the composing text node untouched by the render.)
      * @param {Uint8Array} bytes a Loro snapshot or update
      * @returns {import('loro-crdt').ImportStatus}
+     * @public
      */
     importRemote(bytes) {
         const keep = !this.#composing && this.#busy === 0 && this.doc.getPendingTxnLength() === 0 ? captureSelection(this) : null;
@@ -858,6 +1009,7 @@ export class Nabu {
 
     /**
      * Undo the last operation. The selection as it was before that operation comes back (see ADR 015).
+     * @public
      */
     undo() {
         if (this.undoManager.canUndo()) this.#whileRendering(() => this.undoManager.undo());
@@ -865,6 +1017,7 @@ export class Nabu {
 
     /**
      * Redo the last undone operation. The selection comes back where that operation ended.
+     * @public
      */
     redo() {
         if (this.undoManager.canRedo()) this.#whileRendering(() => this.undoManager.redo());
@@ -956,6 +1109,7 @@ export class Nabu {
      * `await nabu.focus(...)` before `exec(...)` / typing. Fire-and-forget callers are unaffected.
      * @param {{from?: {offset?: number, block?: Block}, to?: {offset?: number, block?: Block}, offset?: number}} [options]
      * @returns {Promise<void>}
+     * @public
      */
     focus(options) {
         return tick().then(() => {
@@ -984,6 +1138,7 @@ export class Nabu {
      * The deepest last block of the document that can hold a caret in the rendered document: follows
      * the last child at each level, but never enters a block that hides its children.
      * @returns {Block | null}
+     * @public
      */
     get lastVisibleBlock() {
         /** @type {any} */
@@ -1006,6 +1161,7 @@ export class Nabu {
      * whose end is not a text position), an empty default text block is appended at the root, in one
      * undo step, and takes the caret. Never called eagerly on load.
      * @returns {Promise<Block | null>} The block now holding the caret
+     * @public
      */
     async openTrailingCaret() {
         if (this.#openingTrailingCaret) return null;
@@ -1050,12 +1206,14 @@ export class Nabu {
     }
 
     /**
-    * Insère un nouveau bloc dans le document
-    * @param {string} type - Le type du bloc (ex: 'paragraph')
-    * @param {Object} [props={}] - Les propriétés initiales
-    * @param {string|null} [parentId=null] - ID du parent (null pour racine)
-    * @param {number|null} [index=null] - Position dans la liste des enfants
-    */
+     * Insert a new block of a registered type and commit (throws when the type is not registered).
+     * @param {string} type - Block type (`'paragraph'`, or the name of an extension that declares a `block`)
+     * @param {Record<string, any>} [props] - Initial props, read by the class's `static create` (`text`, `delta`...)
+     * @param {string | null} [parentId] - Id of the parent block (`null`: the document root)
+     * @param {number | null} [index] - Position among the siblings (`null`: last)
+     * @returns {Block} The created block
+     * @public
+     */
     insert(type, props = {}, parentId = null, index = null) {
         
         const BlockClass = this.registry.get(type);
@@ -1072,7 +1230,11 @@ export class Nabu {
     
     
     
-    /** @param {Block} block */
+    /**
+     * Delete a block (and its children) from the tree. No commit: call `commit()` afterwards.
+     * @param {Block} block
+     * @public
+     */
     delete(block) {
         this.deleteNode(block.node.id);
     }
@@ -2090,6 +2252,7 @@ export class Nabu {
      * @param {import('../utils/extensions.js').PasteBlock} pb
      * @param {any} afterNode
      * @returns {any}
+     * @public
      */
     insertPasteBlock(pb, afterNode) {
         if (!this.registry.has(pb.type)) {
@@ -2132,6 +2295,7 @@ export class Nabu {
      * @param {import('../utils/extensions.js').PasteBlock} pb
      * @param {string} parentId
      * @returns {Block | null}  the created block
+     * @public
      */
     createPasteBlock(pb, parentId) {
         if (!this.registry.has(pb.type)) {
@@ -2161,6 +2325,7 @@ export class Nabu {
      * blocks are created at the root through the same registry pipeline as paste.
      * @param {import('../utils/extensions.js').PasteFragment} fragment
      * @returns {Promise<void>}
+     * @public
      */
     async importFragment(fragment) {
         const blocks = this.#degradeUnknown(Files.get(this).adoptAssets(sanitizePasteBlocks(fragment.blocks), fragment.assets));
@@ -2189,6 +2354,7 @@ export class Nabu {
      * Requires MarkdownPasteExtension (or any text/plain interpreter) to be loaded.
      * @param {string} markdown
      * @returns {Promise<void>}
+     * @public
      */
     async importMarkdown(markdown) {
         const interpreter = [...this.#pasteInterpreters]
@@ -2215,6 +2381,7 @@ export class Nabu {
      * registered is degraded to the default text block (`degradeUnknownBlocks`), nothing is dropped.
      * @param {{version?: string | number, blocks: Parameters<typeof import('../utils/extensions.js').jsonToPasteBlocks>[0], assets?: Record<string, import('../files/files.svelte.js').EmbeddedAsset>} | string} json
      * @returns {Promise<void>}
+     * @public
      */
     async importJSON(json) {
         const doc = typeof json === 'string' ? JSON.parse(json) : json;
@@ -2230,7 +2397,12 @@ export class Nabu {
         await this.importFragment({ blocks, ...(doc.assets && typeof doc.assets === 'object' ? { assets: doc.assets } : {}) });
     }
 
-    /** @param {number} globalOffset */
+    /**
+     * The block and local offset that hold a document-wide caret offset (`positions` counted from the start of the document).
+     * @param {number} globalOffset
+     * @returns {{ block: Block, offset: number } | null}
+     * @public
+     */
     resolveDocumentOffset(globalOffset) {
         let remaining = globalOffset;
         for (const block of this.children) {
@@ -2243,7 +2415,82 @@ export class Nabu {
         return last ? last.resolveOffset(Math.max(0, (last.positions ?? 1) - 1)) : null;
     }
 
-    /** @param  {...any} args */
+    /** @type {NabuInternals | null} */
+    #internals = null;
+
+    /**
+     * The door to everything the engine uses internally that the stable contract (the members tagged `public` in their JSDoc) does not cover: the
+     * command-confirm controller, the action bus, the hook and rule registries, the clipboard / drop / event pipelines, undo
+     * capture, stored marks, the selection's repair machinery. They are the same references the engine runs on, not copies.
+     *
+     * The door itself is part of the stable contract; **@unstable** is everything behind it: nothing reached through `internals` is a
+     * promise, it may change, move or disappear in ANY minor version.
+     * Prefer the stable members; use this when you must, and pin the version of the package. The set of keys is frozen by a
+     * test, so a change shows up in the changelog.
+     * @returns {NabuInternals}
+     * @public
+     * @unstable
+     */
+    get internals() {
+        if (this.#internals) return this.#internals;
+        const nabu = this;
+        const selection = nabu.selection;
+        return this.#internals = Object.freeze({
+            pulse: this.#pulse,
+            commandConfirm: this.commandConfirm,
+            hooks: this.hooks,
+            hookOwners: this.hookOwners,
+            inputRules: this.inputRules,
+            pasteInterpreters: this.#pasteInterpreters,
+            pasteFileHandlers: this.#pasteFileHandlers,
+            undoManager: this.undoManager,
+            content: this.content,
+            fileConfig: this.fileConfig,
+            get storedMarks() { return nabu.storedMarks; },
+            set storedMarks(value) { nabu.storedMarks = value; },
+            toggleStoredMark: this.toggleStoredMark.bind(this),
+            clearStoredMarks: this.clearStoredMarks.bind(this),
+            noteTextChange: this.noteTextChange.bind(this),
+            captureUndoSelection: this.captureUndoSelection.bind(this),
+            sealUndoEnd: this.sealUndoEnd.bind(this),
+            updateRoots: this.updateRoots.bind(this),
+            deleteNode: this.deleteNode.bind(this),
+            rearmTab: this.rearmTab.bind(this),
+            get tabDescription() { return nabu.tabDescription; },
+            dispatchEventToSelection: this.dispatchEventToSelection.bind(this),
+            handleKeydown: this.handleKeydown.bind(this),
+            handleBeforeinput: this.handleBeforeinput.bind(this),
+            beforeinput: this.beforeinput.bind(this),
+            handleCompositionStart: this.handleCompositionStart.bind(this),
+            handleCompositionUpdate: this.handleCompositionUpdate.bind(this),
+            handleCompositionEnd: this.handleCompositionEnd.bind(this),
+            handleMousedown: this.handleMousedown.bind(this),
+            handleCopy: this.handleCopy.bind(this),
+            handleCut: this.handleCut.bind(this),
+            handlePaste: this.handlePaste.bind(this),
+            insertFragment: this.insertFragment.bind(this),
+            handleDragStart: this.handleDragStart.bind(this),
+            handleDragOver: this.handleDragOver.bind(this),
+            handleDragLeave: this.handleDragLeave.bind(this),
+            handleDragEnd: this.handleDragEnd.bind(this),
+            handleDrop: this.handleDrop.bind(this),
+            dropAt: this.dropAt.bind(this),
+            get dropTarget() { return nabu.dropTarget; },
+            selection: Object.freeze({
+                normalize: selection.normalize.bind(selection),
+                scheduleRepair: selection.scheduleRepair.bind(selection),
+                repairAfterRemoval: selection.repairAfterRemoval.bind(selection),
+                get placements() { return selection.placements; },
+            }),
+        });
+    }
+
+    /**
+     * Log a diagnostic to the console when `debugging` is on. Silent otherwise.
+     * @param {...any} args
+     * @returns {void}
+     * @public
+     */
     warn(...args) {
         if (this.debugging) console.warn("[Nabu]", ...args);
     }

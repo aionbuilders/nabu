@@ -87,7 +87,10 @@ export class CommandRegistry {
     /** @param {Nabu} nabu @param {CommandRegistryOptions} [options] */
     constructor(nabu, { keymap, platform } = {}) {
         this.nabu = nabu;
-        /** @type {Platform} `Mod` is Cmd on `'mac'`, Ctrl on `'other'` */
+        /**
+         * @type {Platform} `Mod` is Cmd on `'mac'`, Ctrl on `'other'`
+         * @public
+         */
         this.platform = platform ?? detectPlatform();
         /** @type {Record<string, string[]>} */
         this.keymap = keymap && typeof keymap === 'object' ? keymap : {};
@@ -188,6 +191,7 @@ export class CommandRegistry {
      * Build the context a command sees: the core fields, then the facts of the extensions.
      * @param {KeyboardEvent | null} [event]
      * @returns {CommandContext}
+     * @public
      */
     context(event = null) {
         const nabu = this.nabu;
@@ -289,6 +293,7 @@ export class CommandRegistry {
      * Run a command from the bus (`nabu.exec(id, data)`): no key press, `ctx.event` is `null`, `when` is not checked.
      * @param {CommandEntry} entry
      * @param {any} [data]
+     * @public
      */
     invoke(entry, data) {
         return entry.def.run(this.nabu, this.context(null), data);
@@ -298,6 +303,7 @@ export class CommandRegistry {
      * Run a command by id, like `nabu.exec(id, data)` (which it calls).
      * @param {string} id
      * @param {any} [data]
+     * @public
      */
     run(id, data) {
         if (!this.entries.has(id)) { this.nabu.warn(`commands.run: unknown command "${id}"`); return undefined; }
@@ -321,6 +327,7 @@ export class CommandRegistry {
      * @param {string} id  command id
      * @param {CommandContext} [ctx]  default: the current context (`event: null`)
      * @returns {boolean}
+     * @public
      */
     offer(id, ctx) {
         const entry = this.entries.get(id);
@@ -368,6 +375,7 @@ export class CommandRegistry {
      * are evaluated with `ctx` (default: the current context, `event: null`).
      * @param {CommandContext} [ctx]
      * @returns {CommandInfo[]}
+     * @public
      */
     list(ctx) {
         /** @type {CommandContext | undefined} */
@@ -380,13 +388,18 @@ export class CommandRegistry {
      * @param {string} id
      * @param {CommandContext} [ctx]
      * @returns {CommandInfo | null}
+     * @public
      */
     get(id, ctx) {
         const entry = this.entries.get(id);
         return entry ? this.#info(entry, () => ctx ?? this.context(null)) : null;
     }
 
-    /** @param {string} id @returns {boolean} */
+    /**
+     * @param {string} id
+     * @returns {boolean}
+     * @public
+     */
     has(id) { return this.entries.has(id); }
 }
 

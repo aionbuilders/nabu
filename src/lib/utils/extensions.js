@@ -43,6 +43,75 @@
  */
 
 /**
+ * A rule of a block class's `static htmlRules`: which HTML elements the block reads on paste. The rules of every registered
+ * block form one ruleset, tried by descending `priority` (default 0); the first whose `selector` (and `filter`) matches wins and
+ * its class's `static fromHTML(el, helpers, rule, siblings)` makes the block. Extra fields are the rule's own: the class reads them
+ * back from `rule`.
+ * @typedef {{
+ *   selector: string,
+ *   priority?: number,
+ *   filter?: (el: Element) => boolean,
+ *   embed?: boolean,
+ *   props?: Record<string, any>,
+ *   [field: string]: any,
+ * }} HtmlRule
+ * `selector` is a CSS selector tested with `el.matches()`. `priority`: higher is tried first (a specific block beats a generic
+ * fallback). `filter`: an extra test once the selector matches. `embed`: the element may sit inside the inline content of another
+ * block and is then lifted out as a block of its own. `props`: props the rule asks `fromHTML` to set.
+ */
+
+/**
+ * What a block's `static fromHTML` receives to read an element.
+ * @typedef {Object} HtmlHelpers
+ * @property {(el: Element) => import('loro-crdt').Delta<string>[]} parseInline - The inline content of an element, as a Loro delta
+ * @property {(el: Element) => PasteBlock | null} parseBlock - The first block an element makes
+ * @property {(el: Element) => PasteBlock[]} parseBlocks - Every block an element makes
+ * @property {(el: Element) => PasteBlock[]} parseChildren - The blocks made by each child of an element
+ */
+
+/**
+ * What a block's `static fromMarkdown` receives to read its lines (and what `markdownRules` callbacks receive).
+ * @typedef {Object} MarkdownHelpers
+ * @property {(text: string) => import('loro-crdt').Delta<string>[]} parseInline - Inline markdown to a Loro delta
+ * @property {(text: string) => any[]} parseInlineSegments - Inline markdown to segments (text, images...)
+ * @property {boolean} joinLines - CommonMark semantics: consecutive lines join into one paragraph (`importMarkdown`); false on paste
+ * @property {string} [softBreak] - What replaces a soft line break in a nested parse
+ * @property {(lines: string[], index: number) => boolean} interrupts - Whether the line at `index` starts a block that ends the paragraph above it
+ * @property {(lines: string[], overrides?: { joinLines?: boolean, softBreak?: string }) => PasteBlock[]} [parseBlocks] - Parse lines as a document of their own (the body of a quote...)
+ */
+
+/**
+ * A rule of a block class's `static markdownRules`: how a block starts and how many lines it takes. The rules of every registered
+ * block form one ruleset, tried by descending `priority` (default 0) at each line; the first whose `detect` matches and whose class's
+ * `static fromMarkdown(lines, helpers, rule)` returns a block (or several) takes the lines `consume` counted. Extra fields are the
+ * rule's own.
+ * @typedef {{
+ *   detect: RegExp | ((line: string, lines: string[], index: number, helpers: MarkdownHelpers) => boolean),
+ *   consume: (lines: string[], index: number, helpers: MarkdownHelpers) => number,
+ *   priority?: number,
+ *   interruptsParagraph?: boolean | ((line: string, lines: string[], index: number, helpers: MarkdownHelpers) => boolean),
+ *   [field: string]: any,
+ * }} MarkdownRule
+ * `detect`: does the block start at this line. `consume`: how many lines it takes from `index` (at least 1). `priority`: higher is
+ * tried first. `interruptsParagraph`: the block may start in the middle of a paragraph (a fence, a heading, a quote...); `true`
+ * means "whenever `detect` matches".
+ */
+
+/**
+ * The second argument of a block's `static toMarkdown(pb, ctx)` / `static toHtml(pb, ctx)`: the clipboard and `serialize` call it
+ * once per block, with helpers to serialize children without knowing their type. Other fields are the caller's own (a list passes its `listType`, `index`...).
+ * @typedef {{
+ *   recurse: (child: PasteBlock, ctx?: Record<string, any>) => string,
+ *   recurseAll?: (children: PasteBlock[], ctx?: Record<string, any>) => string[],
+ *   before?: PasteBlock[],
+ *   after?: PasteBlock[],
+ *   [field: string]: any,
+ * }} SerializeContext
+ * `recurse`: serialize one child block. `recurseAll` (markdown only): serialize siblings in order, telling each its neighbours.
+ * `before` / `after` (markdown only): the siblings around this block.
+ */
+
+/**
  * @typedef {Object} PasteInterpretOptions
  * @property {boolean} [joinLines] - false/absent (paste): one non-blank line = one block.
  *   true (`importMarkdown`): CommonMark semantics, consecutive lines join into one paragraph.

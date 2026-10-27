@@ -30,45 +30,79 @@ export class TextBlock extends Block {
     constructor(nabu, node, textContainer) {
         super(nabu, node);
         const data = /** @type {TextBlockNode} */ (node).data;
-        /** @type {LoroText} */
+        /**
+         * The Loro text of the block: the source of its `text` and `delta`.
+         * @type {LoroText}
+         * @public
+         */
         this.container = textContainer ?? data.get("text") ?? data.setContainer("text", new LoroText());
         this.#behavior = new TextBehavior(/** @type {Block} */ (/** @type {unknown} */ (this)), this.container);
         this.behaviors.set("text", this.#behavior);
     }
 
-    /** @returns {TextBehavior} */
+    /**
+     * The text behavior of the block (`behaviors.get('text')`): reads and edits the text, selection, marks and clipboard form.
+     * @returns {TextBehavior}
+     * @public
+     */
     get behavior() { return this.#behavior; }
 
+    /** The plain text of the block (reactive). @public */
     get text() { return this.behavior.text; }
 
+    /** The text with its marks, as a Loro delta (reactive). @public */
     get delta() { return this.behavior.delta; }
 
+    /** The selection inside this block, `{ from, to, direction }` in text offsets, or `null` (reactive). @public */
     selection = $derived(this.behavior.selection);
+    /** Caret positions of the block: its text length plus one (reactive). @public */
     positions = $derived(this.behavior.positions);
+    /** Number of words in the text (reactive). @public */
     wordCount = $derived(this.behavior.wordCount);
 
-    /** @param {InputEvent} event */
+    /**
+     * @param {InputEvent} event
+     * @public
+     */
     beforeinput(event) { return this.behavior.handleBeforeInput(event); }
 
     /**
      * Retrouve le nœud texte et l'offset DOM pour un offset Modèle donné
      * @param {number} targetOffset
      * @returns {{node: Node, offset: number} | null}
+     * @public
      */
     getDOMPoint(targetOffset) { return this.behavior.getDOMPoint(targetOffset); }
 
-    /** @param {Block} block */
+    /**
+     * @param {Block} block
+     * @public
+     */
     absorbs(block) { return this.behavior.absorbs(block); }
 
-    /** @param {number} index @param {string} text */
+    /**
+     * @param {number} index
+     * @param {string} text
+     * @public
+     */
     insert(index, text) { return this.behavior.insert(index, text); }
 
-    /** @param {Parameters<Block["delete"]>[0]} [deletion] */
+    /**
+     * @param {Parameters<Block["delete"]>[0]} [deletion]
+     * @public
+     */
     delete(deletion) { return this.behavior.delete(deletion); }
 
-    /** @param {import('loro-crdt').Delta<string>[]} data */
+    /**
+     * @param {import('loro-crdt').Delta<string>[]} data
+     * @public
+     */
     applyDelta(data = []) { return this.behavior.applyDelta(data); }
 
-    /** @param {Parameters<Block["split"]>[0]} [options] @returns {ReturnType<Block["split"]>} */
+    /**
+     * @param {Parameters<Block["split"]>[0]} [options]
+     * @returns {ReturnType<Block["split"]>}
+     * @public
+     */
     split(options) { return this.behavior.split(options); }
 }

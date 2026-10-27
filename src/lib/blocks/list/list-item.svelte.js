@@ -269,7 +269,7 @@ export class ListItem extends MegaBlock {
 
     /**
      * @param {import('../../utils/extensions.js').PasteBlock} pb
-     * @param {{ listType?: string, index?: number, start?: number, run?: number, indent?: string }} helpers  `run`: position of the list among adjacent lists (marker alternation), `indent`: what the item is nested under
+     * @param {Partial<import('../../utils/extensions.js').SerializeContext> & { listType?: string, index?: number, start?: number, run?: number, indent?: string }} helpers  `run`: position of the list among adjacent lists (marker alternation), `indent`: what the item is nested under
      */
     static toMarkdown(pb, { listType = 'bullet', index = 0, start = 1, run = 0, indent = '' }) {
         return renderItem(pb, markdownEnv, { listType, index, start, run, indent });

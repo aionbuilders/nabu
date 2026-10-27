@@ -76,7 +76,7 @@ export class Paragraph extends TextBlock {
      * line is trimmed. With the table rule, the lines are a table: one paragraph per row.
      * @param {string[]} lines
      * @param {{ parseInline: (text: string) => import('loro-crdt').Delta<string>[], parseInlineSegments?: (text: string) => Array<{ delta?: import('loro-crdt').Delta<string>[], image?: { alt: string, ref: string } }>, joinLines?: boolean, softBreak?: string }} helpers
-     * @param {{ table?: boolean }} [rule]
+     * @param {import('../../utils/extensions.js').MarkdownRule} [rule]
      * @returns {import('../../utils/extensions.js').PasteBlock | import('../../utils/extensions.js').PasteBlock[] | null}
      */
     static fromMarkdown(lines, { parseInline, parseInlineSegments, joinLines, softBreak }, rule) {
