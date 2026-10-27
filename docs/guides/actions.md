@@ -1,3 +1,10 @@
+---
+title: Action bus
+description: Trigger editor actions from the outside with nabu.exec: marks, block transforms, lists, links, history.
+section: guides
+order: 20
+---
+
 # Guide — Action Bus (`nabu.exec`)
 
 `nabu.exec(topic, data?)` est le point d'entrée unique pour déclencher des actions sur l'éditeur depuis l'extérieur : boutons toolbar, raccourcis custom, scripts, etc.

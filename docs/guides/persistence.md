@@ -1,3 +1,10 @@
+---
+title: Local persistence
+description: Save and restore a document in IndexedDB with createPersistedEditor: options, multi-tab, history and recovery.
+section: guides
+order: 30
+---
+
 # Guide : Persistance locale
 
 Nabu intègre une couche de persistance locale basée sur **IndexedDB** et les **snapshots binaires Loro**. Aucun backend n'est requis.
