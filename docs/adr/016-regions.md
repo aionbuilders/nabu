@@ -1,112 +1,114 @@
-# ADR 016 — Regions : structurer un texte continu par des repères
+# ADR 016 — Regions: structuring a continuous text with markers
 
-**Statut** : accepté (2026-10-22, validé par le propriétaire) — **modèle de données remplacé par l'ADR 018** (2026-10-23 : les régions sont des conteneurs dans Loro, les coutures sont l'interface). Types, champs, numérotation, registre, commandes et protection restent valables.
-**Remplace** : le bloc Zone (retiré de Nabu le 2026-10-22, conteneur imbriqué)
-**Liés** : `docs/design/variables.md` (à refondre sur Regions), canvas d'exploration « Zones — exploration » (planches 5–7 : Nabu seul), ADR 014 (historique), feuille de route de l'audit 2026-10
+**Status:** Accepted (2026-10-22, validated by the owner) — **data model superseded by ADR 018** (2026-10-23: regions are containers in Loro, seams are the interface). Types, fields, numbering, registry, commands and protection remain valid.
+**Date:** 2026-10-22
+**Original:** [French](fr/016-regions.md)
+**Supersedes:** the Zone block (removed from Nabu on 2026-10-22, nested container)
+**Related:** `docs/design/variables.md` (to be reworked on top of Regions), exploration canvas "Zones — exploration" (boards 5–7: Nabu only), ADR 014 (history), audit 2026-10 roadmap
 
 ---
 
-## 1. Contexte
+## 1. Context
 
-Orduin (application d'écriture longue) a besoin de découper **un seul document continu** en parties, chapitres et scènes, avec des métadonnées par division, une navigation, des vues (plan, liège, frise) et, à terme, un rendu paresseux des très longs textes.
+Orduin (a long-form writing application) needs to split **a single continuous document** into parts, chapters and scenes, with metadata per division, navigation, views (outline, corkboard, timeline) and, eventually, lazy rendering of very long texts.
 
-L'ancienne Zone modélisait chaque division comme une **boîte** (conteneur imbriqué). Les frontières y étaient des murs : couper un chapitre, fusionner deux scènes ou faire passer un paragraphe d'un chapitre à l'autre demandait de déplacer des blocs entre conteneurs, et l'arbre imbriqué se prête mal au rendu paresseux.
+The former Zone modeled each division as a **box** (nested container). Boundaries were walls there: cutting a chapter, merging two scenes or moving a paragraph from one chapter to another required moving blocks between containers, and the nested tree lends itself poorly to lazy rendering.
 
-Décisions du propriétaire (2026-10-22) : **modèle à repères** ; les **primitives génériques** dans Nabu (open source), le **produit « Zone »** et toute son interface dans Orduin (privé) ; Zone retirée de Nabu sans migration (aucun utilisateur).
+Owner decisions (2026-10-22): a **marker model**; the **generic primitives** in Nabu (open source), the **"Zone" product** and all its interface in Orduin (private); Zone removed from Nabu without migration (no users).
 
-**Vocabulaire** : dans Nabu, la brique générique s'appelle **région** (`RegionsExtension`). « Zone » désigne le produit d'Orduin construit dessus.
+**Vocabulary**: in Nabu, the generic building block is called a **region** (`RegionsExtension`). "Zone" refers to Orduin's product built on top of it.
 
-## 2. Décision
+## 2. Decision
 
-Une région est une **portion d'un texte continu**, ouverte par un **repère** et fermée par le repère suivant de même niveau ou de niveau supérieur (ou la fin du document). Le document reste **plat** au niveau racine ; la structure est une couche posée dessus.
+A region is a **portion of a continuous text**, opened by a **marker** and closed by the next marker of the same or a higher level (or the end of the document). The document stays **flat** at the root level; the structure is a layer placed on top of it.
 
-## 3. Conception
+## 3. Design
 
-### 3.1 Le repère
+### 3.1 The marker
 
-- Un bloc `region` **sans texte** (bloc vide, comme le séparateur : le curseur le saute, il se rend en « couture »).
-- Données Loro du repère : `regionType` (identifiant d'un type déclaré) et `fields` (map Loro des champs déclarés par ce type ; `title` est un champ de base de toute région).
-- **Uniquement au niveau racine.** Un repère n'a pas de sens dans une liste ou un toggle ; le normaliseur le remonte à la racine (même mécanique que les autres règles de structure). *(cas des conteneurs : voir questions ouvertes)*
-- Le contenu situé **avant le premier repère** est un préambule hors région.
+- A `region` block **without text** (a void block, like the divider: the cursor skips it, and it is rendered as a "seam").
+- Loro data of the marker: `regionType` (identifier of a declared type) and `fields` (Loro map of the fields declared by that type; `title` is a base field of every region).
+- **Root level only.** A marker makes no sense inside a list or a toggle; the normalizer lifts it to the root (same mechanism as the other structure rules). *(containers case: see open questions)*
+- The content located **before the first marker** is a preamble outside any region.
 
-### 3.2 Types de régions (déclarés par l'intégrateur)
+### 3.2 Region types (declared by the integrator)
 
 ```js
 RegionsExtension({
   types: {
-    part:    { level: 1, label: 'Partie {index}' },
-    chapter: { level: 2, label: 'Chapitre {index}', numbering: 'document' },
+    part:    { level: 1, label: 'Part {index}' },
+    chapter: { level: 2, label: 'Chapter {index}', numbering: 'document' },
     scene:   { level: 3, numbering: 'parent', fields: { pov: 'text', place: 'text' } },
   },
 })
 ```
 
-- `level` : profondeur (1 = la plus haute). L'étendue d'une région se déduit des niveaux.
-- `label` : gabarit d'affichage (`{index}`, `{path}` → « 2.3 », `{title}`).
-- `numbering` : `'parent'` (repart à 1 dans chaque région parente, défaut), `'document'` (continue sur tout le document), `'none'`.
-- `fields` : champs typés (`text`, `richtext` = LoroText, `number`, `boolean`, `enum`, `date`) — Nabu les stocke et les rend réactifs ; leur sens (synopsis, statut, objectif…) appartient à l'intégrateur.
-- Sans configuration : un type générique `section` (niveaux 1–3, libellés « 1. », « 1.1 »…).
+- `level`: depth (1 = highest). The extent of a region is deduced from the levels.
+- `label`: display template (`{index}`, `{path}` → "2.3", `{title}`).
+- `numbering`: `'parent'` (restarts at 1 in each parent region, default), `'document'` (continues over the whole document), `'none'`.
+- `fields`: typed fields (`text`, `richtext` = LoroText, `number`, `boolean`, `enum`, `date`) — Nabu stores them and makes them reactive; their meaning (synopsis, status, goal…) belongs to the integrator.
+- Without configuration: a generic `section` type (levels 1–3, labels "1.", "1.1"…).
 
-### 3.3 Registre réactif `nabu.regions`
+### 3.3 Reactive registry `nabu.regions`
 
-- `list` : les régions dans l'ordre du document, chacune avec `type`, `level`, `fields`, `index` / `path` / `label` calculés, `parent`, `children`, la plage de blocs (`first`, `last`), `wordCount` (somme des blocs de la plage, calculée sans rendu).
-- `tree` : la hiérarchie (parties › chapitres › scènes).
-- `at(position | block)` : la région la plus profonde contenant une position (fil d'Ariane, inspecteur).
+- `list`: the regions in document order, each with `type`, `level`, `fields`, computed `index` / `path` / `label`, `parent`, `children`, the block range (`first`, `last`), `wordCount` (sum over the blocks of the range, computed without rendering).
+- `tree`: the hierarchy (parts › chapters › scenes).
+- `at(position | block)`: the deepest region containing a position (breadcrumb, inspector).
 - `of(marker)`, `next(region)`, `prev(region)`, `parentOf(region)`.
-- Tout est `$derived` : les vues de l'intégrateur s'y abonnent sans code de synchronisation.
+- Everything is `$derived`: the integrator's views subscribe to it with no synchronization code.
 
-### 3.4 Gestes (actions) et clavier
+### 3.4 Gestures (actions) and keyboard
 
-| Action | Effet dans le modèle à repères |
+| Action | Effect in the marker model |
 |---|---|
-| `region:split` — couper ici | coupe le bloc au curseur si besoin, insère un repère du même type que la région courante ; le curseur passe au début de la nouvelle région |
-| `region:insert` | insère un repère (type donné) après la région courante ou au curseur |
-| `region:merge` | supprime le repère : le contenu rejoint la région précédente |
-| `region:move` (`up`/`down`) | déplace la région **avec ses sous-régions** (sa plage de blocs) avant / après sa voisine de même niveau |
-| `region:promote` / `region:demote` | change le niveau (le type) — dans un modèle à repères, c'est tout ce qu'il faut pour réimbriquer |
-| `region:next` / `region:prev` / `region:parent` | navigation : curseur au début de la région visée |
+| `region:split` — cut here | cuts the block at the cursor if needed, inserts a marker of the same type as the current region; the cursor moves to the start of the new region |
+| `region:insert` | inserts a marker (given type) after the current region or at the cursor |
+| `region:merge` | removes the marker: the content joins the previous region |
+| `region:move` (`up`/`down`) | moves the region **with its sub-regions** (its block range) before / after its neighbor of the same level |
+| `region:promote` / `region:demote` | changes the level (the type) — in a marker model, this is all it takes to re-nest |
+| `region:next` / `region:prev` / `region:parent` | navigation: cursor at the start of the targeted region |
 
-- Chaque action structurelle est **une étape d'undo** (mécanisme déjà en place) et Ctrl+Z restaure la sélection (ADR 015).
-- Raccourcis par défaut configurables (voir questions ouvertes). **« Agir sur la région comme un objet »** (Échap du texte vers la région) dépend de la **primitive de sélection de bloc**, chantier à part.
+- Each structural action is **one undo step** (mechanism already in place) and Ctrl+Z restores the selection (ADR 015).
+- Default shortcuts are configurable (see open questions). **"Acting on the region as an object"** (Escape from the text to the region) depends on the **block selection primitive**, a separate workstream.
 
-### 3.5 Rendu par défaut (planche 5)
+### 3.5 Default rendering (board 5)
 
-- Une couture discrète : libellé calculé (« 1.1 Le passeur ») + filet ; style neutre, variables CSS (`--nb-region-*`).
-- Accessibilité : le repère est annoncé comme un **titre de niveau `level`** (`role="heading"`, `aria-level`), pour que les lecteurs d'écran naviguent par division.
-- Aucune interface d'édition des champs dans Nabu : c'est le rôle de l'intégrateur (inspecteur d'Orduin). Nabu expose seulement `region.fields` et les actions.
+- A discreet seam: computed label ("1.1 The ferryman") + hairline; neutral style, CSS variables (`--nb-region-*`).
+- Accessibility: the marker is announced as a **heading of level `level`** (`role="heading"`, `aria-level`), so that screen readers can navigate by division.
+- No field editing interface in Nabu: that is the integrator's role (Orduin's inspector). Nabu only exposes `region.fields` and the actions.
 
-### 3.6 Sérialisation, presse-papiers, collage
+### 3.6 Serialization, clipboard, paste
 
-- **JSON** : `{ type: 'region', props: { regionType, fields } }` — aller-retour exact.
-- **Presse-papiers interne** : les repères voyagent comme des blocs ; collés ailleurs, ils retrouvent leur rôle.
-- **Markdown** : commentaire de données + titre lisible (décidé, question 4 ; voir les notes du lot 3).
-- Collage d'un repère dans un conteneur (liste, toggle) : règle du §3.1.
+- **JSON**: `{ type: 'region', props: { regionType, fields } }` — exact round trip.
+- **Internal clipboard**: markers travel as blocks; pasted elsewhere, they regain their role.
+- **Markdown**: data comment + readable heading (decided, question 4; see the lot 3 notes).
+- Pasting a marker into a container (list, toggle): rule of §3.1.
 
-### 3.7 Collaboration et historique
+### 3.7 Collaboration and history
 
-- Repères et champs vivent dans Loro : synchronisés et historisés comme le texte.
-- Deux auteurs qui coupent au même endroit produisent deux repères voisins (une région vide, visible) — pas de conflit structurel.
+- Markers and fields live in Loro: synchronized and versioned like the text.
+- Two authors cutting at the same place produce two adjacent markers (an empty, visible region) — no structural conflict.
 
-## 4. Hors périmètre (chantiers suivants, chacun avec son ADR)
+## 4. Out of scope (following workstreams, each with its own ADR)
 
-- **Sélection de bloc** (agir sur une région ou un bloc comme un objet).
-- **Variables** (`{{index}}`, `{{title}}`, résolution par portée = `nabu.regions.at(block)`).
-- **Rendu paresseux** par région.
-- Toute l'interface produit (Orduin).
+- **Block selection** (acting on a region or a block as an object).
+- **Variables** (`{{index}}`, `{{title}}`, scope resolution = `nabu.regions.at(block)`).
+- **Lazy rendering** per region.
+- The whole product interface (Orduin).
 
-## 5. Découpage
+## 5. Breakdown
 
-1. **Lot 1** — bloc repère, types, normaliseur (racine), registre réactif, numérotation, rendu par défaut.
-2. **Lot 2** — actions et clavier (§3.4).
-3. **Lot 3** — sérialisation JSON / markdown / HTML, presse-papiers, collage.
+1. **Lot 1** — marker block, types, normalizer (root), reactive registry, numbering, default rendering.
+2. **Lot 2** — actions and keyboard (§3.4).
+3. **Lot 3** — JSON / markdown / HTML serialization, clipboard, paste.
 
-## 6. Questions ouvertes (à trancher avant ou pendant le lot concerné)
+## 6. Open questions (to be settled before or during the relevant lot)
 
-1. ~~**Backspace au début de la première ligne d'une région**~~ — **décidé (2026-10-22, propriétaire)** : **protéger**. Un Backspace au tout début du premier bloc de texte d'une région ne fusionne jamais le texte à travers le repère ; la fusion est un **maintien** de la touche (ADR 017 `hold`, 700 ms) sur la couture, commande `region:merge-previous` ; symétrique pour Suppr (`region:merge-next`, le repère SUIVANT disparaît). Première région sans préambule : rien (pas de cible, pas de maintien).
-2. ~~**Raccourci « couper ici »**~~ — **décidé** : `Mod+Entrée` (`region:split`, sans confirmation), qui cohabite avec `todo:toggle` (celui-ci, limité aux éléments de liste, garde `Mod+Entrée` dans une liste de tâches).
-3. ~~Repère collé dans un toggle~~ — **décidé** : remonté juste après le toggle (comme pour les listes ; la structure n'est jamais perdue).
-4. ~~Markdown~~ — **décidé** : un commentaire HTML porteur des données (`<!-- region:chapter {"title":"La forêt"} -->`), relu exactement par Nabu (exception ciblée, comme `<details>`), **suivi d'un titre lisible** (`## Chapitre 2 — La forêt`) pour les humains et les autres outils.
-5. ~~**Préambule**~~ — **décidé** : autorisé tel quel (contenu avant le premier repère = hors région).
+1. ~~**Backspace at the start of the first line of a region**~~ — **decided (2026-10-22, owner)**: **protect**. A Backspace at the very start of the first text block of a region never merges the text across the marker; the merge is a **hold** of the key (ADR 017 `hold`, 700 ms) on the seam, command `region:merge-previous`; symmetric for Delete (`region:merge-next`, the NEXT marker disappears). First region without a preamble: nothing (no target, no hold).
+2. ~~**"Cut here" shortcut**~~ — **decided**: `Mod+Enter` (`region:split`, no confirmation), which coexists with `todo:toggle` (the latter, limited to list items, keeps `Mod+Enter` in a task list).
+3. ~~Marker pasted into a toggle~~ — **decided**: lifted right after the toggle (as for lists; the structure is never lost).
+4. ~~Markdown~~ — **decided**: an HTML comment carrying the data (`<!-- region:chapter {"title":"The forest"} -->`), read back exactly by Nabu (targeted exception, like `<details>`), **followed by a readable heading** (`## Chapter 2 — The forest`) for humans and other tools.
+5. ~~**Preamble**~~ — **decided**: allowed as is (content before the first marker = outside any region).
 
 ---
 
@@ -114,7 +116,7 @@ RegionsExtension({
 
 Code: `src/lib/blocks/region/` (`types.js`, `region.svelte.js`, `Region.svelte`, `regions.svelte.js`, `normalize.js`, `insert.js`, `region.extension.js`). Tests: `tests/unit/regions.test.js`, `tests/e2e/regions.spec.ts`.
 
-- **Default types**: with no options the extension declares THREE types, `section-1`, `section-2`, `section-3` (levels 1–3, labels `{path}. {title}`, `{path} {title}`, `{path} {title}` → "1.", "1.1 Le passeur"). The level IS the type, as §3.4 already says ("changer le niveau (le type)"): `region:promote` / `demote` will just swap `regionType`, no extra stored `level` field to keep in sync. Passing `types` REPLACES the defaults (no merge).
+- **Default types**: with no options the extension declares THREE types, `section-1`, `section-2`, `section-3` (levels 1–3, labels `{path}. {title}`, `{path} {title}`, `{path} {title}` → "1.", "1.1 The ferryman"). The level IS the type, as §3.4 already says ("changes the level (the type)"): `region:promote` / `demote` will just swap `regionType`, no extra stored `level` field to keep in sync. Passing `types` REPLACES the defaults (no merge).
 - **Factory**: `RegionsExtension(options)` throws on an invalid declaration (level not an integer ≥ 1, unknown numbering or field kind, an `enum` without `values`). The configuration is carried by a block subclass (`static config`, like the dialogue dash); `Regions.get(nabu)` reads it back from the registry. `createRegionsExtension` is an alias; there is no separate default instance because `RegionsExtension()` already is the default (and `FullPreset` includes it, consistently with "all built-in blocks").
 - **Registry exposure**: `Regions.get(nabu)` (stored in `nabu.systems`, like `Todos`) plus a `nabu.regions` getter that the extension installs from its `onInit` hook: the core never names it. Not installed without the extension.
 - **Levels and extent**: as §2. A marker whose type is NOT declared (a document coming from a richer editor) is a leaf at the deepest declared level, unnumbered, labelled by its title. Numbering: `parent` counts per (parent region, type), `document` per type over the whole document, `none` gives no index; `path` = the indexes of the numbered ancestors then its own (`"2.1"`; array in `path`, text in `pathString`).
@@ -161,3 +163,7 @@ Code: `src/lib/blocks/region/format.js` (pure text forms: comment, echo, HTML), 
 - **Root-only paste**: pinned in unit and e2e. Pasting `[p x, marker, p y]` in a toggle body at "body|one" gives: the text before the marker lands in the body, the text after the marker too, and ONLY the marker is hoisted right after the toggle (the content order across the marker is therefore not kept inside a container: the marker cannot be there). In a list item the list normalizer cuts the list around the marker (the rest of the list follows it); in a nested list the marker goes after the top-level list structure; in a callout it is hoisted after the callout.
 - **Copying only a marker** (selection reduced to a marker) gives its two markdown lines as `text/plain` and the heading element as `text/html` (it is not a text block, so the "raw selected text" rule does not apply).
 - **Left out**: no warning on an edited echo; richtext of UNDECLARED fields (an unknown field holding a text container) is exported as a delta array and comes back as a plain JSON array.
+
+
+## Note (2026-10-27)
+The marker block and the implementation described in the lot 1–3 notes (§7–§9) were replaced by ADR 018 (lots A–E, implemented 2026-10-23 to 2026-10-26): `region` is now a container block. The types, fields, numbering, registry, commands, hold protection and messages carry over; the marker block, the root-only normalizer and the markdown/HTML forms of this ADR do not.

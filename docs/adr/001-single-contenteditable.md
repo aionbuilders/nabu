@@ -1,19 +1,20 @@
-# ADR 001 : Architecture Single ContentEditable
+# ADR 001 — Single ContentEditable Architecture
 
-## Statut
-Accepté
+**Status:** Accepted
+**Date:** 2026-02-19
+**Original:** [French](fr/001-single-contenteditable.md)
 
-## Contexte
-La majorité des éditeurs "block-based" (comme Notion) utilisent un `contenteditable` par bloc. Cela facilite la gestion du rendu mais brise la sélection native du navigateur (le curseur ne peut pas traverser naturellement les blocs, le copier-coller est complexe, et les performances se dégradent avec le nombre de blocs).
+## Context
+Most block-based editors (such as Notion) use one `contenteditable` per block. This simplifies rendering but breaks the browser's native selection: the cursor cannot cross blocks naturally, copy and paste is complex, and performance degrades as the number of blocks grows.
 
-## Décision
-Nabu utilisera un **unique attribut `contenteditable="true"`** à la racine de l'éditeur. Les blocs enfants seront des éléments DOM passifs (non-éditables par défaut du point de vue du navigateur).
+## Decision
+Nabu uses a **single `contenteditable="true"` attribute** at the root of the editor. Child blocks are passive DOM elements (not editable by default from the browser's point of view).
 
-## Conséquences
-*   **Avantages :** 
-    *   Sélection native parfaite (sélection de plusieurs blocs, glisser-déposer du curseur).
-    *   Gestion du copier-coller simplifiée car le navigateur voit un seul flux.
-    *   Performance de rendu supérieure (moins de zones éditables à gérer par le moteur du navigateur).
-*   **Défis :**
-    *   Nécessite un mapping complexe (Selection Bridge) pour traduire les coordonnées DOM (Node/Offset) vers les coordonnées Loro (BlockID/TextOffset).
-    *   Interception obligatoire de tous les événements d'entrée (`beforeinput`) pour rediriger les modifications vers Loro au lieu de laisser le navigateur modifier le DOM.
+## Consequences
+*   **Advantages:**
+    *   Native selection works fully (selection across several blocks, drag selection with the cursor).
+    *   Copy and paste is simpler, because the browser sees a single flow.
+    *   Better rendering performance (fewer editable regions for the browser engine to manage).
+*   **Challenges:**
+    *   Requires a complex mapping (the Selection Bridge) to translate DOM coordinates (Node/Offset) into Loro coordinates (BlockID/TextOffset).
+    *   All input events (`beforeinput`) must be intercepted, so that modifications are redirected to Loro instead of letting the browser modify the DOM.

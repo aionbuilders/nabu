@@ -1,15 +1,16 @@
-# ADR 003 : Structure Hybride (Flat-Map & Rendu Récursif)
+# ADR 003 — Hybrid Structure (Flat Map and Recursive Rendering)
 
-## Statut
-Accepté
+**Status:** Accepted
+**Date:** 2026-02-19
+**Original:** [French](fr/003-hybrid-rendering-structure.md)
 
-## Contexte
-Le moteur doit accéder aux blocs de deux façons : par ID pour les mises à jour (Input) et par hiérarchie pour l'affichage (UI). Parcourir un arbre récursif à chaque frappe de touche est inefficace.
+## Context
+The engine must reach blocks in two ways: by ID for updates (input), and by hierarchy for display (UI). Traversing a recursive tree on every keystroke is inefficient.
 
-## Décision
-Maintenir une **Map plate** (`nabu.blocks`) pour le stockage et l'accès rapide, tout en utilisant la **récursion dans les composants Svelte** pour le rendu visuel.
+## Decision
+Maintain a **flat Map** (`nabu.blocks`) for storage and fast access, while using **recursion in the Svelte components** for visual rendering.
 
-## Conséquences
-*   **Performance O(1) :** Accès instantané à n'importe quel bloc via son ID, peu importe sa profondeur.
-*   **Modularité :** Les composants ne connaissent que leurs enfants directs via leurs IDs, ce qui limite la propagation des changements réactifs.
-*   **Simplicité :** Le passage de Loro (liste plate de nœuds) vers Svelte est direct et ne nécessite pas de reconstruction d'arbre complexe en mémoire JS.
+## Consequences
+*   **O(1) performance:** Instant access to any block through its ID, regardless of depth.
+*   **Modularity:** Components only know their direct children through their IDs, which limits the propagation of reactive changes.
+*   **Simplicity:** Going from Loro (a flat list of nodes) to Svelte is direct and does not require rebuilding a complex tree in memory in JS.

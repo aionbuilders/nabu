@@ -1,42 +1,44 @@
-# ADR 017 — Commandes, raccourcis et confirmations
+# ADR 017 — Commands, keymap and confirmations
 
-**Statut** : accepté (2026-10-22, validé par le propriétaire)
-**Design de référence pour `hold`** : canvas « Zones — exploration », planche **8b** (indication au-dessus du libellé, à gauche, sans bulle, teinte ambre `#B45309`, filet qui se vide dans la même teinte, aucun décalage du texte).
-**Liés** : ADR 011 (bus d'actions `nabu.exec`), ADR 016 (Regions — premier client : « couper ici », fusion protégée), canvas « Zones — exploration » (planche 8 : fusion en maintenant ⌫)
+**Status:** Accepted (2026-10-22, validated by the owner)
+**Date:** 2026-10-22
+**Original:** [French](fr/017-commands-keymap-confirmations.md)
+**Reference design for `hold`:** canvas "Zones — exploration", board **8b** (hint above the label, left-aligned, no bubble, amber tint `#B45309`, hairline that drains in the same tint, no shift of the text).
+**Related:** ADR 011 (action bus `nabu.exec`), ADR 016 (Regions — first client: "cut here", protected merge), canvas "Zones — exploration" (board 8: merge by holding ⌫)
 
 ---
 
-## 1. Contexte
+## 1. Context
 
-Aujourd'hui, les raccourcis clavier sont gérés **au cas par cas** : chaque extension intercepte `keydown` dans son hook `onKeyDown` (marques, listes, code, todos, slash menu…) et **le premier qui répond gagne**. Conséquences :
+Today, keyboard shortcuts are handled **case by case**: each extension intercepts `keydown` in its `onKeyDown` hook (marks, lists, code, todos, slash menu…) and **the first one to answer wins**. Consequences:
 
-- personne ne sait que deux extensions veulent la même touche : les conflits sont silencieux ;
-- impossible de personnaliser un raccourci, ni d'afficher une aide clavier fiable ;
-- aucune manière commune de **confirmer** une action à risque (ex. fusionner deux régions) ou de **choisir** entre deux actions possibles.
+- nobody knows that two extensions want the same key: conflicts are silent;
+- it is impossible to customize a shortcut, or to display a reliable keyboard help;
+- there is no common way to **confirm** a risky action (e.g. merging two regions) or to **choose** between two possible actions.
 
-Le bus d'actions (`nabu.exec(topic, data)`, ADR 011) existe déjà : il exécute, mais ne sait rien des touches, du contexte ni de la confirmation.
+The action bus (`nabu.exec(topic, data)`, ADR 011) already exists: it executes, but knows nothing about keys, context or confirmation.
 
-## 2. Décision
+## 2. Decision
 
-1. Un **registre central des commandes** : une extension *déclare* ses commandes (action, libellé, raccourcis, contexte d'application, stratégie de confirmation) ; le cœur résout les touches.
-2. Trois **stratégies de confirmation**, choisies par chaque commande : **maintenir sur la cible**, **invite au curseur**, **choisir**.
-3. Les anciens hooks `onKeyDown` restent supportés pendant la migration (repli).
+1. A **central command registry**: an extension *declares* its commands (action, label, shortcuts, applicability context, confirmation strategy); the core resolves the keys.
+2. Three **confirmation strategies**, chosen by each command: **hold on the target**, **invite at the cursor**, **choose**.
+3. The former `onKeyDown` hooks remain supported during the migration (fallback).
 
-## 3. Conception
+## 3. Design
 
-### 3.1 Déclarer une commande
+### 3.1 Declaring a command
 
 ```js
 extension('regions', {
   commands: {
     'region:split': {
-      label: 'Couper ici',
+      label: 'Cut here',
       keys: ['Mod-Enter'],
       when: (ctx) => ctx.block?.behaviors.has('text') && ctx.inRoot,
       run: (nabu, ctx) => splitRegionAtCaret(nabu, ctx),
     },
     'region:merge-previous': {
-      label: (ctx) => `Fusionner avec « ${ctx.previousRegion.title} »`,
+      label: (ctx) => `Merge with “${ctx.previousRegion.title}”`,
       keys: ['Backspace'],
       when: (ctx) => ctx.isCollapsed && ctx.atStartOfRegion,
       confirm: { strategy: 'hold', target: (ctx) => ctx.region.marker, holdMs: 700 },
@@ -46,69 +48,69 @@ extension('regions', {
 });
 ```
 
-- Une commande **est** une action du bus : `nabu.exec('region:split')` fonctionne toujours, sans clavier (palette, menu, API).
-- `keys` : accords normalisés (`Mod` = Cmd sur macOS, Ctrl ailleurs ; `Ctrl` explicite, `Alt`, `Shift`, noms de touches `KeyboardEvent.key`). Les accords réservés au navigateur ou au système (Cmd/Ctrl+W, T, N, Q…) sont refusés avec un avertissement.
-- `when(ctx)` : le contexte où la commande s'applique. `ctx` est construit par le cœur à chaque `keydown` : `nabu`, `block`, `selection`, `isCollapsed`, la chaîne des ancêtres (types), plus des **faits enrichis par les extensions** (ex. `atStartOfRegion`, `region`, `previousRegion` fournis par Regions) — le cœur ne connaît aucun type de bloc.
-- `label` : texte (ou fonction du contexte) pour l'aide, l'invite et le sélecteur.
+- A command **is** an action of the bus: `nabu.exec('region:split')` always works, without a keyboard (palette, menu, API).
+- `keys`: normalized chords (`Mod` = Cmd on macOS, Ctrl elsewhere; explicit `Ctrl`, `Alt`, `Shift`, `KeyboardEvent.key` key names). Chords reserved by the browser or the system (Cmd/Ctrl+W, T, N, Q…) are refused with a warning.
+- `when(ctx)`: the context where the command applies. `ctx` is built by the core on every `keydown`: `nabu`, `block`, `selection`, `isCollapsed`, the chain of ancestors (types), plus **facts enriched by the extensions** (e.g. `atStartOfRegion`, `region`, `previousRegion` provided by Regions) — the core knows no block type.
+- `label`: text (or function of the context) for the help, the invite and the chooser.
 
-### 3.2 Résolution des touches
+### 3.2 Key resolution
 
-À chaque `keydown` (phase de capture, **ignoré pendant une composition IME**) :
+On every `keydown` (capture phase, **ignored during an IME composition**):
 
-1. normaliser l'accord ;
-2. réunir les commandes dont un raccourci correspond et dont `when(ctx)` est vrai ;
-3. **une seule** → elle s'exécute (avec sa stratégie de confirmation éventuelle), `preventDefault` ;
-4. **plusieurs** → priorité : une commande liée au type du bloc courant (`scope`) passe avant une commande générique ; à priorité égale → stratégie **choisir** (§3.4) ;
-5. **aucune** → repli sur les hooks `onKeyDown` historiques, puis comportement natif.
+1. normalize the chord;
+2. gather the commands that have a matching shortcut and whose `when(ctx)` is true;
+3. **exactly one** → it runs (with its confirmation strategy, if any), `preventDefault`;
+4. **several** → priority: a command bound to the current block's type (`scope`) comes before a generic command; at equal priority → **choose** strategy (§3.4);
+5. **none** → fallback to the historical `onKeyDown` hooks, then native behavior.
 
-### 3.3 Détection des conflits, personnalisation, aide
+### 3.3 Conflict detection, customization, help
 
-- **À l'enregistrement** : deux commandes avec le même accord **et** le même `scope` déclaré → avertissement développeur (`nabu.warn`) ; les recouvrements de `when` ne sont détectables qu'à l'exécution (§3.2 point 4).
-- **Personnalisation** : `createEditor({ keymap: { 'region:split': ['Mod-Shift-Enter'], 'mark:bold': [] } })` remplace ou désactive des raccourcis.
-- **Aide** : `nabu.commands.list()` renvoie les commandes, leurs libellés et leurs raccourcis **formatés pour la plateforme** (⌘ ⌥ ⇧ sur macOS) — la fiche clavier (planche 4) se génère d'elle-même.
+- **At registration**: two commands with the same chord **and** the same declared `scope` → developer warning (`nabu.warn`); overlaps between `when` conditions can only be detected at run time (§3.2 point 4).
+- **Customization**: `createEditor({ keymap: { 'region:split': ['Mod-Shift-Enter'], 'mark:bold': [] } })` replaces or disables shortcuts.
+- **Help**: `nabu.commands.list()` returns the commands, their labels and their shortcuts **formatted for the platform** (⌘ ⌥ ⇧ on macOS) — the keyboard sheet (board 4) generates itself.
 
-### 3.4 Les trois stratégies de confirmation
+### 3.4 The three confirmation strategies
 
-L'état en cours est exposé, réactif : `nabu.pendingCommand = { id, strategy, label, target?, progress?, options? } | null`. Le cœur gère le clavier ; **l'apparence appartient à l'intégrateur** (rendu par défaut neutre fourni ; design dédié plus tard).
+The pending state is exposed, reactive: `nabu.pendingCommand = { id, strategy, label, target?, progress?, options? } | null`. The core handles the keyboard; **the appearance belongs to the integrator** (a neutral default rendering is provided; dedicated design later).
 
-**a) `hold` — maintenir sur la cible** (planche 8)
+**a) `hold` — hold on the target** (board 8)
 
-- Un **appui frais** (`event.repeat === false`) commencé dans le contexte de la commande démarre le compte (`holdMs`, défaut 700 ms) ; `progress` va de 0 à 1 ; la **cible** (ex. la couture de la région) affiche la progression.
-- **Relâcher avant la fin annule.** Toute autre touche annule (et fait son action normale).
-- **Un maintien commencé ailleurs ne compte jamais** : les répétitions (`repeat === true`) d'une touche maintenue avant d'atteindre le contexte sont **arrêtées** au contexte — il faut relâcher et appuyer de nouveau. *(Protège celui qui efface une phrase en gardant ⌫ enfoncé.)*
-- Annonce aux lecteurs d'écran via une région `aria-live` (ex. « Maintenez Retour arrière pour fusionner avec La lisière »).
-- La commande reste toujours exécutable **sans maintien** (menu, palette, `nabu.exec`) : accessibilité.
+- A **fresh press** (`event.repeat === false`) started in the command's context starts the count (`holdMs`, default 700 ms); `progress` goes from 0 to 1; the **target** (e.g. the region's seam) displays the progress.
+- **Releasing before the end cancels.** Any other key cancels (and performs its normal action).
+- **A hold started elsewhere never counts**: the repeats (`repeat === true`) of a key held down before reaching the context are **stopped** at the context — the key must be released and pressed again. *(Protects someone erasing a sentence by keeping ⌫ pressed.)*
+- Announcement to screen readers through an `aria-live` region (e.g. "Hold Backspace to merge with The treeline").
+- The command is always executable **without a hold** (menu, palette, `nabu.exec`): accessibility.
 
-**b) `invite` — invite au curseur**
+**b) `invite` — invite at the cursor**
 
-- Premier appui : `pendingCommand` (stratégie `invite`) — une invite apparaît au curseur (« ⌫ pour confirmer · Échap pour annuler »).
-- Même accord à nouveau (appui frais) → exécute ; Échap, toute autre touche, un clic ou un délai (défaut 5 s) → annule.
+- First press: `pendingCommand` (strategy `invite`) — an invite appears at the cursor ("⌫ to confirm · Escape to cancel").
+- Same chord again (fresh press) → executes; Escape, any other key, a click or a timeout (default 5 s) → cancels.
 
-**c) `choose` — choisir entre plusieurs actions**
+**c) `choose` — choose between several actions**
 
-- Utilisée automatiquement en cas d'ambiguïté réelle (§3.2), ou explicitement par une commande qui propose des variantes.
-- Les options (`label`, raccourci) s'affichent au curseur : flèches + Entrée, chiffres, clic ; Échap annule.
-- Règle de conception : le sélecteur est un **filet de sécurité**, pas un mode normal — les raccourcis par défaut doivent être conçus pour ne pas se marcher dessus.
+- Used automatically in case of real ambiguity (§3.2), or explicitly by a command that offers variants.
+- The options (`label`, shortcut) are displayed at the cursor: arrows + Enter, digits, click; Escape cancels.
+- Design rule: the chooser is a **safety net**, not a normal mode — default shortcuts must be designed not to step on each other.
 
-### 3.5 Ce qui ne change pas
+### 3.5 What does not change
 
-- Le slash menu garde son clavier modal (il capture les flèches tant qu'il est ouvert).
-- Les gestes de saisie (`beforeinput`) ne passent pas par ce registre : il ne concerne que les **commandes**.
-- Undo : chaque commande structurelle reste une étape (mécanismes existants) ; une confirmation annulée ne crée aucune étape.
+- The slash menu keeps its modal keyboard (it captures the arrows while it is open).
+- Input gestures (`beforeinput`) do not go through this registry: it only concerns **commands**.
+- Undo: each structural command remains one step (existing mechanisms); a cancelled confirmation creates no step.
 
-## 4. Découpage
+## 4. Breakdown
 
-1. **Lot 1** — registre (`commands` dans `Extension`), normalisation des accords par plateforme, contexte enrichi par les extensions, résolution + priorités, personnalisation (`keymap`), `nabu.commands.list()`, avertissements de conflit. Migration de quelques raccourcis existants pour éprouver le modèle (undo/redo, marques, todo).
-2. **Lot 2** — stratégies `hold`, `invite`, `choose` + `nabu.pendingCommand` + rendus par défaut neutres (filet de progression, invite, sélecteur) + annonces `aria-live`.
-3. **Lot 3** — migration des autres hooks clavier (listes, code, toggle…) ; les hooks `onKeyDown` restent supportés pour les extensions tierces.
+1. **Lot 1** — registry (`commands` in `Extension`), per-platform chord normalization, context enriched by the extensions, resolution + priorities, customization (`keymap`), `nabu.commands.list()`, conflict warnings. Migration of a few existing shortcuts to prove the model (undo/redo, marks, todo).
+2. **Lot 2** — `hold`, `invite`, `choose` strategies + `nabu.pendingCommand` + neutral default renderings (progress hairline, invite, chooser) + `aria-live` announcements.
+3. **Lot 3** — migration of the other keyboard hooks (lists, code, toggle…); the `onKeyDown` hooks remain supported for third-party extensions.
 
-Ensuite seulement : **Regions lot 2** (couper ici = `Mod-Enter`, fusion protégée en maintenant ⌫ sur la couture, déplacer, monter/descendre, naviguer), branché directement sur le registre.
+Only then: **Regions lot 2** (cut here = `Mod-Enter`, protected merge by holding ⌫ on the seam, move, move up/down, navigate), plugged directly into the registry.
 
-## 5. Questions ouvertes
+## 5. Open questions
 
-1. ~~Durée du maintien~~ — **décidé** : 700 ms par défaut, réglable.
-2. ~~Palette de commandes~~ — **décidé** : cœur seulement (`nabu.commands.list()` + exécution) ; la palette visuelle sera dessinée en session de design.
-3. ~~Raccourcis mono-touche~~ — **décidé** : imposé — une commande liée à une touche sans modificateur (Backspace, Entrée, Tab, lettre…) sans `when` est **refusée** à l'enregistrement.
+1. ~~Hold duration~~ — **decided**: 700 ms by default, adjustable.
+2. ~~Command palette~~ — **decided**: core only (`nabu.commands.list()` + execution); the visual palette will be designed in a design session.
+3. ~~Single-key shortcuts~~ — **decided**: enforced — a command bound to a key without a modifier (Backspace, Enter, Tab, letter…) and without `when` is **refused** at registration.
 
 ---
 

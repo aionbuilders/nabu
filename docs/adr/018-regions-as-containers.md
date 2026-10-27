@@ -1,151 +1,153 @@
-# ADR 018 — Regions : des boîtes dans Loro, des coutures à l'écran
+# ADR 018 — Regions: boxes in Loro, seams on screen
 
-**Statut** : accepté (2026-10-23, validé par le propriétaire ; les cinq questions du §6 tranchées selon la recommandation)
-**Remplace** : le **modèle de données** de l'ADR 016 (§2, §3.1, la partie « modèle à repères » de §3.4, §3.6 markdown / HTML). Le reste de l'ADR 016 reste valable (types, champs, numérotation, registre, commandes, protection par maintien, messages).
-**Liés** : ADR 016 (Regions), ADR 017 (commandes, clavier, confirmations), `src/lib/blocks/subthread.js` (règles de sous-fil du Toggle), canvas « Zones — exploration » (planche 8b).
+**Status:** Accepted (2026-10-23, validated by the owner; the five questions of §6 settled according to the recommendation)
+**Date:** 2026-10-23
+**Original:** [French](fr/018-regions-as-containers.md)
+**Supersedes:** the **data model** of ADR 016 (§2, §3.1, the "marker model" part of §3.4, §3.6 markdown / HTML). The rest of ADR 016 remains valid (types, fields, numbering, registry, commands, protection by hold, messages).
+**Related:** ADR 016 (Regions), ADR 017 (commands, keymap, confirmations), `src/lib/blocks/subthread.js` (the Toggle's sub-thread rules), canvas "Zones — exploration" (board 8b).
 
 ---
 
-## 1. Contexte : un malentendu sur le mot « repères »
+## 1. Context: a misunderstanding about the word "markers"
 
-Lors de l'idéation du 2026-10-22, la question « boîtes ou repères ? » portait, dans ma présentation, sur le **modèle de données**. Le propriétaire a répondu « repères » en pensant à l'**interface** : des frontières vécues comme des coutures, dans un texte qui coule. L'intention, confirmée le 2026-10-23 :
+During the ideation of 2026-10-22, the question "boxes or markers?" was, as I presented it, about the **data model**. The owner answered "markers" thinking of the **interface**: boundaries experienced as seams, in a text that flows. The intent, confirmed on 2026-10-23:
 
-> Dans l'arbre Loro, une région est un **conteneur**, une sous-région un conteneur dans le conteneur. À l'écran et au clavier, ça se vit comme un **texte continu avec des coutures**.
+> In the Loro tree, a region is a **container**, a sub-region is a container inside the container. On screen and on the keyboard, it is experienced as **a continuous text with seams**.
 
-L'ADR 016 a été implémenté en repères **dans le modèle** (un bloc vide à la racine, document plat, étendue calculée). Ce modèle perd des choses auxquelles le propriétaire tient : une **fin** explicite (sortir d'une région, du texte du chapitre après ses scènes), une région qui **possède** son contenu (un nœud à copier, déplacer, verrouiller, synchroniser), des métadonnées et un nombre de mots portés par un sous-arbre, un rendu paresseux par conteneur.
+ADR 016 was implemented with markers **in the model** (an empty block at the root, a flat document, a computed extent). That model loses things the owner cares about: an explicit **end** (leaving a region, text of the chapter after its scenes), a region that **owns** its content (a node to copy, move, lock, synchronize), metadata and a word count carried by a subtree, lazy rendering per container.
 
-Rien n'est publié (0.1.0-beta.0 ne contient pas Regions) : on change maintenant, sans migration.
+Nothing is published (0.1.0-beta.0 does not contain Regions): we change now, without migration.
 
-## 2. Décision
+## 2. Decision
 
-Une région est un **bloc conteneur** (MegaBlock) :
+A region is a **container block** (MegaBlock):
 
-- son **en-tête** est son **titre** : un texte Loro, édité sur place, dans la couture (comme le titre d'un Toggle) ;
-- son **corps** est un fil Nabu ordinaire : paragraphes, listes, images… et **sous-régions** ;
-- ses **données** : `regionType` et `fields` (map Loro), comme aujourd'hui.
+- its **header** is its **title**: a Loro text, edited in place, in the seam (like a Toggle's title);
+- its **body** is an ordinary Nabu thread: paragraphs, lists, images… and **sub-regions**;
+- its **data**: `regionType` and `fields` (Loro map), as today.
 
-L'interface et le clavier traitent les frontières comme des **coutures** (rendu, flèches, protection du Backspace, coupure), pas comme des murs. Le modèle, lui, est un arbre.
+The interface and the keyboard treat boundaries as **seams** (rendering, arrows, Backspace protection, cutting), not as walls. The model itself is a tree.
 
-## 3. Conception
+## 3. Design
 
-### 3.1 Le bloc région
+### 3.1 The region block
 
-- Type `region`, MegaBlock, en-tête texte (marques inline autorisées : un titre en italique est courant), corps = enfants.
-- Le titre **est** l'en-tête : `region.fields.title` le lit en texte brut (compatibilité de l'API du registre) ; il n'y a plus de champ `title` stocké à part.
-- Titre vide permis : la couture affiche alors le libellé calculé (« Chapitre 2 ») comme espace réservé.
-- **Où vit une région** : à la racine, ou dans le corps d'une autre région. Jamais dans une liste, un toggle, un callout : le normaliseur la remonte après le conteneur le plus haut qui la tient, **à l'intérieur de sa région englobante** s'il y en a une (même mécanique que la règle « racine seulement » d'aujourd'hui, `hoistTarget()`).
+- Type `region`, MegaBlock, text header (inline marks allowed: an italic title is common), body = children.
+- The title **is** the header: `region.fields.title` reads it as plain text (registry API compatibility); there is no longer a separately stored `title` field.
+- Empty title allowed: the seam then shows the computed label ("Chapter 2") as a placeholder.
+- **Where a region lives**: at the root, or in the body of another region. Never in a list, a toggle, a callout: the normalizer lifts it after the topmost container that holds it, **inside its enclosing region** if there is one (same mechanism as today's "root only" rule, `hoistTarget()`).
 
-### 3.2 Niveaux et imbrication
+### 3.2 Levels and nesting
 
-- Les types gardent leur `level` (déclaration de l'ADR 016 inchangée). Règle d'imbrication : **une sous-région a un niveau strictement plus profond que sa région parente**. Une violation (collage d'une partie dans une scène) est corrigée par le normaliseur : la région remonte jusqu'à un parent valide, son contenu avec elle.
-- Le niveau n'est plus ce qui **calcule** l'étendue : c'est l'arbre. Il reste ce qui **valide** l'arbre et choisit le type lors d'une promotion / rétrogradation.
-- Type inconnu (document venu d'ailleurs) : accepté n'importe où sous une région, non numéroté (comme aujourd'hui).
+- Types keep their `level` (ADR 016's declaration unchanged). Nesting rule: **a sub-region has a level strictly deeper than its parent region**. A violation (pasting a part into a scene) is corrected by the normalizer: the region moves up to a valid parent, its content with it.
+- The level is no longer what **computes** the extent: the tree is. It remains what **validates** the tree and chooses the type on promotion / demotion.
+- Unknown type (document coming from elsewhere): accepted anywhere under a region, unnumbered (as today).
 
-### 3.3 Corps mixtes et préambule
+### 3.3 Mixed bodies and preamble
 
-- Le corps d'une région peut mêler texte propre et sous-régions **dans n'importe quel ordre** (texte du chapitre, scène 1, transition, scène 2…). *Question 2.*
-- À la racine, du texte avant, entre ou après les régions est permis (le préambule de l'ADR 016 devient un cas particulier).
-- **Repère de fin** : quand du contenu suit une sous-région au niveau du parent, l'interface doit le rendre lisible (une couture de fin discrète). Son dessin est un sujet de la séance de design ; le modèle, lui, n'en a pas besoin.
+- A region's body can mix its own text and sub-regions **in any order** (chapter text, scene 1, transition, scene 2…). *Question 2.*
+- At the root, text before, between or after regions is allowed (ADR 016's preamble becomes a special case).
+- **End marker**: when content follows a sub-region at the parent's level, the interface must make it legible (a discreet closing seam). Its design is a topic for the design session; the model itself does not need it.
 
-### 3.4 Registre `nabu.regions`
+### 3.4 Registry `nabu.regions`
 
-API de l'ADR 016 conservée, calculée depuis l'arbre au lieu des repères :
+ADR 016's API is kept, computed from the tree instead of the markers:
 
-- `list`, `tree`, `at(block)` (le plus proche ancêtre région), `of(block)`, `next` / `prev` / `parentOf`, `index` / `path` / `label` (numérotation `parent` / `document` / `none` inchangée) ;
-- `blocks` = le sous-arbre ; `ownBlocks` = les enfants qui ne sont pas des régions ; `wordCount` / `ownWordCount` en conséquence ;
-- `first` / `last` / `start` / `end` (indices racine des repères) disparaissent au profit du **nœud** de la région.
+- `list`, `tree`, `at(block)` (the nearest region ancestor), `of(block)`, `next` / `prev` / `parentOf`, `index` / `path` / `label` (numbering `parent` / `document` / `none` unchanged);
+- `blocks` = the subtree; `ownBlocks` = the children that are not regions; `wordCount` / `ownWordCount` accordingly;
+- `first` / `last` / `start` / `end` (root indices of the markers) disappear in favor of the region's **node**.
 
-### 3.5 Gestes : ce qui change
+### 3.5 Gestures: what changes
 
-Les identifiants de commandes de l'ADR 016 restent ; leur effet devient structurel. Chaque geste = un commit = une étape d'undo (ADR 015 inchangé).
+ADR 016's command identifiers remain; their effect becomes structural. Each gesture = one commit = one undo step (ADR 015 unchanged).
 
-| Commande | Effet dans le modèle à boîtes |
+| Command | Effect in the box model |
 |---|---|
-| `region:split` (Mod+Entrée) | coupe le bloc au curseur si besoin ; crée une région sœur du même type **juste après** la région courante et y **déplace** la suite du corps (blocs après le curseur) |
-| `region:insert` | crée une région (type donné) avant / après la courante, ou au curseur |
-| `region:merge-previous` / `-next` (maintien ⌫ / Suppr, 700 ms) | le corps de la région rejoint la fin de la précédente (resp. le corps de la suivante rejoint celle-ci), le conteneur vidé disparaît, son titre aussi |
-| `region:move` (+ `-up` / `-down`) | déplace le nœud avant / après sa sœur de même niveau (plus de calcul de plage) |
-| `region:promote` / `demote` | **structurel**, comme l'indentation d'une liste : rétrograder = devenir la dernière sous-région de la sœur précédente ; promouvoir = sortir juste après le parent. *Question 4* |
-| `region:unwrap` (nouveau) | dissout la région : le titre devient un paragraphe, le corps reste en place (règle `dissolveToParagraph` du Toggle) |
-| `region:next` / `prev` / `parent` | inchangés |
+| `region:split` (Mod+Enter) | cuts the block at the cursor if needed; creates a sibling region of the same type **right after** the current region and **moves** the rest of the body (blocks after the cursor) into it |
+| `region:insert` | creates a region (given type) before / after the current one, or at the cursor |
+| `region:merge-previous` / `-next` (hold ⌫ / Delete, 700 ms) | the region's body joins the end of the previous one (resp. the next body joins this one), the emptied container disappears, its title too |
+| `region:move` (+ `-up` / `-down`) | moves the node before / after its sibling of the same level (no more range computation) |
+| `region:promote` / `demote` | **structural**, like indenting a list: demoting = becoming the last sub-region of the previous sibling; promoting = leaving right after the parent. *Question 4* |
+| `region:unwrap` (new) | dissolves the region: the title becomes a paragraph, the body stays in place (the Toggle's `dissolveToParagraph` rule) |
+| `region:next` / `prev` / `parent` | unchanged |
 
-Clavier décidé en séance (2026-10-23, propriétaire) — détail en §3.9 :
+Keymap decided in session (2026-10-23, owner) — detail in §3.9:
 
-- **Entrée dans le titre** → début du corps (premier paragraphe créé s'il manque). Le titre n'est jamais coupé.
-- **Entrée sur un paragraphe vide** reste une Entrée ordinaire : un paragraphe vide est un choix d'auteur (respiration, silence), **pas** un signal de sortie (différence assumée avec le Toggle et les listes).
-- **Sortir** = commande explicite `region:exit`, **Mod+Shift+Entrée** : un paragraphe se crée juste après la région, au niveau du parent ; répétée, elle remonte d'un niveau (scène → chapitre → partie → racine). Aussi dans le menu slash.
-- **Mod+Entrée** = couper ici (`region:split`).
-- **Tab / Shift+Tab** = `region:demote` / `region:promote`, **seulement dans le titre**. Dans le corps, Tab garde son sens (listes, imbrication).
-- **Début de région = une seule position logique** : un Backspace au tout début du titre **ou** au tout début du premier élément du corps (quel que soit son type) déclenche la protection ; le **maintien** fusionne avec la région précédente (`region:merge-previous`). Symétrique : maintien de Suppr à la fin de la région précédente.
-- **Créer une région** : `:::` + espace dans un paragraphe vide ouvre un sélecteur (stratégie `choose`, ADR 017) des types **valides à cet endroit** ; le curseur arrive dans le titre. Une entrée de menu slash par type déclaré. `#` reste un titre simple.
-- **Fermer une région** (décidé 2026-10-26) : `:::` + **Entrée** dans un paragraphe vide (symétrique de `:::` + espace, comme les blocs conteneurs `:::` de Pandoc) = « la région finit ici ». Un sélecteur liste les régions qui contiennent le curseur, de la plus proche à la plus lointaine (« Fermer la scène 2.2 — Le passeur », « Fermer le chapitre 2 »…) ; une seule région englobante → fermeture directe. Effet : le paragraphe `:::` disparaît et tout ce qui le **suivait** dans la région choisie (et dans les régions intermédiaires) en sort, juste après elle, au niveau de son parent ; le curseur au début de ce qui sort (un paragraphe vide est créé s'il n'y a rien). Différence assumée avec Mod+Shift+Entrée, qui crée un paragraphe après la région sans rien déplacer (identiques en fin de région).
+- **Enter in the title** → start of the body (first paragraph created if missing). The title is never split.
+- **Enter on an empty paragraph** remains an ordinary Enter: an empty paragraph is an author's choice (breathing room, silence), **not** an exit signal (a deliberate difference from the Toggle and lists).
+- **Exiting** = explicit command `region:exit`, **Mod+Shift+Enter**: a paragraph is created right after the region, at the parent's level; repeated, it goes up one level (scene → chapter → part → root). Also in the slash menu.
+- **Mod+Enter** = cut here (`region:split`).
+- **Tab / Shift+Tab** = `region:demote` / `region:promote`, **only in the title**. In the body, Tab keeps its meaning (lists, nesting).
+- **Start of region = a single logical position**: a Backspace at the very start of the title **or** at the very start of the first element of the body (whatever its type) triggers the protection; the **hold** merges with the previous region (`region:merge-previous`). Symmetric: hold Delete at the end of the previous region.
+- **Creating a region**: `:::` + space in an empty paragraph opens a chooser (`choose` strategy, ADR 017) of the types **valid at that place**; the cursor lands in the title. One slash menu entry per declared type. `#` remains a simple heading.
+- **Closing a region** (decided 2026-10-26): `:::` + **Enter** in an empty paragraph (symmetric to `:::` + space, like Pandoc's `:::` container blocks) = "the region ends here". A chooser lists the regions that contain the cursor, from the nearest to the farthest ("Close scene 2.2 — The ferryman", "Close chapter 2"…); a single enclosing region → direct closing. Effect: the `:::` paragraph disappears and everything that **followed** it in the chosen region (and in the intermediate regions) leaves it, right after it, at the level of its parent; the cursor at the start of what leaves (an empty paragraph is created if there is nothing). Deliberate difference from Mod+Shift+Enter, which creates a paragraph after the region without moving anything (identical at the end of a region).
 
-La **protection** de l'ADR 016 (question 1) reste : aucune fusion silencieuse de texte à travers une frontière (veto `onBeforeMerge`, par ancêtre région).
+ADR 016's **protection** (question 1) remains: no silent merge of text across a boundary (`onBeforeMerge` veto, per region ancestor).
 
-### 3.6 Rendu
+### 3.6 Rendering
 
-- La couture actuelle (planche 8b : libellé, filet, indice ambre, filet qui se vide) devient l'**en-tête** du conteneur, avec le titre éditable sur place ; `role="heading"`, `aria-level` = niveau, inchangés.
-- Le corps ne porte **aucune** bordure, marge ou fond par défaut : à l'œil, le texte coule d'une région à l'autre.
-- Rendu paresseux (chantier à part) : le conteneur est l'unité naturelle.
-- Repère de fin (« seulement si nécessaire ») et rail de marge de la région du curseur : voir §8 (lot D).
+- The current seam (board 8b: label, hairline, amber hint, draining hairline) becomes the container's **header**, with the title editable in place; `role="heading"`, `aria-level` = level, unchanged.
+- The body carries **no** border, margin or background by default: to the eye, the text flows from one region to the next.
+- Lazy rendering (separate workstream): the container is the natural unit.
+- End marker ("only if needed") and margin rail of the cursor's region: see §8 (lot D).
 
-### 3.7 Sérialisation
+### 3.7 Serialization
 
-- **JSON** : un bloc à enfants, `{ type: 'region', props: { regionType, fields }, delta: <titre>, children: [...] }` — aller-retour exact.
-- **HTML** : `<section data-nabu-region="<type>" data-nabu-fields="…"><hN>titre</hN>…corps…</section>`. Relu exactement ; un `<section>` sans ces attributs reste ce qu'il est aujourd'hui.
-- **Markdown** : le commentaire porteur de l'ADR 016 ouvre la région (`<!-- region:chapter {json} -->` suivi du titre `## …`, qui est cette fois le **vrai titre** et non un écho). La fin est **déduite** à la lecture (prochaine ouverture de même niveau ou plus haut, fin du parent, fin du document) ; un commentaire de fin `<!-- /region -->` n'est écrit **que** lorsque du contenu suit au niveau du parent. *Question 5.*
-- **Presse-papiers** : une sélection de **texte** ne copie que du texte (§3.9) ; la structure voyage par les gestes de structure (couture, future sélection de bloc). Coller une région dans une liste / un toggle → règle de §3.1.
+- **JSON**: a block with children, `{ type: 'region', props: { regionType, fields }, delta: <title>, children: [...] }` — exact round trip.
+- **HTML**: `<section data-nabu-region="<type>" data-nabu-fields="…"><hN>title</hN>…body…</section>`. Read back exactly; a `<section>` without these attributes remains what it is today.
+- **Markdown**: ADR 016's data comment opens the region (`<!-- region:chapter {json} -->` followed by the `## …` title, which this time is the **real title** and not an echo). The end is **deduced** on reading (next opening of the same or a higher level, end of the parent, end of the document); an end comment `<!-- /region -->` is written **only** when content follows at the parent's level. *Question 5.*
+- **Clipboard**: a **text** selection copies only text (§3.9); the structure travels through structure gestures (seam, future block selection). Pasting a region into a list / a toggle → rule of §3.1.
 
 ### 3.8 Collaboration
 
-- Les déplacements d'arbre Loro sont sûrs en concurrence (pas de cycles, dernier écrivain gagnant par nœud). Deux auteurs qui coupent au même endroit : les blocs déplacés aboutissent dans l'une des deux nouvelles régions, l'autre reste vide et visible — pas de perte, pas de conflit structurel.
-- Une région = un sous-arbre : la base de futures permissions, synchronisation ou chargement par chapitre (Orduin).
+- Loro tree moves are safe under concurrency (no cycles, last writer wins per node). Two authors cutting at the same place: the moved blocks end up in one of the two new regions, the other stays empty and visible — no loss, no structural conflict.
+- A region = a subtree: the basis for future permissions, synchronization or per-chapter loading (Orduin).
 
-### 3.9 Le titre est un champ ; une sélection de texte ne touche jamais la structure
+### 3.9 The title is a field; a text selection never touches the structure
 
-Décidé le 2026-10-23 (propriétaire). **Stockage** et **comportement** sont distincts : le titre est stocké comme un texte Loro dans la région (collaboration, undo, marques inline), mais il **se comporte comme un champ verrouillé**.
+Decided on 2026-10-23 (owner). **Storage** and **behavior** are distinct: the title is stored as a Loro text in the region (collaboration, undo, inline marks), but it **behaves like a locked field**.
 
-- **Traversable par le curseur simple** : ↓ / → à la fin du bloc au-dessus d'une région → début du titre ; ↑ / ← au début du premier élément du corps → fin du titre ; ↓ / → à la fin du titre → début du corps. Le **libellé** calculé (« Chapitre 2 ») n'est jamais un arrêt du curseur.
-- **Jamais fusionné, coupé ni converti** : rien n'entre dans le titre ni n'en sort par ⌫ / Suppr ; Entrée ne le coupe pas ; les raccourcis de blocs (`# `, `- `, `> `…) et « transformer en… » ne s'y appliquent pas ; un collage multi-blocs y arrive **à plat**, sur une ligne.
-- **Exclu des sélections étendues** qui ne sont pas entièrement en lui :
-  - le modèle de sélection de Nabu exclut les titres de toute plage qui commence ou finit hors d'eux : suppression, frappe par-dessus, copie, marques les ignorent ;
-  - ils ne sont pas surlignés pendant une telle sélection (CSS, piloté par l'état de sélection ; le DOM du titre ne change pas pendant un glisser, pour ne pas perturber la sélection native) ;
-  - une extrémité qui s'étend (Shift+flèches, glisser) et tomberait dans un titre le **saute** ;
-  - une sélection qui **commence** dans un titre y reste **bornée** (comme un champ de formulaire) ;
-  - **Ctrl+A** dans un titre sélectionne le titre ; ailleurs, tout le texte du document **sans** les titres.
-- **Conséquences assumées** : une suppression à cheval sur deux régions efface le texte des deux côtés mais **ne les fusionne pas** (titre intact) ; **Ctrl+A puis Suppr** vide le texte et **garde le squelette** (régions et titres) ; supprimer, fusionner ou déplacer une région se fait par un geste de structure explicite (maintien, couture, future sélection de bloc). Principe : *une sélection de texte ne touche que du texte*.
+- **Traversable by the plain cursor**: ↓ / → at the end of the block above a region → start of the title; ↑ / ← at the start of the first body element → end of the title; ↓ / → at the end of the title → start of the body. The computed **label** ("Chapter 2") is never a cursor stop.
+- **Never merged, split or converted**: nothing enters or leaves the title through ⌫ / Delete; Enter does not split it; block shortcuts (`# `, `- `, `> `…) and "turn into…" do not apply to it; a multi-block paste arrives there **flattened**, on one line.
+- **Excluded from extended selections** that are not entirely within it:
+  - Nabu's selection model excludes titles from any range that starts or ends outside them: deletion, typing over, copy, marks ignore them;
+  - they are not highlighted during such a selection (CSS, driven by the selection state; the title's DOM does not change during a drag, so as not to disturb the native selection);
+  - an extending end (Shift+arrows, drag) that would fall in a title **skips** it;
+  - a selection that **starts** in a title stays **bounded** there (like a form field);
+  - **Ctrl+A** in a title selects the title; elsewhere, all the document's text **without** the titles.
+- **Accepted consequences**: a deletion straddling two regions erases the text on both sides but **does not merge them** (title intact); **Ctrl+A then Delete** empties the text and **keeps the skeleton** (regions and titles); deleting, merging or moving a region is done through an explicit structure gesture (hold, seam, future block selection). Principle: *a text selection only touches text*.
 
-## 4. Ce qui est réutilisé, ce qui est réécrit
+## 4. What is reused, what is rewritten
 
-**Gardé tel quel** : `types.js` (déclaration, validation des champs), la numérotation et les gabarits (`format.js` en partie), `messages.js`, la stratégie `hold` et son rendu (`Region.svelte`, indice et filet), le moteur de commandes (ADR 017), le crochet générique `onBeforeMerge`, les helpers de sous-fil.
+**Kept as is**: `types.js` (declaration, field validation), numbering and templates (`format.js` in part), `messages.js`, the `hold` strategy and its rendering (`Region.svelte`, hint and hairline), the command engine (ADR 017), the generic `onBeforeMerge` hook, the sub-thread helpers.
 
-**Réécrit** : `region.svelte.js` (bloc vide → MegaBlock à en-tête), `regions.svelte.js` (registre depuis l'arbre), `normalize.js` (règle d'imbrication), `actions.js` / `insert.js` / `facts.js` (opérations structurelles), sérialiseurs markdown / HTML, et les tests Regions (unitaires et e2e), réécrits avec les nouvelles sémantiques.
+**Rewritten**: `region.svelte.js` (empty block → MegaBlock with a header), `regions.svelte.js` (registry from the tree), `normalize.js` (nesting rule), `actions.js` / `insert.js` / `facts.js` (structural operations), markdown / HTML serializers, and the Regions tests (unit and e2e), rewritten with the new semantics.
 
-**Supprimé** : la surcharge de `Block#dragRange()` par la région (le crochet générique reste : un conteneur se déplace déjà avec son sous-arbre).
+**Removed**: the region's override of `Block#dragRange()` (the generic hook remains: a container already moves with its subtree).
 
-## 5. Découpage
+## 5. Breakdown
 
-0. **Séance de design** : clavier décidé (§3.5, §3.9). Restent à dessiner sur le canvas : le **repère de fin** (pistes A toujours visible / B seulement si nécessaire / C rail de marge selon le curseur ; préférence B + C), la sortie Mod+Shift+Entrée, le sélecteur `:::`.
-1. **Lot A — modèle** : bloc conteneur, titre en en-tête, imbrication + normaliseur, registre, numérotation, rendu de la couture actuelle avec titre éditable, JSON. Les commandes existantes réécrites sur la structure sans changer leurs raccourcis.
-2. **Lot B — clavier et sélection** : titre-champ (§3.9 : flèches, verrouillage, exclusion des sélections, Ctrl+A), protection du début de région, `exit`, promote / demote structurels dans le titre, `unwrap`, `:::` et menu slash.
-3. **Lot C — échanges** : markdown, HTML, presse-papiers, collages.
+0. **Design session**: keymap decided (§3.5, §3.9). Still to be drawn on the canvas: the **end marker** (options A always visible / B only if needed / C margin rail following the cursor; preference B + C), the Mod+Shift+Enter exit, the `:::` chooser.
+1. **Lot A — model**: container block, title as header, nesting + normalizer, registry, numbering, rendering of the current seam with an editable title, JSON. The existing commands rewritten on the structure without changing their shortcuts.
+2. **Lot B — keyboard and selection**: title-as-field (§3.9: arrows, locking, exclusion from selections, Ctrl+A), protection of the start of a region, `exit`, structural promote / demote in the title, `unwrap`, `:::` and slash menu.
+3. **Lot C — exchanges**: markdown, HTML, clipboard, paste.
 
-## 6. Questions — toutes décidées le 2026-10-23 (propriétaire) selon la recommandation en gras
+## 6. Questions — all decided on 2026-10-23 (owner) according to the recommendation in bold
 
-1. **Titre** = en-tête texte du conteneur (édité sur place, collaboratif, marques inline) **ou** un champ `title` texte brut édité ailleurs ? → **en-tête**.
-2. **Corps mixtes** : texte du parent permis entre et après les sous-régions ? → **oui**, avec une couture de fin dessinée en séance de design.
-3. **Niveaux** : garder `level` comme règle d'imbrication (sous-région strictement plus profonde, normaliseur correcteur) ? → **oui**.
-4. **Promouvoir** une scène au rang de chapitre : les scènes qui la suivent dans le même chapitre **la suivent** (deviennent ses sous-régions, comme dans le modèle à repères) ou **restent** dans l'ancien chapitre ? → **elles la suivent** (le découpage visible du texte ne change pas).
-5. **Markdown** : commentaire de fin seulement quand il est nécessaire ? → **oui**.
+1. **Title** = text header of the container (edited in place, collaborative, inline marks) **or** a plain-text `title` field edited elsewhere? → **header**.
+2. **Mixed bodies**: parent text allowed between and after sub-regions? → **yes**, with an end marker drawn in the design session.
+3. **Levels**: keep `level` as the nesting rule (sub-region strictly deeper, corrective normalizer)? → **yes**.
+4. **Promoting** a scene to chapter rank: do the scenes that follow it in the same chapter **follow it** (become its sub-regions, as in the marker model) or **stay** in the old chapter? → **they follow it** (the visible division of the text does not change).
+5. **Markdown**: end comment only when it is necessary? → **yes**.
 
-## 7. Notes d'implémentation — lot C (2026-10-26)
+## 7. Implementation notes — lot C (2026-10-26)
 
-Formes de référence : `docs/design/import-export.md` (« The region exception »), `docs/design/clipboard-format.md`. Code : `blocks/region/format.js` (commentaire, `scanRegion` : étendue d'une région), `serialize.js` (formes texte, règle du commentaire de fin), `region.svelte.js` (statiques).
+Reference forms: `docs/design/import-export.md` ("The region exception"), `docs/design/clipboard-format.md`. Code: `blocks/region/format.js` (comment, `scanRegion`: extent of a region), `serialize.js` (text forms, end comment rule), `region.svelte.js` (statics).
 
-- **Import markdown** : règle à étendue propre (comme le toggle) ; `scanRegion` parcourt les lignes avec une pile des sous-régions ouvertes (un `<!-- /region -->` ferme la plus interne ; une ouverture de niveau ≤ ferme tout ce qui est ouvert jusqu'à elle) et saute les blocs de code. Le titre est le titre ATX **juste après** le commentaire (niveau ignoré) ; sinon titre vide. Un `<!-- /region -->` orphelin reste du texte littéral.
-- **Écriture du commentaire de fin** : seulement si ce qui suit la région n'est ni la fin ni l'ouverture d'une région de niveau ≤ ; si le parent ferme, le dernier enfant ferme aussi (sinon le commentaire du parent serait pris pour le sien). Titre vide : commentaire seul, ou `##` nu quand le corps commence par un titre.
-- **Cœur** : seul ajout générique, `after` (les frères suivants) à côté de `before` dans le contexte des sérialiseurs markdown statiques (`nabu.svelte.js`). Le chemin d'instance (export du document) lit ses frères dans l'arbre.
-- **Import HTML** : `section[data-nabu-region]` (priorité 100) ; le titre est le **premier enfant élément** s'il est `h1`–`h6` (pas « le premier titre quelconque » : un titre plus loin resterait un titre du corps).
+- **Markdown import**: rule with its own extent (like the toggle); `scanRegion` walks the lines with a stack of the open sub-regions (a `<!-- /region -->` closes the innermost; an opening of level ≤ closes everything open up to it) and skips code blocks. The title is the ATX heading **right after** the comment (level ignored); otherwise empty title. An orphan `<!-- /region -->` remains literal text.
+- **Writing the end comment**: only if what follows the region is neither the end nor the opening of a region of level ≤; if the parent closes, the last child closes too (otherwise the parent's comment would be taken for its own). Empty title: comment alone, or a bare `##` when the body starts with a heading.
+- **Core**: the only generic addition, `after` (the following siblings) next to `before` in the context of the static markdown serializers (`nabu.svelte.js`). The instance path (document export) reads its siblings in the tree.
+- **HTML import**: `section[data-nabu-region]` (priority 100); the title is the **first element child** if it is `h1`–`h6` (not "the first heading of any kind": a heading further down would remain a heading of the body).
 
 ## 8. Implementation notes — lot D, default UI (2026-10-26)
 
@@ -157,7 +159,7 @@ Decided on the design boards 9 and 11 (owner). Code: `blocks/region/Region.svelt
 
 ## 9. Implementation notes — lot E, closing a region (2026-10-26)
 
-`:::` + **Enter** (§3.5, "Fermer une région"). Code: `blocks/region/close.js` (trigger, chain, options, the operation), `commands.js` (`region:close`), `messages.js` (`closeCommand`, `closeOption`, `closeChooser`, `closeFooter`).
+`:::` + **Enter** (§3.5, "Closing a region"). Code: `blocks/region/close.js` (trigger, chain, options, the operation), `commands.js` (`region:close`), `messages.js` (`closeCommand`, `closeOption`, `closeChooser`, `closeFooter`).
 
 - **Trigger** (`onBeforeInput`, `insertParagraph`): a default paragraph without children that is a DIRECT child of a region body, whose text is `:::` followed by spaces only, collapsed caret at its end. Anywhere else (root, list item, other text, caret elsewhere, a selection) Enter is untouched. The `:::` + Space hook of lot B2 is unchanged; the extension tries the close first, then the creation.
 - **Command** `region:close`, no default key. `exec('region:close', { region })` (a `Region`, its block or its id) closes that ancestor directly; without data, the innermost. The caret block must be a closing mark (the `:::` paragraph, or an empty default paragraph in a region body), else nothing happens. `when` tests the same. Closing a region that does not contain the caret block is refused (false, no change).
@@ -167,3 +169,7 @@ Decided on the design boards 9 and 11 (owner). Code: `blocks/region/Region.svelt
 - **Cancel** (Escape, click away, any other key): nothing changes and no undo step exists; the paragraph keeps its `:::`. The Enter is NOT applied (the trigger consumed it to open the chooser): the user can press Enter again to reopen it, or type on.
 - **At the end of a region** the result equals `region:exit` (Mod-Shift-Enter) from the same position (both leave one empty paragraph after the region); tested. The end marker (lot D) appears where text now follows the region.
 - **Core**: one generic change in `utils/command-confirm.svelte.js`: in a `choose` confirmation a REPEATING Enter never confirms (like an `invite`, "a repeat never confirms"). Without it, an Enter held down long enough to repeat would open this chooser and pick its first option at once. The core still knows no region.
+
+
+## Note (2026-10-27)
+Lots A to E are implemented (audit 2026-10, entries of 2026-10-23 to 2026-10-26). The end marker, the margin rail and the `:::` chooser left to the design session in §5 point 0 were drawn on boards 9 and 11 and delivered in lot D (§8).

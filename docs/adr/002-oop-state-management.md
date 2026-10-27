@@ -1,16 +1,17 @@
-# ADR 002 : Gestion d'état via Classes Svelte 5 (OOP)
+# ADR 002 — State Management with Svelte 5 Classes (OOP)
 
-## Statut
-Accepté
+**Status:** Accepted
+**Date:** 2026-02-19
+**Original:** [French](fr/002-oop-state-management.md)
 
-## Contexte
-Svelte 5 introduit les Runes (`$state`, `$derived`). Bien que Svelte soit souvent utilisé de manière fonctionnelle, la complexité d'un moteur d'édition (synchronisation CRDT, hiérarchie, méthodes de transformation) nécessite une encapsulation forte.
+## Context
+Svelte 5 introduces Runes (`$state`, `$derived`). Although Svelte is often used in a functional style, the complexity of an editing engine (CRDT synchronization, hierarchy, transformation methods) calls for strong encapsulation.
 
-## Décision
-Utilisation systématique de **Classes Svelte (`.svelte.js`)** pour représenter les entités du moteur (`Nabu`, `Block`, `MegaBlock`).
+## Decision
+Systematic use of **Svelte classes (`.svelte.js`)** to represent the engine's entities (`Nabu`, `Block`, `MegaBlock`).
 
-## Conséquences
-*   **Encapsulation :** Chaque bloc possède sa propre logique de synchronisation Loro et son état réactif.
-*   **Extensibilité :** Utilisation de l'héritage (`MegaBlock extends Block`) pour partager la logique structurelle.
-*   **Lisibilité :** Les méthodes de mutation (ex: `block.updateText()`) sont regroupées avec la donnée, facilitant la maintenance et la compréhension du flux.
-*   **Performance :** Les Runes dans les classes permettent une réactivité "fine-grained" (seule la propriété modifiée déclenche un re-render, pas tout l'objet).
+## Consequences
+*   **Encapsulation:** Each block owns its Loro synchronization logic and its reactive state.
+*   **Extensibility:** Inheritance (`MegaBlock extends Block`) is used to share structural logic.
+*   **Readability:** Mutation methods (e.g. `block.updateText()`) are grouped with the data they act on, which makes the flow easier to maintain and understand.
+*   **Performance:** Runes inside classes give fine-grained reactivity (only the modified property triggers a re-render, not the whole object).

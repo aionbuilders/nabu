@@ -1,41 +1,42 @@
-# ADR 009 : Comportement Global du Toggle de Marks Rich Text
+# ADR 009 — Global Toggle Behavior for Rich Text Marks
 
-## Statut
-Accepté — *Mars 2026*
+**Status:** Accepted
+**Date:** 2026-03-12
+**Original:** [French](fr/009-rich-text-toggle-behavior.md)
 
-## Contexte
+## Context
 
-Lorsqu'un raccourci clavier applique une mark (ex: Ctrl+B pour le gras) sur une sélection pouvant couvrir **plusieurs blocs**, le comportement attendu n'était pas défini. Deux approches étaient possibles :
+When a keyboard shortcut applies a mark (e.g. Ctrl+B for bold) to a selection that may span **several blocks**, the expected behavior was not defined. Two approaches were possible:
 
-**Option A — Toggle par bloc indépendant :** Chaque bloc décide seul de toggler en fonction de son propre état interne. Problème : un bloc entièrement gras retire le gras, pendant qu'un bloc partiellement gras l'applique → résultat incohérent.
+**Option A — Independent per-block toggle:** Each block decides on its own whether to toggle, based on its own internal state. Problem: a fully bold block removes bold while a partially bold block applies it, which gives an inconsistent result.
 
-**Option B — Toggle global (standard éditeur) :** On évalue l'état de la mark sur l'ensemble de la sélection, puis on applique ou retire uniformément.
+**Option B — Global toggle (editor standard):** The state of the mark is evaluated over the whole selection, then applied or removed uniformly.
 
-## Décision
+## Decision
 
-Adoption du **comportement standard des éditeurs** (Notion, Word, Google Docs, ProseMirror) :
+Adopt the **standard editor behavior** (Notion, Word, Google Docs, ProseMirror):
 
-> **Si la mark est entièrement active sur toute la sélection → la retirer partout.
-> Sinon (partielle ou absente) → l'appliquer partout.**
+> **If the mark is fully active over the whole selection → remove it everywhere.
+> Otherwise (partial or absent) → apply it everywhere.**
 
-Implémenté dans `RichTextExtension` (`src/behaviors/text/rich-text.extension.js`) via deux passes :
+Implemented in `RichTextExtension` (`src/behaviors/text/rich-text.extension.js`) in two passes:
 
 ```javascript
-// Passe 1 : collecte et évaluation globale
-const targets = []; // { behavior, sel } pour chaque bloc sélectionné
+// Pass 1: collect and evaluate globally
+const targets = []; // { behavior, sel } for each selected block
 const isFullyActive = targets.every(({ behavior, sel }) => behavior.isMarkActive(markName, sel));
 
-// Passe 2 : action uniforme
+// Pass 2: uniform action
 for (const { behavior, sel } of targets) {
     if (isFullyActive) behavior.removeMark(markName, sel);
     else behavior.applyMark(markName, true, sel);
 }
 ```
 
-La méthode `isMarkActive(markName, sel)` sur `TextBehavior` retourne `true` uniquement si **chaque opération** du delta dans la plage sélectionnée possède la mark. Un seul segment sans la mark suffit à retourner `false`.
+The method `isMarkActive(markName, sel)` on `TextBehavior` returns `true` only if **every operation** of the delta within the selected range carries the mark. A single segment without the mark is enough to return `false`.
 
-## Conséquences
+## Consequences
 
-- **Cohérence UX :** Comportement identique à tous les éditeurs grand public — aucune surprise utilisateur
-- **Multi-blocs natif :** Fonctionne correctement sur une sélection traversant N blocs
-- **Zéro duplication :** La logique de détection (`isMarkActive`) reste dans `TextBehavior`, seule la coordination multi-blocs est dans l'extension
+- **UX consistency:** Identical behavior to all mainstream editors — no surprise for the user
+- **Native multi-block support:** Works correctly on a selection crossing N blocks
+- **Zero duplication:** The detection logic (`isMarkActive`) stays in `TextBehavior`; only the multi-block coordination lives in the extension

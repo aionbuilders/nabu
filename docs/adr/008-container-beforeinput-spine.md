@@ -1,23 +1,24 @@
-# ADR 008 : Logique Multi-Blocs Partagée — Pattern Spine (container.utils.js)
+# ADR 008 — Shared Multi-Block Logic: the Spine Pattern (container.utils.js)
 
-## Statut
-Accepté — *Mars 2026*
+**Status:** Accepted
+**Date:** 2026-03-12
+**Original:** [French](fr/008-container-beforeinput-spine.md)
 
-## Contexte
+## Context
 
-Lorsqu'une sélection traverse plusieurs blocs (ex: sélectionner du texte de la fin d'un paragraphe jusqu'au milieu d'un item de liste imbriqué), l'événement `beforeinput` doit être géré par le **Lowest Common Ancestor (LCA)** de la sélection dans l'arbre des blocs.
+When a selection crosses several blocks (e.g. selecting text from the end of a paragraph to the middle of a nested list item), the `beforeinput` event must be handled by the **Lowest Common Ancestor (LCA)** of the selection in the block tree.
 
-Deux classes jouent ce rôle de container :
-- **`MegaBlock`** : LCA pour les sélections intra-container (ex: deux items d'une même liste)
-- **`Nabu`** : LCA de dernier recours pour les sélections qui traversent des blocs racines
+Two classes play this container role:
+- **`MegaBlock`**: the LCA for intra-container selections (e.g. two items of the same list)
+- **`Nabu`**: the LCA of last resort for selections that cross root blocks
 
-Le problème initial : `Nabu.beforeinput` et `MegaBlock.beforeinput` implémentaient deux logiques distinctes. La version de `Nabu` était une version naïve et ancienne (scan linéaire, API `mergeWith` dépréciée), tandis que `MegaBlock` avait développé une logique correcte basée sur les "spines".
+The initial problem: `Nabu.beforeinput` and `MegaBlock.beforeinput` implemented two distinct logics. The `Nabu` version was a naive, old one (linear scan, deprecated `mergeWith` API), while `MegaBlock` had developed a correct logic based on "spines".
 
-## Décision
+## Decision
 
-Extraction de la logique `beforeinput` multi-blocs dans **`src/blocks/container.utils.js`**, exportée comme `handleContainerBeforeInput(container, nabu, event)`.
+Extract the multi-block `beforeinput` logic into **`src/blocks/container.utils.js`**, exported as `handleContainerBeforeInput(container, nabu, event)`.
 
-Les deux classes délèguent :
+Both classes delegate to it:
 ```javascript
 // MegaBlock
 beforeinput(event) {
@@ -30,56 +31,56 @@ beforeinput(e) {
 }
 ```
 
-## Mécanisme — Approche Spine
+## Mechanism — the spine approach
 
-Pour chaque extrémité de la sélection (`startBlock`, `endBlock`), on remonte la chaîne de parents jusqu'au container en construisant une **spine** (épine dorsale) :
+For each end of the selection (`startBlock`, `endBlock`), we walk up the chain of parents to the container, building a **spine**:
 
 ```
 startBlock
-  └── parent (listItem)     → supprime les next-siblings de startBlock
-        └── parent (list)   → supprime les next-siblings de listItem
-              └── container  ← arrêt
+  └── parent (listItem)     → deletes the next siblings of startBlock
+        └── parent (list)   → deletes the next siblings of listItem
+              └── container  ← stop
 ```
 
-La **spine start** prune les blocs après chaque nœud (ce qui est "après le début" = sélectionné = à supprimer).
-La **spine end** prune les blocs avant chaque nœud (ce qui est "avant la fin" = sélectionné = à supprimer).
+The **start spine** prunes the blocks after each node (what comes "after the start" is selected and therefore to be deleted).
+The **end spine** prunes the blocks before each node (what comes "before the end" is selected and therefore to be deleted).
 
-Une fois les spines construites, on identifie les **enfants directs du container** dans chaque spine, puis on supprime les blocs intermédiaires entre ces deux enfants.
+Once the spines are built, we identify the **direct children of the container** in each spine, then delete the intermediate blocks between those two children.
 
-## Problème d'unification — Terminaison des spines
+## Unification problem — how the spines terminate
 
-La différence clé entre `MegaBlock` et `Nabu` est la façon dont la spine se termine :
+The key difference between `MegaBlock` and `Nabu` is how the spine terminates:
 
-- **MegaBlock** : le container est pushé dans la spine (boucle `while at(-1) !== this`), donc l'enfant direct = `spine.at(-2)`
-- **Nabu** : les blocs racines ont `parent = null`, la boucle break avant que Nabu soit pushé, donc l'enfant direct = `spine.at(-1)`
+- **MegaBlock**: the container is pushed onto the spine (loop `while at(-1) !== this`), so the direct child is `spine.at(-2)`
+- **Nabu**: root blocks have `parent = null`, so the loop breaks before Nabu is pushed, and the direct child is `spine.at(-1)`
 
-**Solution unifiée :**
+**Unified solution:**
 ```javascript
 const directChild = (spine) => spine.at(-1) === container ? spine.at(-2) : spine.at(-1);
 ```
 
-## Conséquences
+## Consequences
 
-- **Cohérence :** `Nabu` et `MegaBlock` utilisent exactement la même logique, plus aucun risque de divergence
-- **Maintenabilité :** Un seul endroit à modifier pour les opérations multi-blocs
-- **Correctness :** La logique spine gère correctement les structures imbriquées arbitraires, contrairement à l'ancien scan linéaire de `Nabu`
-- **Extensibilité :** Tout futur container (ex: tableau, colonnes) peut utiliser `handleContainerBeforeInput` en passant `{ children, commit }` + sa référence nabu
+- **Consistency:** `Nabu` and `MegaBlock` use exactly the same logic; there is no longer any risk of divergence
+- **Maintainability:** A single place to modify for multi-block operations
+- **Correctness:** The spine logic correctly handles arbitrarily nested structures, unlike `Nabu`'s old linear scan
+- **Extensibility:** Any future container (e.g. table, columns) can use `handleContainerBeforeInput` by passing `{ children, commit }` plus its nabu reference
 
-## Pourquoi pas `Nabu extends MegaBlock`
+## Why not `Nabu extends MegaBlock`
 
-L'héritage a été envisagé mais rejeté pour trois raisons :
-1. **Dépendance circulaire** : `Block → Nabu`, `MegaBlock → Block`, `Nabu → MegaBlock → Block → Nabu`
-2. **Incompatibilité constructeur** : `MegaBlock(nabu, node)` — Nabu n'a pas de `LoroTreeNode`
-3. **Héritage de baggage inutile** : `selected`, `element`, `behaviors`, `parent`, `index` n'ont aucun sens sur Nabu
+Inheritance was considered but rejected for three reasons:
+1. **Circular dependency:** `Block → Nabu`, `MegaBlock → Block`, `Nabu → MegaBlock → Block → Nabu`
+2. **Constructor incompatibility:** `MegaBlock(nabu, node)` — Nabu has no `LoroTreeNode`
+3. **Inheriting useless baggage:** `selected`, `element`, `behaviors`, `parent` and `index` have no meaning on Nabu
 
 ## Addendum — `deleteRange` (P-44)
 
-La logique spine existait en deux exemplaires (`handleContainerBeforeInput` et `deleteSelectionContent`, utilisé par la coupe et le collage) qui avaient divergé : la coupe détruisait la racine commune aux deux spines (document corrompu), et les deux déplaçaient les survivants de la spine de fin dans le mauvais ordre. Il n'y a plus qu'une implémentation, `deleteRange(nabu, { startBlock, startOffset, endBlock, endOffset })` ; `handleContainerBeforeInput` (Backspace, frappe, Entrée sur une sélection) et `deleteSelectionContent` (coupe, collage) l'appellent.
+The spine logic existed in two copies (`handleContainerBeforeInput` and `deleteSelectionContent`, used by cut and paste), and they had diverged: cut destroyed the root common to both spines (corrupting the document), and both moved the survivors of the end spine in the wrong order. There is now a single implementation, `deleteRange(nabu, { startBlock, startOffset, endBlock, endOffset })`; `handleContainerBeforeInput` (Backspace, typing, Enter on a selection) and `deleteSelectionContent` (cut, paste) both call it.
 
-Algorithme (générique, aucun type de bloc) :
-- LCA des deux blocs ; spine de début = `startBlock` → enfant du LCA, spine de fin idem.
-- Détruits : les enfants du LCA entre les deux spines ; les frères suivants de chaque nœud de la spine de début (et les enfants du bloc de début) ; les frères précédents de chaque nœud de la spine de fin ; les nœuds de la spine de fin eux-mêmes (leur texte est dans la sélection).
-- Survivants : ce qui suit le point de fin dans les blocs partiellement sélectionnés de la spine de fin, dans l'ordre du document (enfants de `endBlock`, ses frères suivants, ceux de son parent…), déplacés après `startBlock` (`wrapOrphan` pour `requiredParent`) AVANT la destruction de leurs anciens ancêtres (supprimer un nœud Loro supprime son sous-arbre).
-- Cas « bloc de début ancêtre du bloc de fin » (sélection du texte d'un hybride jusque dans son corps) : le reste du corps reste en place ; seul le premier bloc de la spine de fin qui a un texte propre est retiré, ses survivants prenant sa place.
-- Texte : tête du bloc de début + queue du bloc de fin fusionnées (`absorbs`) ; les enfants de `endBlock` sont adoptés par le bloc de début s'il sait en porter, sinon promus.
-- Un seul `commit` (une étape d'annulation) ; les normaliseurs (listes…) nettoient ensuite les invariants propres aux types.
+Algorithm (generic, no block type involved):
+- LCA of the two blocks; start spine = `startBlock` → child of the LCA; end spine likewise.
+- Destroyed: the children of the LCA between the two spines; the next siblings of each node of the start spine (and the children of the start block); the previous siblings of each node of the end spine; the nodes of the end spine themselves (their text is inside the selection).
+- Survivors: whatever follows the end point in the partially selected blocks of the end spine, in document order (children of `endBlock`, its next siblings, those of its parent…), moved after `startBlock` (`wrapOrphan` for `requiredParent`) BEFORE their former ancestors are destroyed (deleting a Loro node deletes its subtree).
+- Case "start block is an ancestor of the end block" (selection from the text of a hybrid block into its body): the rest of the body stays in place; only the first block of the end spine that has its own text is removed, and its survivors take its place.
+- Text: the head of the start block and the tail of the end block are merged (`absorbs`); the children of `endBlock` are adopted by the start block if it can carry children, otherwise promoted.
+- A single `commit` (one undo step); the normalizers (lists…) then clean up the invariants specific to each type.

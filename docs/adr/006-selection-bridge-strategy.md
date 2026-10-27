@@ -1,17 +1,18 @@
-# ADR 006 : Stratégie de Bridge de Sélection (DOM ↔ Modèle)
+# ADR 006 — Selection Bridge Strategy (DOM ↔ Model)
 
-## Statut
-Accepté
+**Status:** Accepted
+**Date:** 2026-02-22
+**Original:** [French](fr/006-selection-bridge-strategy.md)
 
-## Contexte
-Dans une architecture "Single ContentEditable", le navigateur gère une sélection DOM brute (`Node`, `Offset`) qui n'a aucun sens pour le CRDT (Loro), lequel attend des offsets textuels linéaires (`blockId`, `index`). De plus, le rendu réactif de Svelte risque de détruire le nœud de texte focalisé par le curseur à chaque changement d'état.
+## Context
+In a single-contenteditable architecture, the browser manages a raw DOM selection (`Node`, `Offset`) that means nothing to the CRDT (Loro), which expects linear text offsets (`blockId`, `index`). In addition, Svelte's reactive rendering may destroy the text node holding the cursor on every state change.
 
-## Décision
-1.  **Mapping DOM → Modèle :** Utilisation d'un `Range` virtuel (`range.toString().length`) pour calculer l'offset réel, en ignorant les balises HTML intermédiaires.
-2.  **Mapping Modèle → DOM :** Utilisation d'un `TreeWalker` pour retrouver le point d'insertion exact après un rendu Svelte.
-3.  **Mise à jour Différentielle :** Seuls les blocs entrant ou sortant de la sélection voient leur propriété réactive `selected` modifiée (O(M)).
+## Decision
+1.  **DOM → model mapping:** Use a virtual `Range` (`range.toString().length`) to compute the real offset, ignoring the intermediate HTML tags.
+2.  **Model → DOM mapping:** Use a `TreeWalker` to find the exact insertion point again after a Svelte render.
+3.  **Differential update:** Only the blocks entering or leaving the selection have their reactive `selected` property modified (O(M)).
 
-## Conséquences
-*   **Performance :** Le calcul de sélection est quasi-instantané et ne dépend pas de la taille totale du document.
-*   **Stabilité :** Le curseur est restauré après chaque mutation Loro (`await tick()`), offrant une sensation de frappe "native".
-*   **Précision :** On gère nativement le texte plat et on anticipe déjà les éléments riches (images, liens).
+## Consequences
+*   **Performance:** Computing the selection is nearly instantaneous and does not depend on the total size of the document.
+*   **Stability:** The cursor is restored after every Loro mutation (`await tick()`), giving a "native" typing feel.
+*   **Precision:** Plain text is handled natively, and rich elements (images, links) are already anticipated.

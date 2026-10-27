@@ -1,66 +1,67 @@
-# ADR 013 : Coloration syntaxique des Code blocks — highlighter pluggable
+# ADR 013 — Syntax Highlighting for Code Blocks: a Pluggable Highlighter
 
-## Statut
-Proposé — **différé** (post chemin critique béta). Le `CodeBlock` v1 rend du texte brut monospace ; le seam décrit ici n'est pas encore implémenté.
+**Status:** Proposed — **deferred** (after the beta critical path). The v1 `CodeBlock` renders plain monospace text; the seam described here is not yet implemented.
+**Date:** 2026-06-14
+**Original:** [French](fr/013-code-syntax-highlighting.md)
 
-## Contexte
+## Context
 
-Le `CodeBlock` (livré en v1, sans dépendance) stocke uniquement du texte (`LoroText` multi-ligne). On veut, à terme, une coloration syntaxique de qualité éditeur.
+The `CodeBlock` (shipped in v1, with no dependency) stores text only (a multi-line `LoroText`). In the long run, we want editor-grade syntax highlighting.
 
-Intuition de départ (validée) : la coloration, c'est le même principe de rendu que nos marks `bold`/`italic` — transformer une string en une suite de segments stylés, puis rendre des `<span>` colorés. Et comme le mapping curseur (`getDOMPoint` / `calculateOffset`) parcourt les **text nodes** en comptant les caractères, il fonctionne **gratuitement** à travers ces spans — exactement comme RichText aujourd'hui.
+Initial intuition (validated): highlighting follows the same rendering principle as our `bold`/`italic` marks — turn a string into a sequence of styled segments, then render colored `<span>` elements. And since the cursor mapping (`getDOMPoint` / `calculateOffset`) walks the **text nodes** while counting characters, it works **for free** across these spans — exactly as RichText does today.
 
-### Correction conceptuelle clé : dérivé, pas stocké
+### Key conceptual correction: derived, not stored
 
-Différence fondamentale avec les marks :
-- Les marks bold/italic sont **stockées dans Loro** (donnée CRDT, appliquées par l'utilisateur, persistées).
-- Les tokens de coloration sont une **fonction pure de `(texte, langage)`**, **recalculée au rendu**, **jamais persistée**. Les stocker serait redondant et source de désync.
+A fundamental difference from marks:
+- The bold/italic marks are **stored in Loro** (CRDT data, applied by the user, persisted).
+- The highlighting tokens are a **pure function of `(text, language)`**, **recomputed at render time**, **never persisted**. Storing them would be redundant and a source of desynchronization.
 
-→ Le `CodeBlock` garde son `LoroText` brut. La coloration est une couche **purement présentationnelle** : `segments = $derived(highlighter(text, language))`.
+→ The `CodeBlock` keeps its raw `LoroText`. Highlighting is a **purely presentational** layer: `segments = $derived(highlighter(text, language))`.
 
-### Contrat invariant
+### Invariant contract
 
-Le rendu coloré doit préserver le texte **verbatim** :
+The colored rendering must preserve the text **verbatim**:
 
 ```
-tokens.map(t => t.text).join('') === texteSource
+tokens.map(t => t.text).join('') === sourceText
 ```
 
-Aucun caractère ajouté/retiré, pas de reflow d'espaces, pas d'élément block injecté, pas de zero-width. Sinon le mapping curseur casse. La plupart des tokenizers respectent ça (Prism, TextMate, tree-sitter), à valider lib par lib.
+No character added or removed, no whitespace reflow, no injected block element, no zero-width character. Otherwise the cursor mapping breaks. Most tokenizers respect this (Prism, TextMate, tree-sitter), to be validated library by library.
 
-## Options de tokenizer évaluées
+## Tokenizer options evaluated
 
-### Prism (retenu pour la v1)
-Pur JS, **synchrone**, `Prism.tokenize(text, grammar)` retourne directement un `Array<string | {type, content}>`. Se branche dans un `$derived`. Léger. Précision correcte. → meilleur match pour une intégration synchrone simple.
+### Prism (chosen for v1)
+Pure JS, **synchronous**, `Prism.tokenize(text, grammar)` directly returns an `Array<string | {type, content}>`. Plugs into a `$derived`. Lightweight. Decent accuracy. → best match for a simple synchronous integration.
 
-### Shiki (= tokenizer de VSCode)
-Grammaires TextMate + oniguruma (WASM), thèmes VSCode. Fidélité maximale. Mais **async + WASM + lourd**, conçu pour du highlighting one-shot (build/serveur), peu adapté au recalcul par frappe. → option "fidélité VSCode" pour plus tard, en highlighter alternatif.
+### Shiki (= the VS Code tokenizer)
+TextMate grammars + oniguruma (WASM), VS Code themes. Maximum fidelity. But **async + WASM + heavy**, designed for one-shot highlighting (build/server), poorly suited to recomputation on each keystroke. → a "VS Code fidelity" option for later, as an alternative highlighter.
 
 ### tree-sitter / Lezer (CodeMirror)
-Parsers **incrémentaux** (re-parse uniquement la région changée), niveau éditeur. Puissant mais intégration engageante. → réservé au cas "très gros blocs de code", endgame.
+**Incremental** parsers (re-parse only the changed region), editor-grade. Powerful, but the integration is a heavy commitment. → reserved for the "very large code blocks" case, endgame.
 
-## Décision
+## Decision
 
-**Highlighter pluggable, opt-in, le core reste sans dépendance.**
+**A pluggable, opt-in highlighter; the core stays dependency-free.**
 
-> Le `CodeBlock` reste *dumb* : il expose `segments = $derived(highlighter(text, language))`. Le `highlighter` est une **fonction injectable** `(text: string, language: string | null) => Array<{ text: string, scope?: string }>`, dont le **défaut est l'identité** (un seul segment, sans couleur — rendu brut actuel). Un `PrismHighlightExtension` **opt-in** fournit le highlighter + le CSS des scopes (branché sur les tokens `--nb-*`). Quiconque veut Shiki branche le sien.
+> The `CodeBlock` stays *dumb*: it exposes `segments = $derived(highlighter(text, language))`. The `highlighter` is an **injectable function** `(text: string, language: string | null) => Array<{ text: string, scope?: string }>`, whose **default is the identity** (a single segment, no color — the current plain rendering). An **opt-in** `PrismHighlightExtension` provides the highlighter and the CSS of the scopes (wired to the `--nb-*` tokens). Anyone who wants Shiki plugs in their own.
 
-Cohérent avec l'invariant opt-in de la béta et le dogme extension-first : la coloration est un add-on, jamais dans le core.
+This is consistent with the beta's opt-in invariant and the extension-first dogma: highlighting is an add-on, never part of the core.
 
-## Architecture (à implémenter)
+## Architecture (to be implemented)
 
-1. **Seam de rendu** — `Code.svelte` rend depuis `block.segments` (et non plus `{block.text}`), chaque segment en `<span class="nabu-tok-{scope}">`. L'invariant verbatim garantit que le curseur retombe juste.
-2. **Injection du highlighter** — résolu via un registre (ex. `nabu.codeHighlighter`) alimenté par l'extension opt-in ; défaut = identité. Le `CodeBlock.segments` lit ce highlighter.
-3. **`PrismHighlightExtension`** — opt-in (jamais dans MinimalPreset). Charge Prism + la grammaire du langage à la demande, fournit le highlighter, embarque le CSS de scopes thémé.
-4. **Garde IME** — ne PAS re-tokenizer/re-rendre pendant une composition active (`#composing`, cf. ADR/issue #6) pour ne pas casser la frappe CJK.
-5. **Curseur** — aucune machinerie nouvelle : le `tick().then(() => setCursor(block, offset))` post-mutation existant repositionne le caret par offset modèle sur les nouveaux spans.
-6. **Performance** — v1 : full re-tokenize au changement (négligeable pour des blocs normaux). Parsing incrémental (tree-sitter/Lezer) réservé aux très gros blocs, plus tard. Debounce possible si besoin (rendu brut instantané, couleurs un tick après).
+1. **Rendering seam** — `Code.svelte` renders from `block.segments` (and no longer from `{block.text}`), each segment as a `<span class="nabu-tok-{scope}">`. The verbatim invariant guarantees that the cursor lands correctly.
+2. **Highlighter injection** — resolved through a registry (e.g. `nabu.codeHighlighter`) fed by the opt-in extension; default = identity. `CodeBlock.segments` reads that highlighter.
+3. **`PrismHighlightExtension`** — opt-in (never in MinimalPreset). Loads Prism and the language grammar on demand, provides the highlighter, and ships the themed scope CSS.
+4. **IME guard** — do NOT re-tokenize or re-render during an active composition (`#composing`, see ADR/issue #6), so as not to break CJK typing.
+5. **Cursor** — no new machinery: the existing post-mutation `tick().then(() => setCursor(block, offset))` repositions the caret by model offset on the new spans.
+6. **Performance** — v1: full re-tokenization on change (negligible for normal blocks). Incremental parsing (tree-sitter/Lezer) is reserved for very large blocks, later. Debouncing is possible if needed (plain rendering is instantaneous, colors arrive one tick later).
 
-## Conséquences
+## Consequences
 
-✅ Core `CodeBlock` sans dépendance ; la coloration est un choix de l'intégrateur (Prism / Shiki / aucune).
-✅ Réutilise intégralement le mapping curseur span-aware existant — zéro nouvelle logique de sélection.
-✅ Rien dans Loro : pas de pollution CRDT, pas de désync possible.
-✅ Candidat "wow" idéal pour la démo de lancement béta.
-⚠️ L'invariant `join === source` doit être vérifié pour chaque lib de tokenization adoptée.
-⚠️ Re-tokenize par frappe = coût O(n) par bloc ; acceptable en v1, à surveiller sur très gros blocs.
-⚠️ Doit cohabiter avec le garde IME pour ne pas perturber la composition.
+✅ The core `CodeBlock` has no dependency; highlighting is a choice for the integrator (Prism / Shiki / none).
+✅ Fully reuses the existing span-aware cursor mapping — no new selection logic.
+✅ Nothing in Loro: no CRDT pollution, no possible desynchronization.
+✅ An ideal "wow" candidate for the beta launch demo.
+⚠️ The `join === source` invariant must be verified for each tokenization library adopted.
+⚠️ Re-tokenizing on each keystroke costs O(n) per block; acceptable in v1, to be watched on very large blocks.
+⚠️ Must coexist with the IME guard so as not to disturb composition.

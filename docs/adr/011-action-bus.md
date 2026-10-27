@@ -1,46 +1,47 @@
-# ADR 011 : Action Bus — `nabu.exec()` wrappant Pulse
+# ADR 011 — Action Bus: `nabu.exec()` Wrapping Pulse
 
-## Statut
-Accepté
+**Status:** Accepted
+**Date:** 2026-03-16
+**Original:** [French](fr/011-action-bus.md)
 
-## Contexte
+## Context
 
-La floating toolbar (et tout composant UI externe) a besoin de déclencher des actions sur l'éditeur : toggle bold, transformer un bloc en H2, indenter un item de liste. Avant ce chantier, la logique était enfouie dans les handlers `onKeyDown` des extensions — inaccessible depuis l'extérieur.
+The floating toolbar (and any external UI component) needs to trigger actions on the editor: toggle bold, turn a block into an H2, indent a list item. Before this work, the logic was buried in the `onKeyDown` handlers of the extensions and was unreachable from outside.
 
-Trois approches ont été évaluées :
+Three approaches were evaluated:
 
-### Option A — Méthodes directes sur Nabu
+### Option A — Direct methods on Nabu
 ```js
 nabu.toggleMark('bold')
 nabu.transformBlock('heading', { level: 2 })
 ```
-Problème : fait grossir `Nabu` indéfiniment, couplage fort, pas extensible.
+Problem: makes `Nabu` grow indefinitely, creates tight coupling, and is not extensible.
 
-### Option B — Command Registry
-Un `Map<string, Function>` sur Nabu, les extensions y enregistrent des handlers nommés.
-Problème : complexifie Nabu, introduit un système parallèle aux hooks, pattern redondant.
+### Option B — Command registry
+A `Map<string, Function>` on Nabu, where extensions register named handlers.
+Problem: complicates Nabu, introduces a system parallel to the hooks, and is a redundant pattern.
 
-### Option C — Event Bus avec abstraction (retenu)
-`nabu.exec(topic, data)` comme unique point d'entrée public. Implémentation interne via Pulse (`@aionbuilders/pulse`, déjà dependency) caché derrière un private field `#pulse`. Les extensions déclarent leurs handlers via une propriété `actions` — même pattern que `hooks` et `serializers`.
+### Option C — Event bus with an abstraction (chosen)
+`nabu.exec(topic, data)` as the single public entry point. The internal implementation uses Pulse (`@aionbuilders/pulse`, already a dependency) hidden behind a private field `#pulse`. Extensions declare their handlers through an `actions` property — the same pattern as `hooks` and `serializers`.
 
-## Décision
+## Decision
 
-**Option C retenue.** `nabu.exec()` est la seule API publique. Pulse n'est jamais exposé.
+**Option C is chosen.** `nabu.exec()` is the only public API. Pulse is never exposed.
 
-### Pourquoi Pulse en interne
-- Déjà dependency du projet
-- Pattern matching hiérarchique (`mark:toggle`, `bold`, etc.) natif
-- Async par défaut — pas de blocage synchrone
-- Wildcard (`mark:**`) disponible si besoin futur
+### Why Pulse internally
+- Already a dependency of the project
+- Hierarchical pattern matching (`mark:toggle`, `bold`, etc.) is native
+- Async by default — no synchronous blocking
+- Wildcard (`mark:**`) available if needed in the future
 
-### Pourquoi abstraire Pulse
-- L'implémentation interne peut changer sans casser les consommateurs
-- L'API `nabu.exec()` est orthogonale à Pulse (sémantique "commande" plutôt qu'"événement")
-- Évite l'exposition d'une dépendance qui ne fait pas partie du contrat public de Nabu
+### Why abstract Pulse
+- The internal implementation can change without breaking consumers
+- The `nabu.exec()` API is orthogonal to Pulse (a "command" semantic rather than an "event" one)
+- Avoids exposing a dependency that is not part of Nabu's public contract
 
 ## Architecture
 
-### Propriété `actions` sur Extension
+### `actions` property on Extension
 
 ```js
 export const RichTextExtension = new Extension('rich-text', {
@@ -52,18 +53,18 @@ export const RichTextExtension = new Extension('rich-text', {
 });
 ```
 
-Signature des handlers : `(nabu: Nabu, data: any, topic: string) => void`
+Handler signature: `(nabu: Nabu, data: any, topic: string) => void`
 
-### Enregistrement dans Nabu
+### Registration in Nabu
 
-Dans le constructeur, après la boucle extensions :
+In the constructor, after the extensions loop:
 ```js
 if (ext.actions) {
     for (const [topic, handler] of Object.entries(ext.actions)) {
         this.#pulse.on(topic, ({ event }) => handler(this, event.data, event.topic));
     }
 }
-// Core actions — toujours disponibles
+// Core actions — always available
 this.#pulse.on('undo', () => this.undo());
 this.#pulse.on('redo', () => this.redo());
 ```
@@ -76,33 +77,36 @@ exec(topic, data) {
 }
 ```
 
-### Hiérarchie des actions (conventions)
+### Action hierarchy (conventions)
 
-| Topic | Propriétaire | Description |
-|-------|-------------|-------------|
-| `mark:toggle` / `mark:apply` / `mark:remove` | `RichTextExtension` | Marks inline |
-| `bold`, `italic`, `underline`, `code`, `strikethrough` | `RichTextExtension` | Aliases courts |
-| `block:transform` | `BlockExtension` | Transform type du bloc courant |
-| `code:block` | `CodeExtension` | Alias → délègue à `block:transform` (`code` seul = la marque inline) |
-| `heading:1`…`heading:6` | `HeadingExtension` | Aliases → délèguent à `block:transform` |
-| `paragraph` | `ParagraphExtension` | Alias → délègue à `block:transform` |
-| `list:indent` / `list:unindent` | `ListItemExtension` | Indent/unindent item de liste |
-| `undo` / `redo` | Core (Nabu) | Toujours disponibles |
+| Topic | Owner | Description |
+|-------|-------|-------------|
+| `mark:toggle` / `mark:apply` / `mark:remove` | `RichTextExtension` | Inline marks |
+| `bold`, `italic`, `underline`, `code`, `strikethrough` | `RichTextExtension` | Short aliases |
+| `block:transform` | `BlockExtension` | Transform the type of the current block |
+| `code:block` | `CodeExtension` | Alias → delegates to `block:transform` (`code` alone is the inline mark) |
+| `heading:1`…`heading:6` | `HeadingExtension` | Aliases → delegate to `block:transform` |
+| `paragraph` | `ParagraphExtension` | Alias → delegates to `block:transform` |
+| `list:indent` / `list:unindent` | `ListItemExtension` | Indent/unindent a list item |
+| `undo` / `redo` | Core (Nabu) | Always available |
 
-### Convention aliases
+### Alias convention
 
-Les aliases de type (`heading:1`, `paragraph`) sont **déclarés dans l'extension de leur bloc** et délèguent à l'action générique :
+Type aliases (`heading:1`, `paragraph`) are **declared in the extension of their block** and delegate to the generic action:
 ```js
 // HeadingExtension
 'heading:1': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 1 } })
 ```
-Cohérence : si `HeadingExtension` n'est pas inclus, `heading:1` n'existe pas.
+Consistency: if `HeadingExtension` is not included, `heading:1` does not exist.
 
-## Conséquences
+## Consequences
 
-✅ API propre pour les composants UI externes (toolbar, menu slash, etc.)
-✅ Pas de couplage entre Nabu et Pulse côté consommateur
-✅ Extensions déclarent leur surface d'API de façon cohérente avec le reste du système
-✅ `onKeyDown` peut déléguer à `exec` — logique centralisée, pas dupliquée
-⚠️ `exec` est async (Pulse) — ne pas attendre de retour synchrone
-⚠️ Si `BlockExtension` n'est pas inclus, `block:transform` + les aliases heading/paragraph ne fonctionnent pas silencieusement
+✅ Clean API for external UI components (toolbar, slash menu, etc.)
+✅ No coupling between Nabu and Pulse on the consumer side
+✅ Extensions declare their API surface in a way that is consistent with the rest of the system
+✅ `onKeyDown` can delegate to `exec` — centralized logic, not duplicated
+⚠️ `exec` is async (Pulse) — do not expect a synchronous return value
+⚠️ If `BlockExtension` is not included, `block:transform` and the heading/paragraph aliases silently do not work
+
+## Note (2026-10-27)
+The core `undo` and `redo` actions are no longer registered directly on the bus: they are commands of the command registry introduced by ADR 017, and every declared command is also exposed as an action of the bus. `nabu.exec()` also re-syncs the model selection from the DOM before dispatching, and actions do nothing when the editor is read-only.
