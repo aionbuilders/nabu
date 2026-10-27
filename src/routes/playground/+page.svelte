@@ -1,9 +1,9 @@
 <script>
   import { untrack } from 'svelte';
   import { createPersistedEditor, FullPreset } from '#lib';
-  import PitchPanel from './_components/PitchPanel.svelte';
-  import EditorPanel from './_components/EditorPanel.svelte';
-  import DebugPanel from './_components/DebugPanel.svelte';
+  import PitchPanel from '../_components/PitchPanel.svelte';
+  import EditorPanel from '../_components/EditorPanel.svelte';
+  import DebugPanel from '../_components/DebugPanel.svelte';
 
   /** @type {import('#lib/blocks/nabu.svelte.js').Nabu | null} */
   let engine = $state(null);

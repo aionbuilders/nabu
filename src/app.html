@@ -6,14 +6,24 @@
 
 		<!-- Favicon -->
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<link rel="icon" href="%sveltekit.assets%/favicon-32.png" type="image/png" sizes="32x32" />
 		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
 
 		<!-- Theme color (light / dark) -->
-		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f7f5" />
-		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1a1a" />
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FAFAF8" />
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B0B0C" />
 
 		<!-- PWA manifest -->
 		<link rel="manifest" href="%sveltekit.assets%/site.webmanifest" />
+
+		<!-- Site theme, applied before first paint (no flash). Mirrors src/site/ThemeToggle.svelte: 'dark' | 'light' stored under
+		     nabu-site-theme; no value = follow the system. Harmless on non-site routes (playground, e2e). -->
+		<script>
+			try {
+				var t = localStorage.getItem('nabu-site-theme');
+				if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+			} catch (e) {}
+		</script>
 
 		%sveltekit.head%
 	</head>

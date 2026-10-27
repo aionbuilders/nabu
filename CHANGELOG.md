@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Docs - README rewritten, getting-started pages, tested examples (audit D-01 to D-06)
+- `README.md` is now short and accurate (beta status, install, requirements, entry points, real preset contents); the long previous version is kept in `docs/archive/README-pre-beta-long.md` as source material for the guides. New pages: `docs/getting-started/{installation,first-editor,presets}.md`; every page has YAML frontmatter (`title`, `description`, `section`, `order`).
+- Stale status files archived to `docs/archive/` (`PROJECT_CONTEXT.md`, `PROGRESS.md`, `PROGRESS_LISTS.md`, `prompt.md`, `e2e-plan.md`); `tests/README.md` describes the real test layout.
+- Documentation examples are tests: a block fenced as ```` ```js test ```` is run by `tests/unit/docs-examples.test.js` (public package names are aliased to the source entries in `vitest.config.js`); ```` ```svelte ```` blocks must compile.
+
 ### Tooling - SvelteKit 3 / Vite 8 / Vitest 5 toolchain (no behaviour change)
 - Dev toolchain bumped: `svelte` 5.51 -> 5.57.3, `svelte-check` 4.4 -> 4.7.7, `@sveltejs/kit` 2.52 -> 3.1.0, `@sveltejs/package` 2.5 -> 3.0.1, `@sveltejs/vite-plugin-svelte` 6.2 -> 7.3.1, `vite` 7.3 -> 8.3.5, `vitest` + `@vitest/coverage-v8` 3.2 -> 5.0.5, `typescript` 5.9 -> 6.0.3. The demo/e2e app now builds with `@sveltejs/adapter-node` (replaces the Kit-2-only `svelte-adapter-bun`; the unused `@sveltejs/adapter-auto` is dropped).
 - Applied with `sv migrate sveltekit-3`: `svelte.config.js` folded into `vite.config.js` (the adapter is now an option of `sveltekit()`), `jsconfig.json` extends the generated `$app/tsconfig`, `$app/environment` -> `$app/env`, and the `$lib` alias became `#lib` (a `package.json` `imports` entry: `#lib` -> `src/lib/index.js`, `#lib/*` -> `src/lib/*`, resolved natively by Vite/Vitest, so `vitest.config.js` no longer needs an alias). The library code in `src/lib` keeps relative imports.

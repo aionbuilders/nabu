@@ -1,13 +1,14 @@
 <script>
   import '../lib/nabu-theme.css';
   import { dev } from '$app/env';
+  import { page } from '$app/state';
 
   // No analytics in dev, nor in the e2e production build (`build:e2e`): keeps the test pages free of third-party requests.
   const analytics = !dev && import.meta.env.VITE_NABU_E2E !== '1';
 
   // Update once the domain is confirmed
   const SITE_URL = 'https://nabu.aion.builders';
-  const TITLE = 'Nabu — Modular block editor engine for Svelte 5';
+  const DEFAULT_TITLE = 'Nabu — Modular block editor engine for Svelte 5';
   const DESCRIPTION = 'A local-first, modular block editor engine for Svelte 5. Single contenteditable, Loro-CRDT state, and an extension registry for custom block types.';
 
   const jsonLd = JSON.stringify({
@@ -32,6 +33,11 @@
   });
 
   let { children } = $props();
+
+  // A page can override the title and opt out of indexing through its load data (`{ title, noindex }`): a nested <svelte:head>
+  // <title> would be rendered next to this one (duplicate tags), so the single source of truth stays here.
+  const TITLE = $derived(page.data.title ?? DEFAULT_TITLE);
+  const canonical = $derived(SITE_URL + (page.url.pathname === '/' ? '' : page.url.pathname));
 </script>
 
 <svelte:head>
@@ -40,12 +46,12 @@
   <meta name="description" content={DESCRIPTION} />
   <meta name="keywords" content="svelte, svelte5, block editor, rich text editor, contenteditable, crdt, loro, local-first, collaborative, npm, javascript" />
   <meta name="author" content="Killian Di Vincenzo" />
-  <meta name="robots" content="index, follow" />
-  <link rel="canonical" href={SITE_URL} />
+  <meta name="robots" content={page.data.noindex ? 'noindex, follow' : 'index, follow'} />
+  <link rel="canonical" href={canonical} />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
-  <meta property="og:url" content={SITE_URL} />
+  <meta property="og:url" content={canonical} />
   <meta property="og:title" content={TITLE} />
   <meta property="og:description" content={DESCRIPTION} />
   <meta property="og:image" content="{SITE_URL}/og.png" />

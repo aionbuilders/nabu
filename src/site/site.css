@@ -1,0 +1,95 @@
+/* Site-wide styles: fonts, tokens, page chrome. Imported by `src/routes/(site)/+layout.svelte` only (never by the library). */
+
+@import '@fontsource/syne/700.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import './tokens.css';
+
+/* The whole viewport (overscroll included) takes the page colour while a site page is mounted. */
+html:has(.site) {
+  background: var(--site-bg);
+}
+
+html:has(.site) body {
+  margin: 0;
+}
+
+.site {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--site-bg);
+  color: var(--site-text);
+  font-family: var(--site-font-body);
+  font-size: var(--site-fs-body);
+  line-height: var(--site-lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-size-adjust: 100%;
+  overflow-x: clip;
+}
+
+.site *,
+.site *::before,
+.site *::after {
+  box-sizing: border-box;
+}
+
+.site a {
+  color: inherit;
+}
+
+.site :focus-visible {
+  outline: 2px solid var(--site-accent);
+  outline-offset: 2px;
+}
+
+.site .container {
+  width: 100%;
+  max-width: var(--site-max);
+  margin-inline: auto;
+  padding-inline: var(--site-gutter);
+}
+
+.site main {
+  flex: 1 0 auto;
+}
+
+.site main:focus {
+  outline: none;
+}
+
+.site .skip-link {
+  position: absolute;
+  top: var(--site-space-2);
+  left: var(--site-space-2);
+  z-index: 100;
+  padding: var(--site-space-2) var(--site-space-4);
+  border-radius: var(--site-radius-button);
+  background: var(--site-accent-fill);
+  color: var(--site-on-accent);
+  font-weight: 600;
+  font-size: var(--site-fs-small);
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.site .skip-link:focus {
+  transform: none;
+}
+
+/* Label: JetBrains Mono 500, uppercase tracking (DS1) */
+.site .label {
+  font: 500 var(--site-fs-label) / var(--site-lh-label) var(--site-font-mono);
+  letter-spacing: var(--site-ls-label);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

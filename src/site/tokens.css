@@ -1,0 +1,148 @@
+/*
+ * Nabu website: design tokens (DS1, "direction B / Atelier"). Dark by default, light on request.
+ *
+ * NAMING: the design system names these tokens `--nb-*`, but the library's `src/lib/nabu-theme.css` already owns that
+ * namespace for the EDITOR and three names collide with a different meaning there:
+ *     --nb-border      (editor: translucent hsla hairline)   vs DS1: opaque #232327 / #E4E4DF
+ *     --nb-text-muted  (editor: translucent text alpha)      vs DS1: opaque #A9A9AE / #55555B
+ *     --nb-accent      (editor: translucent blue selection)  vs DS1: coral #FF6F61 / #C2381F
+ * The library stylesheet is loaded by the root layout on every route, so the two would fight. Every site token is therefore
+ * prefixed `--site-*` (DS1 `--nb-X` becomes `--site-X`, e.g. `--nb-bg` -> `--site-bg`). Nothing here leaks into the library.
+ *
+ * Theme: dark is the default. Light applies under `:root[data-theme="light"]` (explicit choice) AND, when no explicit
+ * choice is stored, under `prefers-color-scheme: light` (`:root:not([data-theme="dark"])`). The two light blocks MUST stay identical.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Colour (dark) ─────────────────────────────── */
+  --site-bg: #0B0B0C; /* page */
+  --site-surface: #141416; /* panels, code, cards */
+  --site-surface-2: #0F0F11; /* X-ray, insets */
+  --site-border: #232327; /* card and panel borders */
+  --site-border-strong: #2A2A2E; /* controls */
+  --site-border-subtle: #1E1E21; /* header / footer hairline (not in DS1's list; lifted from the HomeB mockup) */
+  --site-text: #EDEDED; /* body and titles, 16.8:1 on bg */
+  --site-text-muted: #A9A9AE; /* secondary text, 8.4:1 */
+  --site-text-subtle: #7C7C82; /* labels, captions, 4.7:1 */
+  --site-accent: #FF6F61; /* links, carets, 7.2:1 */
+  --site-accent-fill: #FF6F61; /* primary fill, mark (same as accent in dark) */
+  --site-on-accent: #0B0B0C; /* text on accent fill */
+  --site-peer: #7AA2F7; /* second collaborator, 7.8:1 */
+  --site-note-bg: #1A1312; /* callout background */
+  --site-note-border: #3A2A28;
+  --site-code-bg: #0F0F11; /* inline code */
+  --site-hover-bg: #1A1A1D; /* active / hovered nav item (DS2) */
+  --site-logo-mark: #FF6F61;
+  --site-logo-text: #F2F2F2;
+
+  /* ── Type ──────────────────────────────────────── */
+  --site-font-display: Syne, system-ui, sans-serif;
+  --site-font-body: Inter, system-ui, sans-serif;
+  --site-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --site-fs-display: 76px; /* Syne 700 · 1.0 · -0.035em */
+  --site-fs-h1: 44px; /* Syne 700 · 1.1 · -0.02em */
+  --site-fs-h2: 40px; /* Syne 700 · 1.1 · -0.02em (36 to 40) */
+  --site-fs-h3: 26px; /* Syne 700 · 1.2 · -0.01em */
+  --site-fs-lead: 19px; /* Inter 400 · 1.55 (18 to 19) */
+  --site-fs-body: 16px; /* Inter 400 · 1.7 */
+  --site-fs-small: 14px; /* Inter 500 · 1.5 */
+  --site-fs-label: 12px; /* JetBrains Mono 500 · 1.4 · +0.06em (11 to 12) */
+  --site-fs-code: 14px; /* JetBrains Mono 400 · 1.7 (13 to 14) */
+  --site-lh-display: 1;
+  --site-lh-heading: 1.1;
+  --site-lh-h3: 1.2;
+  --site-lh-lead: 1.55;
+  --site-lh-body: 1.7;
+  --site-lh-small: 1.5;
+  --site-lh-label: 1.4;
+  --site-ls-display: -0.035em;
+  --site-ls-heading: -0.02em;
+  --site-ls-h3: -0.01em;
+  --site-ls-label: 0.06em;
+
+  /* ── Spacing (4px base) ────────────────────────── */
+  --site-space-1: 4px;
+  --site-space-2: 8px;
+  --site-space-3: 12px;
+  --site-space-4: 16px;
+  --site-space-5: 20px;
+  --site-space-6: 24px;
+  --site-space-8: 32px;
+  --site-space-10: 40px;
+  --site-space-12: 48px;
+  --site-space-16: 64px;
+  --site-space-18: 72px;
+
+  /* ── Layout ────────────────────────────────────── */
+  --site-max: 1240px;
+  --site-gutter: 32px;
+
+  /* ── Radii and elevation ───────────────────────── */
+  --site-radius-control: 8px;
+  --site-radius-button: 10px;
+  --site-radius-card-sm: 12px;
+  --site-radius-panel: 16px;
+  --site-radius-pill: 999px;
+  --site-shadow-floating: 0 10px 30px rgba(0, 0, 0, 0.5); /* only floating UI casts a shadow */
+}
+
+@media (max-width: 759.98px) {
+  :root { --site-gutter: 16px; }
+}
+
+/* ── Light: explicit choice ──────────────────────── */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --site-bg: #FAFAF8;
+  --site-surface: #FFFFFF;
+  --site-surface-2: #F3F3F0;
+  --site-border: #E4E4DF;
+  --site-border-strong: #D4D4CE;
+  --site-border-subtle: #ECECE8;
+  --site-text: #141416; /* 17.6:1 */
+  --site-text-muted: #55555B; /* 7.1:1 */
+  --site-text-subtle: #6B6B72; /* 5.1:1 */
+  --site-accent: #C2381F; /* links and small text, 5.2:1 */
+  --site-accent-fill: #F04E31; /* fills and the mark (dark text on it) */
+  --site-on-accent: #0B0B0C; /* 5.5:1 on the fill */
+  --site-peer: #2F62CC; /* 5.4:1 */
+  --site-note-bg: #FDF1EE;
+  --site-note-border: #F5CFC6;
+  --site-code-bg: #EFEFEB;
+  --site-hover-bg: #F0F0EC;
+  --site-logo-mark: #F04E31;
+  --site-logo-text: #1A1A1A;
+  --site-shadow-floating: 0 10px 30px rgba(20, 20, 22, 0.14);
+}
+
+/* ── Light: system preference, unless dark was chosen explicitly ── */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --site-bg: #FAFAF8;
+    --site-surface: #FFFFFF;
+    --site-surface-2: #F3F3F0;
+    --site-border: #E4E4DF;
+    --site-border-strong: #D4D4CE;
+    --site-border-subtle: #ECECE8;
+    --site-text: #141416;
+    --site-text-muted: #55555B;
+    --site-text-subtle: #6B6B72;
+    --site-accent: #C2381F;
+    --site-accent-fill: #F04E31;
+    --site-on-accent: #0B0B0C;
+    --site-peer: #2F62CC;
+    --site-note-bg: #FDF1EE;
+    --site-note-border: #F5CFC6;
+    --site-code-bg: #EFEFEB;
+    --site-hover-bg: #F0F0EC;
+    --site-logo-mark: #F04E31;
+    --site-logo-text: #1A1A1A;
+    --site-shadow-floating: 0 10px 30px rgba(20, 20, 22, 0.14);
+  }
+}
