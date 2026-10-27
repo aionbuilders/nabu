@@ -1,16 +1,18 @@
 <script>
   import { tick } from 'svelte';
   import { buildModel, describeBatch, treeLookup, formatTiming } from './xray.js';
+  import { nextPaint } from './measure.js';
 
   /**
    * The X-ray: the live model of the home editor, next to it. Reads ONLY what the editor exposes publicly: `engine.doc` (the Loro
    * document: its `blocks` tree and its change events). The tree view is rebuilt from the document once per animation frame; the
    * operations log is derived from the Loro events of each commit.
    *
-   * TIMING (never invented): a keystroke starts at its `keydown` / `beforeinput` (captured on the document, before the editor's own
-   * handlers), and ends when the DOM has caught up with the commit: the Loro event of that commit fires, then `await tick()` (Svelte
-   * has flushed the DOM updates it caused) and `performance.now()` is read. The difference is the number shown. An operation that
-   * did not come from a key (paste, cut, drop, undo / redo, IME composition, import, a toolbar command) shows its kind instead.
+   * TIMING (never invented), the same measure as the lab (measure.js): KEY TO NEXT PAINT. A keystroke starts at the `event.timeStamp`
+   * of its `keydown` / `beforeinput` (captured on the document, before the editor's own handlers; the time an event spent queued
+   * counts), and ends at the first frame painted once the DOM has caught up with the commit: the Loro event of that commit fires, then
+   * `await tick()` (Svelte has flushed the DOM updates it caused), then `nextPaint()`. The difference is the number shown. An operation
+   * that did not come from a key (paste, cut, drop, undo / redo, IME composition, import, a toolbar command) shows its kind instead.
    *
    * @type {{ engine: import('#lib').Nabu | null, open?: boolean, id?: string }}
    */
@@ -71,7 +73,7 @@
         else if (k === 'v') kind = 'paste';
         else if (k === 'x') kind = 'cut';
       } else if (e.key.length !== 1 && !TYPING.includes(e.key)) return; // arrows, Escape, F-keys: no edit
-      cause = { t0: now(), kind };
+      cause = { t0: e.timeStamp, kind };
     };
     /** @param {InputEvent} e */
     const onBeforeinput = (e) => {
@@ -84,7 +86,7 @@
         : type === 'historyUndo' ? 'undo'
         : type === 'historyRedo' ? 'redo'
         : 'key';
-      const t = now();
+      const t = e.timeStamp;
       // The keydown of this very key came first (same task): keep its start. Without one (virtual keyboard, dictation) start here.
       const fresh = cause && t - cause.t0 < 100;
       cause = { t0: fresh ? /** @type {Cause} */ (cause).t0 : t, kind: kind === 'key' && fresh ? /** @type {Cause} */ (cause).kind : kind };
@@ -125,10 +127,10 @@
         ? [...described.slice(0, PER_COMMIT), { sign: '~', text: `… +${described.length - PER_COMMIT} more` }]
         : described;
       const no = ++batchNo;
-      // The DOM has caught up with this commit once Svelte has flushed.
-      tick().then(() => {
+      // The DOM has caught up with this commit once Svelte has flushed; the number is read after the next paint.
+      tick().then(() => (how.kind === 'key' && how.t0 !== null ? nextPaint() : 0)).then((painted) => {
         if (!alive) return;
-        const timing = how.kind === 'key' && how.t0 !== null ? now() - how.t0 : how.kind;
+        const timing = how.kind === 'key' && how.t0 !== null ? painted - how.t0 : how.kind;
         const added = shown.map((op) => ({ key: ++seq, batch: no, sign: op.sign, text: op.text, timing })).reverse();
         ops = [...added, ...ops].slice(0, LOG);
       });

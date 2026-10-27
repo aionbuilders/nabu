@@ -2,7 +2,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 const DEV = !!process.env.NABU_E2E_DEV;
 // Port of the dedicated e2e server (default 5180). `NABU_E2E_PORT` only exists to dodge a port that something else holds.
-const PORT = Number(process.env.NABU_E2E_PORT ?? 5180);
+// `NABU_SLOT=<1-9>` runs a separate suite next to the default one: its own build folders (see vite.config.js), its own
+// results folder and port 5180 + slot. Two runs in the SAME slot still overwrite each other.
+const SLOT = process.env.NABU_SLOT;
+if (SLOT && !/^[1-9]$/.test(SLOT)) throw new Error(`NABU_SLOT must be a digit 1-9, got "${SLOT}"`);
+const PORT = Number(process.env.NABU_E2E_PORT ?? 5180 + Number(SLOT ?? 0));
+const RESULTS = SLOT ? `test-results-${SLOT}` : 'test-results';
 
 // The `perf` project (large-document measurements, tests/e2e/perf/*.perf.ts) only exists when it is asked for:
 // `bunx playwright test --project=perf` (or NABU_PERF=1), so that a plain `bunx playwright test` never runs it. The
@@ -77,8 +82,9 @@ export default defineConfig({
       : []),
   ],
   timeout: 20000,
+  outputDir: RESULTS,
   // On the dev server, more than 6 browsers made editor boots time out in beforeEach
   // (on-demand transforms). See tests/README.md for the production-build measurements.
   workers: 6,
-  reporter: [['list', { printSteps: true }], ['json', { outputFile: 'test-results/results.json' }]],
+  reporter: [['list', { printSteps: true }], ['json', { outputFile: `${RESULTS}/results.json` }]],
 });

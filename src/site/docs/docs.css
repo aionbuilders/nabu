@@ -1,0 +1,95 @@
+/*
+ * Documentation pages (API reference now, guides next): layout, prose and code.
+ * Only `--site-*` tokens are used, so dark / light follow the site theme. Imported by DocsLayout.svelte.
+ */
+
+/* ── Syntax: Shiki's CSS-variables theme, mapped to the site tokens ─────────────────────────── */
+.site {
+  --shiki-foreground: var(--site-text);
+  --shiki-background: var(--site-surface);
+  --shiki-token-keyword: var(--site-accent);
+  --shiki-token-string: var(--site-peer);
+  --shiki-token-string-expression: var(--site-peer);
+  --shiki-token-constant: var(--site-peer);
+  --shiki-token-function: color-mix(in srgb, var(--site-accent) 38%, var(--site-text));
+  --shiki-token-parameter: var(--site-text-muted);
+  --shiki-token-punctuation: var(--site-text-muted);
+  --shiki-token-comment: var(--site-text-subtle);
+  --shiki-token-link: var(--site-accent);
+}
+
+/* ── Code block (also emitted as raw HTML by the Markdown renderer) ─────────────────────────── */
+.site .cb {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--site-border);
+  border-radius: var(--site-radius-card-sm);
+  background: var(--site-surface);
+  overflow: hidden;
+}
+.site .cb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--site-space-3);
+  padding: 4px 6px 4px 16px;
+  border-bottom: 1px solid var(--site-border-subtle);
+  background: var(--site-surface-2);
+}
+.site .cb-lang {
+  font: 500 var(--site-fs-label) / var(--site-lh-label) var(--site-font-mono);
+  letter-spacing: var(--site-ls-label);
+  text-transform: uppercase;
+  color: var(--site-text-subtle);
+}
+.site .cb-copy {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--site-radius-control);
+  background: transparent;
+  color: var(--site-text-muted);
+  font: 500 12px / 1 var(--site-font-mono);
+  cursor: pointer;
+}
+.site .cb-copy:hover { border-color: var(--site-border-strong); color: var(--site-text); }
+.site .cb pre {
+  margin: 0;
+  padding: 16px 20px;
+  overflow-x: auto;
+  background: transparent;
+  font: 400 var(--site-fs-code) / var(--site-lh-body) var(--site-font-mono);
+  tab-size: 2;
+}
+.site .cb pre code { font: inherit; background: none; padding: 0; }
+.site .cb pre:focus-visible { outline-offset: -2px; }
+.site .cb a.type-link { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--site-text-subtle); }
+.site .cb a.type-link:hover { color: var(--site-accent) !important; border-bottom-color: var(--site-accent); }
+
+/* ── Prose: rendered Markdown ───────────────────────────────────────────────────────────────── */
+.site .prose { min-width: 0; overflow-wrap: anywhere; }
+.site .prose > :first-child { margin-top: 0; }
+.site .prose > :last-child { margin-bottom: 0; }
+.site .prose p { margin: 0 0 var(--site-space-3); }
+.site .prose ul, .site .prose ol { margin: 0 0 var(--site-space-3); padding-left: 1.4em; }
+.site .prose li { margin: 2px 0; }
+.site .prose li > p { margin: 0; }
+.site .prose a { color: var(--site-accent); text-underline-offset: 3px; }
+.site .prose strong { color: var(--site-text); font-weight: 600; }
+.site .prose .cb { margin: 0 0 var(--site-space-4); }
+.site .prose h1, .site .prose h2, .site .prose h3, .site .prose h4 { margin: var(--site-space-6) 0 var(--site-space-2); font-family: var(--site-font-display); font-size: 18px; letter-spacing: var(--site-ls-h3); }
+.site .prose blockquote { margin: 0 0 var(--site-space-3); padding: var(--site-space-3) var(--site-space-4); border: 1px solid var(--site-note-border); background: var(--site-note-bg); border-radius: var(--site-radius-card-sm); }
+.site .prose table { border-collapse: collapse; margin: 0 0 var(--site-space-3); font-size: var(--site-fs-small); }
+.site .prose th, .site .prose td { padding: 4px 10px; border: 1px solid var(--site-border); text-align: left; }
+
+/* Inline code, anywhere in the documentation */
+.site .prose code, .site .doc-code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--site-hover-bg);
+  color: var(--site-text);
+  font: 500 0.875em / 1.4 var(--site-font-mono);
+  overflow-wrap: anywhere;
+}
+.site .prose .cb code { padding: 0; background: none; border-radius: 0; font: inherit; }
+.site .prose :is(h2, h3) code { font-size: 0.8em; }

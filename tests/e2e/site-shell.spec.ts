@@ -59,11 +59,16 @@ test.describe('site shell', () => {
     for (const [label, href] of NAV) {
       const res = await page.goto(href);
       expect(res?.status(), href).toBe(200);
-      await expect(page.getByRole('heading', { level: 1 })).toHaveText(label);
-      await expect(page.getByText('Coming soon')).toBeVisible();
-      await expect(page.locator('header')).toBeVisible();
+      // The API reference is a real page now (tests/e2e/site-api.spec.ts): its H1 and title say "API reference".
+      const title = href === '/api' ? 'API reference' : label;
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
+      // Labs and the API reference are real pages (Labs lists the Performance lab); the others are still stubs.
+      if (href === '/labs') await expect(page.getByRole('link', { name: /Performance/ })).toBeVisible();
+      else if (href === '/api') await expect(page.getByRole('navigation', { name: 'API reference' })).toBeVisible();
+      else await expect(page.getByText('Coming soon')).toBeVisible();
+      await expect(page.getByRole('banner')).toBeVisible();
       await expect(page.locator('footer')).toBeVisible();
-      await expect(page).toHaveTitle(`${label} — Nabu`);
+      await expect(page).toHaveTitle(`${title} — Nabu`);
       // active item follows the route
       const current = page.getByRole('navigation', { name: 'Main' }).locator('a[aria-current="page"]');
       await expect(current).toHaveCount(1);

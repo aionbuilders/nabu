@@ -1,5 +1,6 @@
 <script>
   import HeroEditor from '../../site/HeroEditor.svelte';
+  import Proofs from '../../site/Proofs.svelte';
 </script>
 
 <section class="container hero">
@@ -9,9 +10,13 @@
 
 <div class="container">
   <HeroEditor />
+  <div class="proofs-row"><Proofs /></div>
 </div>
 
 <style>
+  .proofs-row {
+    padding-bottom: var(--site-space-16);
+  }
   .hero {
     display: flex;
     flex-direction: column;

@@ -1,2 +1,2 @@
-// Read by the root layout (title, robots). Stub page: not indexed until it has content.
-export const load = () => ({ title: 'Labs — Nabu', noindex: true });
+// Read by the root layout (title, robots). One lab for now.
+export const load = () => ({ title: 'Labs — Nabu' });

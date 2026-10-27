@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "strict": true,
+    "noEmit": true,
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "types": [],
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "paths": { "#lib": ["../src/lib/index.js"], "#lib/*": ["../src/lib/*"] }
+  },
+  "files": ["../src/lib/index.js", "../src/lib/ui/index.js", "../src/lib/extend.js", "./api-contract.js"]
+}

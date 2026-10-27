@@ -179,9 +179,11 @@ test.describe('the floating UI hides itself', () => {
 test.describe('reading still works', () => {
   test('text is selectable and the selection is copied', async ({ page }) => {
     await viewer(page);
-    await page.getByText('First paragraph').dblclick(); // selects a word
+    // The paragraph is a full-width block: dblclick on its centre lands on the blank past the end of the text, where no browser
+    // selects a word (editable or not). A reader double-clicks a word, so aim at one.
+    await page.getByText('First paragraph').dblclick({ position: { x: 10, y: 5 } }); // selects a word
     const selected = await page.evaluate(() => window.getSelection()!.toString().trim());
-    expect(selected.length).toBeGreaterThan(0);
+    expect(selected).toBe('First');
     const copied = await page.evaluate(() => {
       const dt = new DataTransfer();
       const event = new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true });
@@ -189,6 +191,20 @@ test.describe('reading still works', () => {
       return dt.getData('text/plain');
     });
     expect(copied).toBe(selected);
+  });
+
+  test('text is selectable by dragging the mouse', async ({ page }) => {
+    await viewer(page);
+    const box = (await page.getByText('First paragraph').boundingBox())!;
+    await page.mouse.move(box.x + 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 60, box.y + box.height / 2, { steps: 5 });
+    await page.mouse.up();
+    const selected = await page.evaluate(() => window.getSelection()!.toString());
+    expect(selected.length).toBeGreaterThan(0);
+    expect('First paragraph'.startsWith(selected)).toBe(true);
+    await page.getByText('First paragraph').click({ clickCount: 3 }); // triple click: the whole block
+    expect(await page.evaluate(() => window.getSelection()!.toString().trim())).toBe('First paragraph');
   });
 
   test('a link opens as a normal link', async ({ page }) => {
@@ -226,7 +242,9 @@ test.describe('reading still works', () => {
     const after = await page.evaluate(() => ({
       version: JSON.stringify((window as any).nabu.doc.frontiers()),
       canUndo: (window as any).nabu.undoManager.canUndo(),
-      collapsed: (window as any).nabu.serialize('json').blocks[0].props.collapsed,
+      // JSON shape: { version, blocks: [{ type, props: { collapsed }, ... }] }; the viewer keeps an empty paragraph before the toggle,
+      // so look the toggle up by type instead of by index
+      collapsed: (window as any).nabu.serialize('json').blocks.find((b: any) => b.type === 'toggle').props.collapsed,
     }));
     expect(after.version).toBe(version); // no Loro change at all
     expect(after.canUndo).toBe(false);
@@ -249,8 +267,9 @@ test.describe('reading still works', () => {
     });
     await flushRender(page);
     const before = await getJson(page);
-    await page.locator('.nabu-todo-check').click();
-    await page.locator('.nabu-callout-icon').click();
+    // Playwright refuses to click an aria-disabled button: force it, the point is that a click changes nothing
+    await page.locator('.nabu-todo-check').click({ force: true });
+    await page.locator('.nabu-callout-icon').click({ force: true });
     expect(await getJson(page)).toEqual(before);
     await expect(page.locator('.nabu-todo-check')).toHaveAttribute('aria-disabled', 'true');
     await expect(page.locator('.nabu-callout-icon')).toHaveAttribute('aria-disabled', 'true');

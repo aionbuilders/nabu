@@ -2,6 +2,8 @@
   import { onMount, tick } from 'svelte';
   import '#lib/themes/atelier.css';
   import XRay from './XRay.svelte';
+  import { curatedPreset } from './preset.js';
+  import { createKeyMeter } from './measure.js';
 
   /**
    * The home page editor: a real, persisted Nabu editor wearing the published "Atelier" theme.
@@ -66,25 +68,7 @@
     const eng = await lib.createPersistedEditor({
       docId: DOC_ID,
       lang: 'en',
-      // A curated set: text, headings, lists (+ to-do), quote, code, divider, regions, rich text, shortcuts, paste. No media.
-      preset: [
-        lib.ParagraphExtension,
-        lib.HeadingExtension,
-        lib.BlockquoteExtension,
-        lib.DividerExtension,
-        lib.CodeExtension,
-        lib.ListExtension,
-        lib.ListItemExtension,
-        lib.RegionsExtension(),
-        lib.RichTextExtension,
-        lib.TypographyExtension,
-        lib.MarkdownShortcutsExtension,
-        lib.PlainTextPasteExtension,
-        lib.HtmlPasteExtension,
-        lib.MarkdownPasteExtension,
-        lib.NabuPasteExtension,
-        lib.BlockExtension,
-      ],
+      preset: curatedPreset(lib),
     });
     if (/** @type {any} */ (eng).isNew) await seed(eng, lib.JSON_FORMAT_VERSION);
     return eng;
@@ -129,6 +113,17 @@
     scope.querySelector('[data-nabu-root]')?.setAttribute('aria-label', 'Try Nabu');
   });
 
+  // E2E builds only: the samples of the shared key-to-next-paint meter (measure.js) on `window.__keySamples`, for the numbers of the report.
+  $effect(() => {
+    if (import.meta.env.VITE_NABU_E2E !== '1' || !engine || !scope) return;
+    const root = scope.querySelector('[data-nabu-root]');
+    if (!root) return;
+    const w = /** @type {any} */ (window);
+    w.__keySamples = [];
+    const meter = createKeyMeter(root, (sample) => w.__keySamples.push(sample));
+    return () => meter.dispose();
+  });
+
   /** Clear the stored document and start again from the seed. One action, no confirmation. */
   async function reset() {
     if (busy || !engine || !mods) return;
@@ -151,7 +146,7 @@
   }
 </script>
 
-<section class="hero-editor" aria-label="Live editor">
+<section class="hero-editor" id="try" aria-label="Live editor">
   <div class="grid">
     <div class="nb-theme-atelier slot" data-nb-scheme={scheme} bind:this={scope} data-testid="hero-editor">
       {#if engine && mods}
