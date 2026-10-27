@@ -180,4 +180,4 @@ expect(engine.serialize('markdown')).toBe('# Shopping\n\n- milk\n- eggs');
 
 The generic `createEditor()` forwards every other option (`placeholders`, `files`, `keymap`, `lang`…) to the engine, so a custom preset gets the same configuration surface as the named factories.
 
-Next: the [guides](../guides/actions.md).
+Next: the [guides](../guides/extensions.md), starting with how to write your own extension.

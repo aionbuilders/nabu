@@ -168,7 +168,7 @@ await engine.commit();
 expect(engine.serialize('markdown')).toBe('First\n\nSecond\n\n## A title');
 ```
 
-Everything the user can do from the keyboard is also a command you can run with `engine.exec(topic, data)`: toggle a mark, transform a block, undo. See the [action bus guide](../guides/actions.md).
+Everything the user can do from the keyboard is also a command you can run with `engine.exec(topic, data)`: toggle a mark, transform a block, undo. See [Commands and keymap](../guides/commands-and-keymap.md).
 
 ## Listen to changes and export updates
 
@@ -231,9 +231,9 @@ import { createPersistedEditor } from '@aionbuilders/nabu';
 const engine = await createPersistedEditor({ docId: 'my-document' });
 ```
 
-Options, multi-tab behaviour, history and recovery are covered in the [persistence guide](../guides/persistence.md).
+Options, multi-tab behaviour, history and recovery are covered in [Persistence and sync](../guides/persistence-and-sync.md).
 
 ## Next
 
 - [Presets](./presets.md): choose and customise what the editor can do.
-- [Guides](../guides/actions.md): the action bus, persistence, and more.
+- [Guides](../guides/extensions.md): extensions, commands and keymap, persistence and sync, regions.

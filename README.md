@@ -83,7 +83,7 @@ A preset is an array of extensions, and each has a factory.
 - [Installation](docs/getting-started/installation.md)
 - [Your first editor](docs/getting-started/first-editor.md): mounting, reading and writing content, listening to changes
 - [Presets](docs/getting-started/presets.md)
-- Guides: [Action bus (`nabu.exec`)](docs/guides/actions.md), [Local persistence](docs/guides/persistence.md)
+- Guides: [Extensions](docs/guides/extensions.md), [Commands and keymap](docs/guides/commands-and-keymap.md) (the `nabu.exec` action bus included), [Persistence and sync](docs/guides/persistence-and-sync.md), [Regions](docs/guides/regions.md)
 - [Architecture decisions](docs/adr) and [design notes](docs/design)
 - [Tests](tests/README.md)
 

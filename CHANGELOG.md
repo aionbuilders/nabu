@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Breaking: the slash menu is agnostic, `DEFAULT_SLASH_COMMANDS` removed (P-114)
+- The slash menu no longer knows any block type: `DEFAULT_SLASH_COMMANDS` (15 hard-coded entries, shown whatever extensions were loaded, e.g. "Callout" in an editor without the callout extension, where it did nothing) is **removed** from `@aionbuilders/nabu/ui`. The menu lists only `nabu.slashCommands`, the entries contributed by the loaded extensions (`Extension#slashCommands`), plus the integrator's extras.
+- Each built-in extension now declares its own entries, with the same titles, aliases and actions as before: Paragraph (Text), Heading (Heading 1-3), List (Bulleted / Numbered / To-do list), Code, Callout, Blockquote (Quote), Toggle, Divider, Image, Video, File; Regions' entries are in the `structure` group.
+- New `SlashCommand` fields `group` (`'text' | 'lists' | 'blocks' | 'media' | 'structure'` or any string; a free group is listed after the known ones, no group = last) and `order` (number, inside the group). The menu sorts by group, then `order`, then declaration order, so the list no longer depends on the load order of the extensions. New exports of `ui/slash-menu.svelte.js` (internal): `sortSlashCommands`, `SLASH_GROUP_ORDER`.
+- `<SlashMenu commands>` / `new SlashMenuController(engine, commands)` now mean EXTRA entries (default `[]`), appended and sorted with the same rules; their `when(engine, block)` is honoured like the extensions'. Migration: `commands={[...DEFAULT_SLASH_COMMANDS, mine]}` becomes `commands={[mine]}`; to restyle or replace a built-in entry, provide your own extension (`slashCommands`) with that entry.
+- No emoji in the library's entries any more: Callout `!`, Image `▢`, Video `▷`, File `⎘`, To-do list `✓` (`icon` stays a plain string; themes and integrators can provide their own entries to change icons).
+
 ### Docs - README rewritten, getting-started pages, tested examples (audit D-01 to D-06)
 - `README.md` is now short and accurate (beta status, install, requirements, entry points, real preset contents); the long previous version is kept in `docs/archive/README-pre-beta-long.md` as source material for the guides. New pages: `docs/getting-started/{installation,first-editor,presets}.md`; every page has YAML frontmatter (`title`, `description`, `section`, `order`).
 - Stale status files archived to `docs/archive/` (`PROJECT_CONTEXT.md`, `PROGRESS.md`, `PROGRESS_LISTS.md`, `prompt.md`, `e2e-plan.md`); `tests/README.md` describes the real test layout.
