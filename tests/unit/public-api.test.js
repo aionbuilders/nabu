@@ -69,7 +69,6 @@ const ROOT = [
 const UI = [
   'CommandChooser',
   'CommandInvite',
-  'DEFAULT_SLASH_COMMANDS',
   'DragHandle',
   'FloatingToolbar',
   'SlashMenu',

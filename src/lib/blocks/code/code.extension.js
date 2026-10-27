@@ -72,6 +72,9 @@ export const CodeExtension = extension("code", {
     // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
     block: CodeBlock,
     component: CodeComponent,
+    slashCommands: [
+        { title: 'Code', icon: '<>', aliases: ['code', 'snippet'], group: 'blocks', order: 0, run: (e) => e.exec('code') },
+    ],
     actions: {
         'code': (nabu) => nabu.exec('block:transform', { type: 'code' }),
     },

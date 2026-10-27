@@ -128,6 +128,9 @@ export const DividerExtension = extension("divider", {
     // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
     block: DividerBlock,
     component: DividerComponent,
+    slashCommands: [
+        { title: 'Divider', icon: '—', aliases: ['divider', 'hr', 'separator', 'rule'], group: 'blocks', order: 40, run: (e) => e.exec('divider:insert') },
+    ],
     actions: {
         /**
          * Insert a divider like the `--- ` shortcut does (see insertDivider): an empty paragraph

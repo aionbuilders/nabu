@@ -10,6 +10,6 @@ export { default as SlashMenu } from './SlashMenu.svelte';
 export { default as DragHandle } from './DragHandle.svelte';
 export { default as CommandInvite } from './CommandInvite.svelte';
 export { default as CommandChooser } from './CommandChooser.svelte';
-export { SlashMenuController, DEFAULT_SLASH_COMMANDS } from './slash-menu.svelte.js';
+export { SlashMenuController } from './slash-menu.svelte.js';
 
 /** @typedef {import('./slash-menu.svelte.js').SlashCommand} SlashCommand An entry of the slash menu. */

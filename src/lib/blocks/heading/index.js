@@ -15,6 +15,11 @@ const deltaLength = (delta) => (delta || []).reduce((n, op) => n + (typeof op.in
 const HeadingExtension = extension("heading", {
     block: Heading,
     component: HeadingComponent,
+    slashCommands: [
+        { title: 'Heading 1', icon: 'H1', aliases: ['h1', 'title', 'heading'], group: 'text', order: 10, run: (e) => e.exec('heading:1') },
+        { title: 'Heading 2', icon: 'H2', aliases: ['h2', 'subtitle'], group: 'text', order: 20, run: (e) => e.exec('heading:2') },
+        { title: 'Heading 3', icon: 'H3', aliases: ['h3'], group: 'text', order: 30, run: (e) => e.exec('heading:3') },
+    ],
     actions: {
         'heading:1': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 1 } }),
         'heading:2': (nabu) => nabu.exec('block:transform', { type: 'heading', props: { level: 2 } }),

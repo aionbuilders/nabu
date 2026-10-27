@@ -1,8 +1,8 @@
 <script>
-  import { SlashMenuController, DEFAULT_SLASH_COMMANDS } from './slash-menu.svelte.js';
+  import { SlashMenuController } from './slash-menu.svelte.js';
   import { anchorRect, placeNear, clipBounds, isOutside } from './anchor.js';
   /** @type {{ engine: import('../blocks/nabu.svelte.js').Nabu, commands?: import('./slash-menu.svelte.js').SlashCommand[] }} */
-  let { engine, commands = DEFAULT_SLASH_COMMANDS } = $props();
+  let { engine, commands = [] } = $props();
   const ctrl = new SlashMenuController(engine, commands);
   /** @type {HTMLElement | null} */
   let menuEl = $state(null);

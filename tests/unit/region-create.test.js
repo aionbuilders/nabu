@@ -365,13 +365,15 @@ describe('region:create', () => {
 // ─── slash menu ────────────────────────────────────────────────────────────
 
 describe('slash-menu entries', () => {
-  const titles = (engine, block) => engine.slashCommands.filter((c) => c.when(engine, block)).map((c) => c.title);
+  // The editor also loads other extensions' entries: the regions' own are the ones of the 'structure' group.
+  const regionEntries = (engine) => engine.slashCommands.filter((c) => c.group === 'structure');
+  const titles = (engine, block) => regionEntries(engine).filter((c) => c.when(engine, block)).map((c) => c.title);
 
   it('one entry per declared type, named by the type', async () => {
     const engine = await makeEditor(BOOK);
-    expect(engine.slashCommands.map((c) => c.title)).toEqual(['Part', 'Chapter', 'scene']);
+    expect(regionEntries(engine).map((c) => c.title)).toEqual(['Part', 'Chapter', 'scene']);
     const defaults = await makeEditor(undefined);
-    expect(defaults.slashCommands.map((c) => c.title)).toEqual(['Section', 'Subsection', 'Sub-subsection']);
+    expect(regionEntries(defaults).map((c) => c.title)).toEqual(['Section', 'Subsection', 'Sub-subsection']);
   });
 
   it('shown only for the types valid at the caret\'s place', async () => {
@@ -396,7 +398,7 @@ describe('slash-menu entries', () => {
 
   it('titles are overridable', async () => {
     const engine = await makeEditor(BOOK, { messages: { slash: ({ name }) => `Insérer : ${name}` } });
-    expect(engine.slashCommands[0].title).toBe('Insérer : Part');
+    expect(regionEntries(engine)[0].title).toBe('Insérer : Part');
   });
 });
 

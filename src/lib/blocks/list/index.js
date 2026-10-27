@@ -12,6 +12,11 @@ import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
 const ListExtension = extension("list", {
     block: List,
     component: ListComponent,
+    slashCommands: [
+        { title: 'Bulleted list', icon: '•', aliases: ['bullet', 'ul', 'list'], group: 'lists', order: 0, run: (e) => e.exec('list:convert', { listType: 'bullet' }) },
+        { title: 'Numbered list', icon: '1.', aliases: ['numbered', 'ol', 'ordered'], group: 'lists', order: 10, run: (e) => e.exec('list:convert', { listType: 'ordered' }) },
+        { title: 'To-do list', icon: '✓', aliases: ['todo', 'task', 'checkbox', 'checklist'], group: 'lists', order: 20, run: (e) => e.exec('list:convert', { listType: 'todo' }) },
+    ],
     hooks: {
         onBeforeInput,
         // Tab / Shift+Tab with a selection spanning several blocks: the keydown would otherwise resolve to

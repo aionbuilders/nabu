@@ -1,33 +1,46 @@
 /**
+ * The known groups of the slash menu, in display order. A group is a free string: an unknown one is listed after these (in the
+ * order its first entry is met), and an entry without a group comes last.
+ * @type {readonly string[]}
+ */
+export const SLASH_GROUP_ORDER = ['text', 'lists', 'blocks', 'media', 'structure'];
+
+/**
  * @typedef {Object} SlashCommand
  * @property {string} title
  * @property {string} [subtitle]
- * @property {string} [icon]
+ * @property {string} [icon] A short text glyph (no emoji in the library's own entries). A theme or an integrator overrides an
+ *   entry's icon by providing its own entry (`commands` of `SlashMenu`, or `slashCommands` of an extension).
  * @property {string[]} [aliases]
+ * @property {'text' | 'lists' | 'blocks' | 'media' | 'structure' | (string & {})} [group] Where the entry is listed. Known
+ *   groups, in display order: `text`, `lists`, `blocks`, `media`, `structure`; any other string is a group of its own listed
+ *   after them; no group = last.
+ * @property {number} [order] Position inside the group (ascending, default 0); ties keep the declaration order. The menu's
+ *   order never depends on the load order of the extensions.
  * @property {(engine: import('../blocks/nabu.svelte.js').Nabu, block: any) => boolean} [when]
- *   Extension entries only (`Extension#slashCommands`): where the entry applies; `block` is the block holding the caret. Without it
- *   the entry is always offered.
+ *   Where the entry applies; `block` is the block holding the caret. Without it the entry is always offered.
  * @property {(engine: import('../blocks/nabu.svelte.js').Nabu) => void} run
  */
 
-/** @type {SlashCommand[]} */
-export const DEFAULT_SLASH_COMMANDS = [
-  { title: 'Text',          icon: '¶',  aliases: ['paragraph','p','plain'], run: (e) => e.exec('paragraph') },
-  { title: 'Heading 1',     icon: 'H1', aliases: ['h1','title','heading'],  run: (e) => e.exec('heading:1') },
-  { title: 'Heading 2',     icon: 'H2', aliases: ['h2','subtitle'],         run: (e) => e.exec('heading:2') },
-  { title: 'Heading 3',     icon: 'H3', aliases: ['h3'],                    run: (e) => e.exec('heading:3') },
-  { title: 'Bulleted list', icon: '•',  aliases: ['bullet','ul','list'],    run: (e) => e.exec('list:convert', { listType: 'bullet' }) },
-  { title: 'Numbered list', icon: '1.', aliases: ['numbered','ol','ordered'], run: (e) => e.exec('list:convert', { listType: 'ordered' }) },
-  { title: 'To-do list',    icon: '☑',  aliases: ['todo','task','checkbox','checklist'], run: (e) => e.exec('list:convert', { listType: 'todo' }) },
-  { title: 'Code',          icon: '<>', aliases: ['code','snippet'],        run: (e) => e.exec('code') },
-  { title: 'Callout',       icon: '💡', aliases: ['callout','note','info','warning'], run: (e) => e.exec('callout') },
-  { title: 'Quote',         icon: '"',  aliases: ['quote','blockquote'],    run: (e) => e.exec('blockquote') },
-  { title: 'Toggle',        icon: '▸',  aliases: ['toggle','collapse','details'], run: (e) => e.exec('toggle') },
-  { title: 'Divider',       icon: '—',  aliases: ['divider','hr','separator','rule'], run: (e) => e.exec('divider:insert') },
-  { title: 'Image',         icon: '🖼', aliases: ['image','img','photo','picture'],  run: (e) => e.exec('image:pick') },
-  { title: 'Video',         icon: '🎬', aliases: ['video','movie','mp4'],            run: (e) => e.exec('video:pick') },
-  { title: 'File',          icon: '📎', aliases: ['file','attachment','upload','document'], run: (e) => e.exec('file:pick') },
-];
+/**
+ * Stable sort of slash entries: group (known order, then other groups by first appearance, then ungrouped), then `order`, then
+ * declaration order. Returns a new array.
+ * @param {SlashCommand[]} commands
+ * @returns {SlashCommand[]}
+ */
+export function sortSlashCommands(commands) {
+    /** @type {Map<string, number>} */
+    const rank = new Map(SLASH_GROUP_ORDER.map((g, i) => [g, i]));
+    const groupRank = (/** @type {SlashCommand} */ c) => {
+        if (!c.group) return Infinity;
+        if (!rank.has(c.group)) rank.set(c.group, rank.size);
+        return /** @type {number} */ (rank.get(c.group));
+    };
+    return commands
+        .map((c, i) => ({ c, i, g: groupRank(c) }))
+        .sort((a, b) => (a.g === b.g ? 0 : a.g < b.g ? -1 : 1) || (a.c.order ?? 0) - (b.c.order ?? 0) || a.i - b.i)
+        .map((x) => x.c);
+}
 
 /**
  * Filter slash commands by a query. Titles match by SUBSTRING (`/head` -> "Heading 1"), aliases
@@ -47,8 +60,12 @@ export function filterSlashCommands(commands, query) {
 export class SlashMenuController {
     /** @type {import('../blocks/nabu.svelte.js').Nabu} */
     #engine;
-    /** @param {import('../blocks/nabu.svelte.js').Nabu} engine @param {SlashCommand[]} commands */
-    constructor(engine, commands) { this.#engine = engine; this.commands = commands ?? DEFAULT_SLASH_COMMANDS; }
+    /**
+     * @param {import('../blocks/nabu.svelte.js').Nabu} engine
+     * @param {SlashCommand[]} [commands] EXTRA entries of the integrator, added to the ones the loaded extensions contribute
+     *   (`Extension#slashCommands`, collected in `engine.slashCommands`) and sorted with them. The menu has no entry of its own.
+     */
+    constructor(engine, commands) { this.#engine = engine; this.commands = commands ?? []; }
 
     /** @type {{ block: any, slashStart: number, cursor: number, query: string } | null} */
     match = $derived.by(() => {
@@ -68,14 +85,17 @@ export class SlashMenuController {
 
     query = $derived(this.match?.query ?? '');
 
-    /** The menu's own list, then the entries contributed by extensions that apply at the caret (`when`). */
+    /**
+     * The entries of the loaded extensions plus the integrator's extras that apply at the caret (`when`), in the documented
+     * order (group, `order`, declaration order).
+     */
     available = $derived.by(() => {
         const block = this.match?.block;
-        const contributed = (this.#engine.slashCommands ?? []).filter((c) => {
+        const applies = (/** @type {SlashCommand} */ c) => {
             if (typeof c.when !== 'function') return true;
             try { return !!block && !!c.when(this.#engine, block); } catch { return false; }
-        });
-        return contributed.length ? [...this.commands, ...contributed] : this.commands;
+        };
+        return sortSlashCommands([...(this.#engine.slashCommands ?? []), ...this.commands].filter(applies));
     });
 
     filteredItems = $derived.by(() => {

@@ -6,6 +6,9 @@ export const ToggleExtension = extension("toggle", {
     // @ts-ignore — static-side variance on create()
     block: ToggleBlock,
     component: ToggleComponent,
+    slashCommands: [
+        { title: 'Toggle', icon: '▸', aliases: ['toggle', 'collapse', 'details'], group: 'blocks', order: 30, run: (e) => e.exec('toggle') },
+    ],
     actions: {
         'toggle': (nabu) => nabu.exec('block:transform', { type: 'toggle' }),
     },

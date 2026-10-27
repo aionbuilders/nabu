@@ -101,6 +101,20 @@ test.describe('home editor', () => {
     await expect(menu).toHaveCount(0);
   });
 
+  test('the slash menu only lists the blocks this editor loads (no callout / toggle / image / video / file)', async ({ page }) => {
+    await open(page);
+    await focusEnd(page, 'Press / for blocks, ::: for a region, ⌘Z to rewind.');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('/');
+    await expect(page.locator('.nabu-slash')).toBeVisible();
+    const titles = await page.locator('.nabu-slash .nabu-slash-title').allTextContents();
+    for (const absent of ['Callout', 'Toggle', 'Image', 'Video', 'File']) expect(titles).not.toContain(absent);
+    expect(titles.slice(0, 10)).toEqual([
+      'Text', 'Heading 1', 'Heading 2', 'Heading 3', 'Bulleted list', 'Numbered list', 'To-do list', 'Code', 'Quote', 'Divider',
+    ]);
+    await page.keyboard.press('Escape');
+  });
+
   test('the floating toolbar appears on a selection, inside the scope', async ({ page }) => {
     await open(page);
     await selectRange(page, 'Start typing — this is Nabu.', 0, 'Start typing — this is Nabu.', 5);

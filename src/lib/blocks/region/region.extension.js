@@ -76,6 +76,7 @@ export function RegionsExtension(options = {}) {
         slashCommands: [...config.types.values()].map((def) => ({
             title: text('slash', { name: def.name, type: def.id }),
             icon: '§',
+            group: 'structure',
             aliases: [def.id, 'region'],
             when: (/** @type {Nabu} */ nabu, /** @type {import("../block.svelte.js").Block} */ block) => {
                 const place = placeOf(nabu, block);

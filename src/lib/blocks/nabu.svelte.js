@@ -413,8 +413,8 @@ export class Nabu {
     inputRules = [];
 
     /**
-     * Slash-menu entries contributed by extensions (`Extension#slashCommands`); the slash menu appends them to its own list,
-     * keeping those whose `when(engine, block)` holds at the caret.
+     * Slash-menu entries contributed by extensions (`Extension#slashCommands`); the slash menu lists ONLY these (plus the
+     * integrator's extras), sorted by `group` / `order`, keeping those whose `when(engine, block)` holds at the caret.
      * @type {import('../ui/slash-menu.svelte.js').SlashCommand[]}
      */
     slashCommands = [];

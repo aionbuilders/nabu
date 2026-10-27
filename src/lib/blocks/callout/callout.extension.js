@@ -69,6 +69,9 @@ export const CalloutExtension = extension("callout", {
     // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
     block: CalloutBlock,
     component: CalloutComponent,
+    slashCommands: [
+        { title: 'Callout', icon: '!', aliases: ['callout', 'note', 'info', 'warning'], group: 'blocks', order: 10, run: (e) => e.exec('callout') },
+    ],
     actions: {
         'callout': (nabu) => nabu.exec('block:transform', { type: 'callout' }),
     },

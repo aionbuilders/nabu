@@ -65,6 +65,9 @@ export const BlockquoteExtension = extension("blockquote", {
     // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
     block: BlockquoteBlock,
     component: BlockquoteComponent,
+    slashCommands: [
+        { title: 'Quote', icon: '"', aliases: ['quote', 'blockquote'], group: 'blocks', order: 20, run: (e) => e.exec('blockquote') },
+    ],
     actions: {
         'blockquote': (nabu) => nabu.exec('block:transform', { type: 'blockquote' }),
     },

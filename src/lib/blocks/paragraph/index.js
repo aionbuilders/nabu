@@ -29,6 +29,9 @@ const ParagraphExtension = extension("paragraph", {
     block: Paragraph,
     defaultBlock: true,
     component: ParagraphComponent,
+    slashCommands: [
+        { title: 'Text', icon: '¶', aliases: ['paragraph', 'p', 'plain'], group: 'text', order: 0, run: (e) => e.exec('paragraph') },
+    ],
     actions: {
         'paragraph': (nabu) => nabu.exec('block:transform', { type: 'paragraph' }),
         'gap:click': (nabu, data) => {

@@ -9,6 +9,9 @@ export const FileExtension = extension("file", {
     component: FileComponent,
     // A file pasted from the clipboard becomes this block.
     pasteFileHandlers: [mediaFileHandler('file', (file) => file.size > 0 || !!file.type)],
+    slashCommands: [
+        { title: 'File', icon: '⎘', aliases: ['file', 'attachment', 'upload', 'document'], group: 'media', order: 20, run: (e) => e.exec('file:pick') },
+    ],
     actions: {
         'file:pick': (nabu) => pickMedia(nabu, 'file', '*/*'),
         /**

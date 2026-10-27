@@ -9,6 +9,9 @@ export const VideoExtension = extension("video", {
     component: VideoComponent,
     // A file pasted from the clipboard becomes this block.
     pasteFileHandlers: [mediaFileHandler('video', (file) => /^video\//i.test(file.type), 20)],
+    slashCommands: [
+        { title: 'Video', icon: '▷', aliases: ['video', 'movie', 'mp4'], group: 'media', order: 10, run: (e) => e.exec('video:pick') },
+    ],
     actions: {
         'video:pick': (nabu) => pickMedia(nabu, 'video', 'video/*'),
         /**
