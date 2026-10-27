@@ -172,6 +172,11 @@ export class RegionBlock extends MegaBlock {
     // The title first, then the body
     positions = $derived(this.behavior.positions + this.children.reduce((sum, child) => sum + (child.positions ?? 0), 0));
 
+    // How many blocks the body holds, roughly (a sub-region counts its own body, any other container its direct children): the estimate
+    // of the height of a body that the browser skips while it is off screen (Region.svelte, large documents). Reactive in the structure only.
+    /** @type {number} */
+    weight = $derived(this.children.reduce((/** @type {number} */ sum, /** @type {any} */ c) => sum + 1 + (c instanceof RegionBlock ? c.weight : (c.children?.length ?? 0)), 0));
+
     // Words of the BODY only: a title is a label, not prose, so neither this region's title nor the titles of its sub-regions
     // (each sub-region block counts its own body the same way) are counted.
     wordCount = $derived(this.children.reduce((s, c) => s + (c.wordCount ?? 0), 0));

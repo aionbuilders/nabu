@@ -9,13 +9,13 @@
 import { githubBlob } from './adr.js';
 
 /** The day this file was last checked against the repository. Shown as "Updated". */
-export const LIMITS_UPDATED = '2026-10-27';
+export const LIMITS_UPDATED = '2026-10-28';
 
 export const LIMITS_TITLE = "What Nabu doesn't do well (yet)";
 export const LIMITS_LEAD =
   'If you are deciding whether to build on Nabu, this page matters more than the home page. Everything here is true on the day it was last updated, and each number links to the test that measures it.';
 export const LIMITS_DESCRIPTION =
-  'What Nabu does not do well yet: typing in very large documents, mobile keyboards, Firefox and Safari, network collaboration, tables, browser extensions, bundle weight and setup. What we know, the numbers, and what we plan.';
+  'What Nabu does not do well yet: loading very large documents, mobile keyboards, Firefox and Safari, network collaboration, tables, browser extensions, bundle weight and setup. What we know, the numbers, and what we plan.';
 
 /**
  * Status vocabulary, with the colour token each one is drawn in (see arch.css): `fix` coral, `plan` amber, `design` blue.
@@ -42,15 +42,15 @@ export const STATUSES = {
 export const LIMITS = [
   {
     id: 'typing',
-    title: 'Typing in huge documents',
-    status: 'being-fixed',
+    title: 'Loading huge documents',
+    status: 'known-planned',
     description:
-      'At the time of writing, a key takes 88 ms to reach the screen in a document of 10,000 blocks (19.6 ms at 1,000, 9 ms on a short page). The engine itself stays near 3 ms: the rest is the browser, working after the text has changed. A fix is in progress; the lab will show it.',
-    value: '88 ms',
-    unit: 'p50 · 10k blocks · at the time of writing',
+      'At the time of writing, opening a document of 10,000 blocks takes about 9 s in the lab, and the page does not answer while it loads (1,000 blocks: about 1.3 s). Typing in such a document was slow too (88 ms per key) and is fixed since 0.1.0: the browser skips what is off screen, and a key reaches the screen in about 13 ms at the median, 19 ms for the slow one in twenty (9 ms and 15 ms on a short page, on a busy machine). The load is next: the document is built block by block, and a single transaction is read several times by the extensions.',
+    value: '9 s',
+    unit: 'to load 10k blocks · at the time of writing',
     volatile: true,
-    asOf: '2026-10-27',
-    // The measure, run alone on a production build. The audit entry P-107 (docs/audit/2026-10.md) is the open item that tracks the fix.
+    asOf: '2026-10-28',
+    // The measure, run alone on a production build: it prints the load time and the typing numbers. The audit entry P-107 (docs/audit/2026-10.md) tracked the typing fix.
     source: { path: 'tests/e2e/perf/lab-numbers.perf.ts', label: 'tests/e2e/perf/lab-numbers.perf.ts' },
   },
   {

@@ -1,6 +1,7 @@
 <script>
-    import Block from "../Block.svelte";
+    import BlockList from "../BlockList.svelte";
     import RichText from "../../behaviors/text/RichText.svelte";
+    import { LARGE_DOC } from "../chunks.js";
     import { Regions } from "./regions.svelte.js";
     import { createMessages } from "./messages.js";
     import { endMarkerText, needsEndMarker } from "./end-marker.js";
@@ -8,6 +9,8 @@
     /** @type {{block: import('./region.svelte.js').RegionBlock}}*/
     let {block} = $props();
 
+    // A large document (Nabu.svelte sets `data-nabu-large` on the root): the body is skipped by the browser while off screen, see the style below.
+    const large = $derived(block.nabu.blocks.size >= LARGE_DOC);
     const region = $derived(Regions.get(block.nabu).of(block));
     const level = $derived(Math.min(6, Math.max(1, region?.level ?? 1)));
     // The label template applied with an EMPTY title ("1.", "1.1", "Chapter 2"): the editable title follows it.
@@ -80,9 +83,24 @@
             data-block-type="region"
             data-nabu-isolated
             data-placeholder={block.placeholder}
-        ><RichText delta={block.delta} /></div><span class="nabu-region-rule" data-nabu-ui contenteditable="false" aria-hidden="true">{#if pending}<span class="nabu-region-drain"></span>{/if}</span></div><div class="nabu-region-body">{#each block.children as child (child.id)}<Block block={child} />{/each}</div>{#if endText}<!-- Never a caret stop (not editable, not selectable) and not read as text: a separator named by the same sentence. --><div class="nabu-region-end" data-region-end data-nabu-ui contenteditable="false" role="separator" aria-label={endText}><span class="nabu-region-end-rule" aria-hidden="true"></span><span class="nabu-region-end-text" aria-hidden="true">{endText}</span></div>{/if}</div>
+        ><RichText delta={block.delta} /></div><span class="nabu-region-rule" data-nabu-ui contenteditable="false" aria-hidden="true">{#if pending}<span class="nabu-region-drain"></span>{/if}</span></div><div class="nabu-region-body" style:--nb-region-blocks={large ? block.weight : undefined}><BlockList blocks={block.children} /></div>{#if endText}<!-- Never a caret stop (not editable, not selectable) and not read as text: a separator named by the same sentence. --><div class="nabu-region-end" data-region-end data-nabu-ui contenteditable="false" role="separator" aria-label={endText}><span class="nabu-region-end-rule" aria-hidden="true"></span><span class="nabu-region-end-text" aria-hidden="true">{endText}</span></div>{/if}</div>
 
 <style>
+    /* ── Large documents ── In a large document (`data-nabu-large`, 800 blocks) the body of a region is skipped by the browser while it is off screen
+       (`content-visibility: auto`): its layout, paint and selection bookkeeping no longer grow with the size of the document, which is
+       what keeps a keystroke within a frame at 10,000 blocks. Until it has been shown once its height is an estimate (its number of
+       blocks times --nb-block-estimate, 72px); `auto` then remembers the real one. A small document is left exactly as it was. */
+    :global(.nabu-editor[data-nabu-large]) .nabu-region-body {
+        content-visibility: auto;
+        contain-intrinsic-block-size: auto calc(var(--nb-region-blocks, 16) * var(--nb-block-estimate, 72px));
+        /* ...and what it contains may hang out of its box (the margin rail of a sub-region): paint containment would clip it. */
+        overflow-clip-margin: var(--nb-clip-margin, 3rem);
+    }
+
+    @media print {
+        :global(.nabu-editor[data-nabu-large]) .nabu-region-body { content-visibility: visible; }
+    }
+
     /* ── Margin rail: the region that holds the caret (data-region-caret), from its seam to the end of its body ── */
     @media not print {
         .nabu-region[data-region-caret] {

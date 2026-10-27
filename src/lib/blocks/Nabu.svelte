@@ -1,6 +1,7 @@
 <script>
     import { Nabu } from "./nabu.svelte.js";
-    import Block from "./Block.svelte";
+    import BlockList from "./BlockList.svelte";
+    import { LARGE_DOC } from "./chunks.js";
     import { commandTargetElement } from "../utils/command-confirm.svelte.js";
 
     /**
@@ -18,6 +19,8 @@
     function syncReadonly() { if (readonly !== undefined) engine.readonly = !!readonly; }
     syncReadonly();
     $effect.pre(syncReadonly);
+    // A large document (800 blocks, at any level): its containers may skip their off-screen body, see blocks/chunks.js. `data-nabu-large` on the root.
+    const isLarge = $derived(engine.blocks.size >= LARGE_DOC);
     const isReadonly = $derived(readonly !== undefined ? !!readonly : engine.readonly);
 
     // The engine learns which element is its own root (an attachment: set when the root mounts, cleared when it goes away, and re-run
@@ -71,6 +74,7 @@
     data-nabu-root="true"
     {@attach claimRoot}
     data-nabu-range={engine.selection?.isRange ? '' : undefined}
+    data-nabu-large={isLarge ? '' : undefined}
     onbeforeinput={(e) => mine(e) && engine.handleBeforeinput(e)}
     onkeydown={(e) => mine(e) && engine.handleKeydown(e)}
     onmousedown={(e) => mine(e) && engine.handleMousedown(e)}
@@ -88,9 +92,7 @@
     oncompositionupdate={(e) => mine(e) && engine.handleCompositionUpdate(e)}
     oncompositionend={(e) => mine(e) && engine.handleCompositionEnd(e)}
 >
-    {#each engine.children as block (block.id)}
-        <Block {block} />
-    {/each}
+    <BlockList blocks={engine.children} />
 </div>
 
 <!-- One polite live region per editor: prompts and outcomes of command confirmations (hold, invite, choose). Visually hidden. -->
@@ -155,6 +157,10 @@
     .nabu-editor :global([data-block-type='paragraph']:first-child),
     .nabu-editor :global(:is([data-block-type='heading'], [data-block-type='divider']) + [data-block-type='paragraph']) {
         text-indent: 0;
+    }
+    /* A long list of blocks is rendered in chunks (BlockList.svelte): the first block of a chunk is not the first of its text, except in the first chunk. */
+    .nabu-editor :global(.nabu-chunk:not(:first-child) > [data-block-type='paragraph']:first-child) {
+        text-indent: var(--nb-paragraph-indent, 0);
     }
 
     /* A selection across several blocks leaves out the blocks that isolate their text (a region title, ADR 018 §3.9): the model

@@ -1,19 +1,23 @@
 /**
  * Typing latency, measured ONE way everywhere on the site (the X-ray on the home page, the Performance lab, any proof).
  *
- * MEASUREMENTS, 2026-10-27, headless Chromium under Playwright (software rendering, no GPU), production build (`build:e2e`),
- * nothing else running, 60 characters typed in the middle of the document at 90 ms per key (tests/e2e/perf/lab-numbers.perf.ts).
- * These numbers are NOT printed on the site.
+ * MEASUREMENTS, 2026-10-28, headless Chromium under Playwright (software rendering, no GPU), production build (`build:e2e`),
+ * 60 characters typed in the middle of the document at 90 ms per key (tests/e2e/perf/lab-numbers.perf.ts), on a machine shared with
+ * other jobs (load average 4 on 24 cores), BEFORE and AFTER the fix in the same session. These numbers are NOT printed on the site.
  *
- *                          key to next paint p50 / p95     engine work p50
- *   lab,  1,000 blocks        19.6 ms / 26.4 ms                2.9 ms
- *   lab, 10,000 blocks        88.2 ms / 107 ms                 2.6 ms   (the 10,000 runs of the same day: 88 to 101 ms p50)
- *   home editor (7 blocks)     9.1 ms / 13.3 ms                4.0 ms
+ *                          before the fix                after the fix                engine work p50
+ *                          key to next paint p50 / p95   key to next paint p50 / p95
+ *   lab,  1,000 blocks        18.1 ms / 24.3 ms             9.3-9.7 ms / 13.5-20.1 ms      2.8 ms
+ *   lab, 10,000 blocks        92.0 ms / 112 ms              13.5 ms / 18.3-19.4 ms         2.9 ms   (4 runs: p50 13.5 every time)
+ *   home editor (7 blocks)     8.7 ms / 14.8 ms              8.6-9.0 ms / 14.4-15.1 ms     3.5 ms   (unchanged: the floor of this setup)
+ *   (the same day, quiet machine, first measure: 10,000 blocks 80 / 99 ms before, 10.3 / 13.2 ms after)
  *
- *   Reading: at 10,000 blocks the engine's own work up to the DOM text update stays ~3 ms, but the `beforeinput` handler keeps running
- *   for 60-80 ms AFTER that update (Chrome long-animation-frame: script 63-79 ms in `onbeforeinput`), so the frame is late. That is
- *   what "key to next paint" is for: "key to DOM text" alone cannot see it. The small document sits at ~9 ms, which is mostly the
- *   wait for the next frame tick (a uniform 0-16.7 ms, ~8 ms on average).
+ *   Reading: the engine's own work stays ~3 ms at any size and a keystroke creates no DOM node. What took 80-100 ms at 10,000 blocks
+ *   was the browser: after the text changed it laid out, painted and synced the selection of the WHOLE contenteditable (a Chrome
+ *   trace: `Editor::SyncSelection` 70 ms per key, `Layout` 15-30 ms for 9 dirty objects out of 27,000). The fix lets it skip what is off
+ *   screen (`content-visibility: auto` on chunks of ~64 blocks and on region bodies, see src/lib/blocks/chunks.js). The small document
+ *   sits at ~9 ms, which is mostly the wait for the next frame tick (a uniform 0-16.7 ms, ~8 ms on average): it is the floor.
+ *   Loading 10,000 blocks takes 7-10 s in the lab (not changed by the fix), 1,000 blocks 1-1.4 s.
  *
  * KEY TO NEXT PAINT (the number we call "latency"; INP-like)
  *   start  the keyboard event's OWN `event.timeStamp` (keydown, or beforeinput when there is no keydown: virtual keyboards, dictation).

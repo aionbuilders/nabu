@@ -16,7 +16,8 @@ import { normalizeLang } from '../utils/spellcheck.js';
 import { resolveTabMode, handleTabKey, isModifierKey, DEFAULT_TAB_HINT } from '../utils/tab.js';
 import { moveBlocks } from './move.js';
 import { closestWithin } from '../utils/dom-scope.js';
-import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset } from './undo-selection.js';
+import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset, revealFocus } from './undo-selection.js';
+import { LARGE_DOC } from './chunks.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
 
@@ -40,6 +41,8 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 
 /**
 * @typedef {Object} NabuInit
+* The options of an editor: the extensions to load, an initial snapshot, files, placeholders, readonly, language, Tab behaviour, keymap and
+* command confirmation. Accepted by `new Nabu(init)`, by `createEditor` and the preset factories, and by `createPersistedEditor`.
 * @property {Extension[]} [extensions]
 * @property {Uint8Array<ArrayBufferLike>} [snapshot]
 * @property {import('../files/files.svelte.js').FilesConfig} [files]
@@ -108,9 +111,9 @@ export const isTransformInput = (e) => {
 };
 
 /**
- * The engine machinery behind {@link Nabu#internals}. **Unstable**: may change in any minor version (see `docs/guides/extensions.md`,
- * "Stability"). Methods are bound to the editor; their signatures are those of the `Nabu` methods of the same name.
  * @typedef {Object} NabuInternals
+ * The engine machinery behind {@link Nabu#internals}. **Unstable**: may change in any version (see `docs/guides/extensions.md`,
+ * "Stability"). Methods are bound to the editor; their signatures are those of the `Nabu` methods of the same name.
  * @property {Pulse} pulse The action bus behind `exec()`: `pulse.on(topic, handler)` observes or adds a topic at runtime.
  * @property {CommandConfirmation} commandConfirm The confirmation controller of commands (hold / invite / choose): `start`, `stop`, `offer`, `choose`, `cancel`, `pending`.
  * @property {Map<string, Array<(nabu: Nabu, ...args: any[]) => any>>} hooks Extension hooks by name, in registration order (the normalizers of `onBeforeTransaction`, the `onBeforeInput` handlers...).
@@ -153,6 +156,13 @@ export const isTransformInput = (e) => {
  * @property {{ normalize: NabuSelection['normalize'], scheduleRepair: NabuSelection['scheduleRepair'], repairAfterRemoval: NabuSelection['repairAfterRemoval'], placements: number, attachRoot: NabuSelection['attachRoot'], owns: NabuSelection['owns'], scope: NabuSelection['scope'], root: HTMLElement | null }} selection The selection's own repair machinery, and the engine's root element: `attachRoot(el)` (what `Nabu.svelte` calls on mount, it returns the detach function), `root`, `owns(node)` (inside MY root, not in a nested editor) and `scope()` ('mine' | 'outside' | 'foreign': whose business the live DOM selection is).
  */
 
+/**
+ * The editor engine. It owns the document (a Loro CRDT), the block tree and its registry, the selection, the commands and the
+ * extensions, and runs the event, clipboard and drag and drop pipelines; `NabuEditor` renders it. Create one with `createEditor`
+ * (or a preset factory such as `createDocumentEditor`) rather than `new Nabu(...)`, then read and write the content through
+ * `serialize`, `importMarkdown`, `importJSON`, `exec` and `transact`. The members documented as public are the stable contract of
+ * `@aionbuilders/nabu/extend`; `internals` is the unstable door to the rest.
+ */
 export class Nabu {
     /** @type {Pulse} */
     #pulse = new Pulse();
@@ -465,11 +475,13 @@ export class Nabu {
     CONTINUE = Nabu.CONTINUE;
     
     /**
+     * The Loro document behind the editor (public: connect it to a server with `doc.subscribeLocalUpdates` and `importRemote`).
      * @type {LoroDoc}
      * @public
      */
     doc;
     /**
+     * The block classes registered by the loaded extensions, by block type.
      * @type {SvelteMap<string, typeof Block>}
      * @public
      */
@@ -483,17 +495,20 @@ export class Nabu {
      */
     defaultBlockType = null;
     /**
+     * The Svelte components registered by the loaded extensions, by block type.
      * @type {SvelteMap<string, Component>}
      * @public
      */
     components = new SvelteMap();
     /**
+     * Every live block of the document, by tree id.
      * @type {SvelteMap<string, Block>}
      * @public
      */
     blocks = new SvelteMap();
 
     /**
+     * The live blocks of each type (reactive sets, by block type).
      * @type {SvelteMap<string, SvelteSet<Block>>}
      * @public
      */
@@ -652,6 +667,7 @@ export class Nabu {
     ]));
 
     /**
+     * The root blocks of the document, in order (reactive).
      * @type {Block[]}
      * @public
      */
@@ -1490,7 +1506,7 @@ export class Nabu {
         // Commands first (ADR 017): undo / redo and every declared shortcut. What no command handles falls through to the
         // legacy `onKeyDown` hooks and the block's own keydown, then to the native behavior.
         if (this.commands.handleKeydown(e)) return;
-        if (this.#selectAll(e) || this.#landOnIsolated(e)) return;
+        if (this.#selectAll(e) || this.#landOnIsolated(e) || this.#jumpToEdge(e)) return;
 
         this.dispatchEventToSelection('keydown', e, 'onKeyDown');
         // Tab / Shift+Tab that no command, hook or block took: the `tab` option decides (structural meanings come first).
@@ -1524,6 +1540,32 @@ export class Nabu {
         const first = plain[0];
         const last = plain.at(-1);
         if (first && last) sel.selectBetween(first, last);
+        return true;
+    }
+
+    /**
+     * Ctrl / Cmd + End and Ctrl / Cmd + Home (with Shift: extend the selection) in a LARGE document (`LARGE_DOC` blocks, whose
+     * off-screen parts the browser skips, see `blocks/chunks.js`). The browser moves the caret to the end of what it has laid out, and
+     * a skipped part has none: it would stop short of the real end. The caret goes to the end of the last text block (the start of
+     * the first) of the model instead, and the page scrolls to it. A smaller document keeps the browser's own key.
+     * @param {KeyboardEvent} e
+     * @returns {boolean} Whether the key was handled
+     */
+    #jumpToEdge(e) {
+        if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.key !== 'End' && e.key !== 'Home')) return false;
+        if (e.isComposing || this.#composing || this.blocks.size < LARGE_DOC) return false;
+        const texts = textBlocksInOrder(this, { visible: true });
+        const toEnd = e.key === 'End';
+        const target = toEnd ? texts[texts.length - 1] : texts[0];
+        const point = target?.element ? /** @type {any} */ (target).getDOMPoint?.(toEnd ? (target.behaviors?.get('text')?.text.length ?? 0) : 0) : null;
+        if (!target || !point) return false;
+        e.preventDefault();
+        const live = typeof window !== 'undefined' ? window.getSelection() : null;
+        const anchor = e.shiftKey && live?.anchorNode && this.selection.owns(live.anchorNode) ? { node: live.anchorNode, offset: live.anchorOffset } : point;
+        this.selection.setBaseAndExtent(anchor.node, anchor.offset, point.node, point.offset);
+        // The skipped parts above take their real height as they are shown: reveal again once the layout has settled.
+        revealFocus(target);
+        requestAnimationFrame(() => requestAnimationFrame(() => { if (target.element?.isConnected) revealFocus(target); }));
         return true;
     }
 

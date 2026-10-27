@@ -69,7 +69,11 @@
  *   shown above the seam and announced to screen readers
  */
 
-/** @type {Required<RegionMessages>} */
+/**
+ * The default texts of the regions: command labels, the seam and end marker wording, the chooser and the hold prompt (English).
+ * Override any key with `RegionsExtension({ messages })`.
+ * @type {Required<RegionMessages>}
+ */
 export const DEFAULT_REGION_MESSAGES = {
     split: 'Split here',
     insert: 'Insert a region',

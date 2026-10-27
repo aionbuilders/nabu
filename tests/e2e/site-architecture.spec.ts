@@ -462,12 +462,12 @@ test.describe('/architecture/limits', () => {
   test('eight limits, each with a status, an honest description, a number and a source on GitHub', async ({ page }) => {
     await page.goto('/architecture/limits');
     await expect(page.locator('h1')).toHaveText(/What Nabu doesn.t do well \(yet\)/);
-    await expect(page.getByText('Updated 2026-10-27')).toBeVisible();
+    await expect(page.getByText('Updated 2026-10-28')).toBeVisible();
     await expect(page.getByRole('link', { name: /^0\.1\.0/ })).toHaveAttribute('href', '/changelog');
     const limits = page.getByTestId('limit');
     await expect(limits).toHaveCount(8);
     const expected: Record<string, [string, string]> = {
-      'Typing in huge documents': ['known · being fixed', '88 ms'],
+      'Loading huge documents': ['known · planned', '9 s'],
       'Mobile keyboards': ['known · planned', '—'],
       'Firefox and Safari': ['known · planned', '1 / 3'],
       'Real-time collaboration': ['by design, not yet', 'tabs'],
@@ -485,17 +485,16 @@ test.describe('/architecture/limits', () => {
       await expect(item.locator('.source')).toHaveAttribute('href', /^https:\/\/github\.com\/aionbuilders\/nabu\/blob\/main\/[^\s]+$/);
     }
     // the number that is being worked on says when it was true
-    const typing = limits.filter({ hasText: 'Typing in huge documents' });
+    const typing = limits.filter({ hasText: 'Loading huge documents' });
     await expect(typing.locator('.unit')).toContainText('at the time of writing');
     await expect(typing.locator('.source')).toHaveAttribute('href', `${REPO}/blob/main/tests/e2e/perf/lab-numbers.perf.ts`);
   });
 
-  test('the statuses have their colours: coral, amber, blue', async ({ page }) => {
+  test('the statuses have their colours: amber, blue (no limit is "being fixed" at the moment: that tone, coral, has none on the page)', async ({ page }) => {
     await page.goto('/architecture/limits');
     const color = (text: string) => page.locator('.status', { hasText: new RegExp(`^${text}$`) }).first().evaluate((el) => getComputedStyle(el).color);
-    const [fix, plan, design] = [await color('known · being fixed'), await color('known · planned'), await color('by design, not yet')];
-    expect(new Set([fix, plan, design]).size).toBe(3);
-    expect(fix).toBe('rgb(255, 111, 97)');
+    const [plan, design] = [await color('known · planned'), await color('by design, not yet')];
+    expect(plan).not.toBe(design);
     expect(design).toBe('rgb(122, 162, 247)');
   });
 });
