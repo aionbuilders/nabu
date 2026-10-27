@@ -7,6 +7,11 @@ import wasm from 'vite-plugin-wasm';
 // without overwriting each other (the default slot uses `.svelte-kit` and `build`). See playwright.config.js.
 const SLOT = process.env.NABU_SLOT;
 
+// Hosts the dev and preview servers answer besides localhost: any Cloudflare quick tunnel (`cloudflared tunnel --url …`), plus
+// extra hosts from `NABU_ALLOWED_HOSTS` (comma separated, e.g. a named tunnel's domain). A leading dot allows every subdomain.
+// Not `true`: Vite's host check is what stops DNS-rebinding attacks on the dev server.
+const ALLOWED_HOSTS = ['.trycloudflare.com', ...(process.env.NABU_ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim()).filter(Boolean)];
+
 export default defineConfig({
 	plugins: [
 		sveltekit({
@@ -17,6 +22,12 @@ export default defineConfig({
 		}),
 		wasm()
 	],
+	server: {
+		allowedHosts: ALLOWED_HOSTS,
+		// Other slots' builds and test runs write into the repo: without this the dev server reloads the page on every one of their files.
+		watch: { ignored: ['**/build-*/**', '**/.svelte-kit-*/**', '**/test-results*/**'] }
+	},
+	preview: { allowedHosts: ALLOWED_HOSTS },
 	build: {
 		target: 'esnext' /* top-level await natif (Loro WASM) */
 	}
