@@ -19,6 +19,11 @@ const LIGHT = { pane: 'rgb(255, 255, 255)', float: 'rgb(255, 255, 255)', text: '
 
 const pane = (page: Page) => page.locator('[data-nabu-root]');
 const scope = (page: Page) => page.getByTestId('hero-editor');
+const panel = (page: Page) => page.getByTestId('xray');
+const treeLines = (page: Page) => page.getByTestId('xray-tree').locator('.line');
+const ops = (page: Page) => page.getByTestId('xray-op');
+const FIRST = 'Start typing — this is Nabu.';
+const SECOND = 'Press / for blocks, ::: for a region, ⌘Z to rewind.';
 
 async function open(page: Page) {
   await page.goto('/');
@@ -316,6 +321,135 @@ test.describe('home editor', () => {
     expect(external).toEqual([]);
   });
 
+  test('X-ray: side by side (60 / 40, same height, joined), a named region that does not announce', async ({ page }) => {
+    await open(page);
+    await expect(panel(page)).toBeVisible();
+    await expect(panel(page)).toHaveAttribute('aria-label', 'Live model');
+    await expect(panel(page)).toHaveAttribute('aria-live', 'off');
+    await expect(page.getByRole('region', { name: 'Live model' })).toHaveCount(1);
+    await expect(page.getByTestId('xray-toggle')).toBeHidden();
+    const [e, x] = [(await pane(page).boundingBox())!, (await panel(page).boundingBox())!];
+    const total = e.width + x.width;
+    expect(e.width / total).toBeGreaterThan(0.56);
+    expect(e.width / total).toBeLessThan(0.64);
+    expect(Math.abs(e.height - x.height), 'same height').toBeLessThanOrEqual(1);
+    expect(Math.abs(e.y - x.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(e.x + e.width - x.x), 'joined: the panel starts where the editor ends').toBeLessThanOrEqual(1);
+    const radii = await page.evaluate(() => {
+      const r = (el: Element) => getComputedStyle(el).borderRadius;
+      return { pane: r(document.querySelector('[data-nabu-root]')!), panel: r(document.querySelector('[data-testid="xray"]')!) };
+    });
+    expect(radii).toEqual({ pane: '16px 0px 0px 16px', panel: '0px 16px 16px 0px' });
+    const dims = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    expect(dims.sw).toBeLessThanOrEqual(dims.iw);
+  });
+
+  test('X-ray: the seeded model, one line per block, nested, with the mark', async ({ page }) => {
+    await open(page);
+    await expect(panel(page)).toContainText('model');
+    await expect(panel(page)).toContainText('live');
+    await expect.poll(async () => (await treeLines(page).allTextContents()).map((t) => t.replace(/#\d+/, '#_'))).toEqual([
+      'paragraph#_ "Start typing — this is Nabu."',
+      'bold [0, 12]',
+      'paragraph#_ "Press / for blocks, ::: for a region, ⌘Z…"',
+      'region#_ section-2 "The bank"',
+      'list#_ bullet',
+      'list-item#_ "Bold, italic, links, code"',
+      'list-item#_ "Lists, quotes, code blocks"',
+      'paragraph#_ "Everything you type is kept in this brow…"',
+    ]);
+    // nesting: the region body is indented under the region, the list items under the list
+    const pad = await treeLines(page).evaluateAll((els) => els.map((el) => parseFloat(getComputedStyle(el).paddingLeft)));
+    const ch = pad[5] / 4; // list item: depth 2 -> 4ch
+    expect(pad.map((v) => Math.round(v / ch))).toEqual([0, 2, 0, 0, 2, 4, 4, 2]);
+    await expect(ops(page)).toHaveCount(0);
+    await expect(page.getByTestId('xray-ops')).toContainText('No operations yet');
+  });
+
+  test('X-ray: typing logs a measured operation and updates the block excerpt', async ({ page }) => {
+    await open(page);
+    await focusEnd(page, FIRST);
+    await page.keyboard.type('!?');
+    await expect(treeLines(page).first()).toContainText(`"${FIRST}!?"`);
+    await expect(ops(page)).toHaveCount(2);
+    // newest first, the latest in coral, the older muted; a real, numeric time
+    await expect(ops(page).nth(0)).toHaveText(/^\+ insert "\?" @ 29 · \d+(\.\d)? ms$/);
+    await expect(ops(page).nth(1)).toHaveText(/^\+ insert "!" @ 28 · \d+(\.\d)? ms$/);
+    const colors = await ops(page).evaluateAll((els) => els.map((el) => getComputedStyle(el).color));
+    expect(colors[0]).toBe('rgb(255, 111, 97)');
+    expect(colors[1]).not.toBe(colors[0]);
+    // the time is the key's: it is not a constant, and is plausible for one key (well under a second)
+    const ms = Number((await ops(page).nth(0).textContent())!.match(/([\d.]+) ms/)![1]);
+    expect(ms).toBeGreaterThan(0);
+    expect(ms).toBeLessThan(1000);
+    // a deletion
+    await page.keyboard.press('Backspace');
+    await expect(ops(page).nth(0)).toHaveText(/^− delete 1 @ 29 · \d+(\.\d)? ms$/);
+    await expect(treeLines(page).first()).toContainText(`"${FIRST}!"`);
+    // only the last five are kept
+    await page.keyboard.type('abcdefg');
+    await expect(ops(page)).toHaveCount(5);
+  });
+
+  test('X-ray: a bold toggle shows a mark line and its operation', async ({ page }) => {
+    await open(page);
+    await selectRange(page, SECOND, 0, SECOND, 5);
+    await page.getByRole('toolbar', { name: 'Text formatting' }).getByRole('button', { name: 'Bold' }).click();
+    await expect(page.getByTestId('xray-tree').locator('.line[data-kind="mark"]')).toHaveText(['bold [0, 12]', 'bold [0, 5]']);
+    await expect(ops(page).nth(0)).toHaveText('+ mark bold [0, 5] · command');
+    // not typed: the kind, not a time
+    await expect(ops(page).nth(0)).not.toContainText(' ms');
+  });
+
+  test('X-ray: new blocks and undo appear in the log (undo shows its kind)', async ({ page }) => {
+    await open(page);
+    await focusEnd(page, FIRST);
+    await page.keyboard.press('Enter');
+    await expect(treeLines(page).filter({ hasText: 'paragraph#' })).toHaveCount(4);
+    await expect(ops(page).filter({ hasText: '+ block paragraph#' })).toHaveCount(1);
+    await page.keyboard.press('Control+z');
+    await expect(treeLines(page).filter({ hasText: 'paragraph#' })).toHaveCount(3);
+    await expect(ops(page).nth(0)).toHaveText(/^− block paragraph#\d+ · undo$/);
+  });
+
+  test('X-ray: the editor does not move when the model changes; the panel keeps the editor\'s height', async ({ page }) => {
+    await open(page);
+    const before = (await pane(page).boundingBox())!;
+    const p0 = (await pane(page).locator('[data-block-type="paragraph"]').first().boundingBox())!;
+    await focusEnd(page, FIRST);
+    await page.keyboard.type('!');
+    await expect(ops(page)).toHaveCount(1);
+    const after = (await pane(page).boundingBox())!;
+    const p1 = (await pane(page).locator('[data-block-type="paragraph"]').first().boundingBox())!;
+    expect(after).toEqual(before);
+    expect(p1.x).toBe(p0.x);
+    expect(p1.y).toBe(p0.y);
+    // many more blocks than the panel shows (cap ~60 lines): the panel scrolls inside, it never stretches the row
+    await focusEnd(page, LAST);
+    for (let i = 0; i < 70; i++) await page.keyboard.press('Enter');
+    await expect(treeLines(page).last()).toHaveText('…');
+    expect(await treeLines(page).count()).toBeLessThanOrEqual(61);
+    const [e, x] = [(await pane(page).boundingBox())!, (await panel(page).boundingBox())!];
+    expect(Math.abs(e.height - x.height)).toBeLessThanOrEqual(1);
+  });
+
+  test('X-ray: Reset reseeds the editor and the panel follows', async ({ page }) => {
+    await open(page);
+    await focusEnd(page, FIRST);
+    await page.keyboard.type('zz');
+    await expect(treeLines(page).first()).toContainText('Nabu.zz');
+    await expect(ops(page)).toHaveCount(2);
+    await page.getByRole('button', { name: 'Reset' }).click();
+    await expect(page.getByText('Editor reset')).toHaveCount(1);
+    await expect(treeLines(page).first()).toContainText(`"${FIRST}"`);
+    await expect(treeLines(page)).toHaveCount(8);
+    await expect(ops(page)).toHaveCount(0);
+    await focusEnd(page, FIRST);
+    await page.keyboard.type('y');
+    await expect(treeLines(page).first()).toContainText('Nabu.y');
+    await expect(ops(page)).toHaveCount(1);
+  });
+
   test('the skeleton has the editor\'s size: no layout shift when it hydrates', async ({ browser }) => {
     for (const viewport of [{ width: 1440, height: 900 }, { width: 375, height: 800 }]) {
       const nojs = await browser.newContext({ javaScriptEnabled: false, colorScheme: 'dark', viewport });
@@ -324,6 +458,8 @@ test.describe('home editor', () => {
       const before = {
         box: (await scope(p1).boundingBox())!,
         reset: (await p1.getByTestId('hero-editor-reset').boundingBox())!,
+        xray: await panel(p1).boundingBox(),
+        toggle: await p1.getByTestId('xray-toggle').boundingBox(),
       };
       await nojs.close();
       const ctx = await browser.newContext({ colorScheme: 'dark', viewport });
@@ -332,11 +468,23 @@ test.describe('home editor', () => {
       const after = {
         box: (await scope(p2).boundingBox())!,
         reset: (await p2.getByTestId('hero-editor-reset').boundingBox())!,
+        xray: await panel(p2).boundingBox(),
+        toggle: await p2.getByTestId('xray-toggle').boundingBox(),
       };
       await ctx.close();
       expect(after.box.y).toBeCloseTo(before.box.y, 0);
       expect(Math.abs(after.box.height - before.box.height), `pane height at ${viewport.width}px`).toBeLessThanOrEqual(1);
       expect(Math.abs(after.reset.y - before.reset.y), `Reset position at ${viewport.width}px`).toBeLessThanOrEqual(1);
+      // the X-ray panel (desktop) / its toggle (phone, the panel itself is collapsed): same boxes in the skeleton and once hydrated
+      if (viewport.width >= 1000) {
+        expect(before.xray && after.xray, 'the panel is in the server render').toBeTruthy();
+        for (const k of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(after.xray![k] - before.xray![k]), `panel ${k}`).toBeLessThanOrEqual(1);
+      } else {
+        expect(before.xray, 'collapsed in the server render').toBeNull();
+        expect(after.xray).toBeNull();
+        expect(before.toggle && after.toggle).toBeTruthy();
+        for (const k of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(after.toggle![k] - before.toggle![k]), `toggle ${k}`).toBeLessThanOrEqual(1);
+      }
     }
   });
 });
@@ -362,6 +510,36 @@ test.describe('home editor, phone', () => {
   });
 });
 
+test.describe('home editor, phone: the X-ray', () => {
+  test.use({ colorScheme: 'dark', viewport: { width: 375, height: 800 }, hasTouch: false });
+
+  test('375px: collapsed under the editor, the toggle opens and closes it, no horizontal scroll', async ({ page }) => {
+    await open(page);
+    const toggle = page.getByRole('button', { name: 'Show the model' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel(page)).toBeHidden();
+    expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggle).toHaveAttribute('aria-controls', 'xray-panel');
+    await expect(panel(page)).toBeVisible();
+    await expect(panel(page)).toHaveAttribute('id', 'xray-panel');
+    // under the editor, full width
+    const [e, x] = [(await pane(page).boundingBox())!, (await panel(page).boundingBox())!];
+    expect(x.y).toBeGreaterThanOrEqual(e.y + e.height);
+    expect(x.x + x.width).toBeLessThanOrEqual(375);
+    await expect(treeLines(page).first()).toContainText(`"${FIRST}"`);
+    await focusEnd(page, FIRST);
+    await page.keyboard.type('!');
+    await expect(ops(page).first()).toHaveText(/^\+ insert "!" @ 28 · \d+(\.\d)? ms$/);
+    const dims = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+    expect(dims.sw).toBeLessThanOrEqual(dims.iw);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel(page)).toBeHidden();
+  });
+});
+
 // Screenshots for review (not assertions): written to the scratchpad.
 test.describe('home editor, screenshots', () => {
   test.beforeAll(() => mkdirSync(SHOTS, { recursive: true }));
@@ -381,6 +559,34 @@ test.describe('home editor, screenshots', () => {
       await shot(page, `hero-1440-${scheme}-v2`);
       await ctx.close();
     }
+  });
+
+  test('X-ray 1440 dark / light, 375 dark open', async ({ browser }) => {
+    for (const scheme of ['dark', 'light'] as const) {
+      const ctx = await browser.newContext({ colorScheme: scheme, viewport: { width: 1440, height: 900 } });
+      const page = await ctx.newPage();
+      await open(page);
+      await page.evaluate(() => document.fonts.ready);
+      await focusEnd(page, FIRST);
+      await page.keyboard.type(' Hi');
+      await selectRange(page, SECOND, 0, SECOND, 5);
+      await page.getByRole('toolbar', { name: 'Text formatting' }).getByRole('button', { name: 'Bold' }).click();
+      await focusEnd(page, FIRST + ' Hi');
+      await page.keyboard.type('.');
+      await expect(ops(page)).toHaveCount(5);
+      await shot(page, `xray-1440-${scheme}`);
+      await ctx.close();
+    }
+    const ctx = await browser.newContext({ colorScheme: 'dark', viewport: { width: 375, height: 900 } });
+    const page = await ctx.newPage();
+    await open(page);
+    await page.evaluate(() => document.fonts.ready);
+    await focusEnd(page, FIRST);
+    await page.keyboard.type(' Hi');
+    await page.getByRole('button', { name: 'Show the model' }).click();
+    await expect(ops(page)).toHaveCount(3);
+    await shot(page, 'xray-375-dark-open', true);
+    await ctx.close();
   });
 
   test('375 dark', async ({ browser }) => {
