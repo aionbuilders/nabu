@@ -81,7 +81,7 @@ expect(names(FullPreset)).toEqual([
 - **`TypographyExtension`**: typographic substitutions while typing (`-- ` becomes an em dash).
 - **`MarkdownShortcutsExtension`**: inline markdown while typing (`**bold**`, `_italic_`, `` `code` ``, `~~strike~~`).
 - **Paste**: `PlainTextPasteExtension` (a plain text fallback, one line per block), `HtmlPasteExtension` (HTML from other pages and apps), `MarkdownPasteExtension` (markdown text; it also powers `engine.importMarkdown()`), `NabuPasteExtension` (copy and paste between Nabu editors, structure kept).
-- **`BlockExtension`**: the `block:transform` action that turns a block into another type; the toolbar and the slash menu use it.
+- **`BlockExtension`**: the `block:transform` action that turns a block into another type. The slash menu reaches it through the actions of the block extensions (`heading:1`, `callout`, `code:block`...), which call it. The floating toolbar does not use it: it only applies marks and links.
 
 ## The `tab` option per preset
 

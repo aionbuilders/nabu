@@ -23,10 +23,14 @@
  *  - Pure modifier presses (`Shift`, `Control`, `Alt`, `Meta`) and AltGraph keystrokes (they type a character) have no chord.
  *
  * @typedef {'mac' | 'other'} Platform
+ * The platform whose conventions `Mod` and the displayed shortcuts follow: `'mac'` (Cmd) or `'other'` (Ctrl).
  * @typedef {{ key: string, ctrl: boolean, alt: boolean, shift: boolean, meta: boolean }} Chord
+ * A parsed key chord: a key and its four modifiers (`Mod` is resolved to `ctrl` or `meta` for the platform).
  */
 
-/** @returns {Platform} `'mac'` on macOS / iOS (Cmd is the main modifier), `'other'` everywhere else (and server-side). */
+/**
+ * Detect the platform whose conventions `Mod` and the displayed shortcuts follow: Cmd on macOS and iOS, Ctrl everywhere else.
+ * @returns {Platform} `'mac'` on macOS / iOS (Cmd is the main modifier), `'other'` everywhere else (and server-side). */
 export function detectPlatform() {
     if (typeof navigator === 'undefined') return 'other';
     const nav = /** @type {any} */ (navigator);
@@ -234,6 +238,7 @@ export function reservedChords(platform) {
 }
 
 /**
+ * Whether a chord is reserved by the browser or the OS (close tab, reload, quit...) and so refused when a command declares it.
  * @param {Chord} chord
  * @param {Platform} platform
  * @returns {boolean} whether the browser / OS owns this chord

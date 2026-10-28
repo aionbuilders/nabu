@@ -7,6 +7,8 @@ export const SLASH_GROUP_ORDER = ['text', 'lists', 'blocks', 'media', 'structure
 
 /**
  * @typedef {Object} SlashCommand
+ * An entry of the slash menu: a title, optional subtitle, icon and aliases to filter on, a group and order for sorting, an optional
+ * `when` to limit where it is offered, and the action to run. Extensions contribute theirs with `slashCommands`.
  * @property {string} title
  * @property {string} [subtitle]
  * @property {string} [icon] A short text glyph (no emoji in the library's own entries). A theme or an integrator overrides an
@@ -57,6 +59,10 @@ export function filterSlashCommands(commands, query) {
         (c.aliases || []).some(a => a.toLowerCase().startsWith(q)));
 }
 
+/**
+ * The state of the "/" menu for one editor: whether it is open, the query typed after the slash, the filtered and sorted entries
+ * and the selected one. `SlashMenu` is its default rendering; use it directly to build your own menu.
+ */
 export class SlashMenuController {
     /** @type {import('../blocks/nabu.svelte.js').Nabu} */
     #engine;
@@ -67,7 +73,10 @@ export class SlashMenuController {
      */
     constructor(engine, commands) { this.#engine = engine; this.commands = commands ?? []; }
 
-    /** @type {{ block: any, slashStart: number, cursor: number, query: string } | null} */
+    /**
+     * The pending slash trigger at the caret: its block, where the slash starts, the caret and the query typed after it; `null` when there is none.
+     * @type {{ block: any, slashStart: number, cursor: number, query: string } | null}
+     */
     match = $derived.by(() => {
         const sel = this.#engine.selection;
         const block = sel?.anchorBlock;
@@ -83,6 +92,7 @@ export class SlashMenuController {
         return { block, slashStart: bsel.from - query.length - 1, cursor: bsel.from, query };
     });
 
+    /** The text typed after the slash (empty when no trigger). */
     query = $derived(this.match?.query ?? '');
 
     /**
@@ -98,6 +108,7 @@ export class SlashMenuController {
         return sortSlashCommands([...(this.#engine.slashCommands ?? []), ...this.commands].filter(applies));
     });
 
+    /** The available entries matching the query: titles by substring, aliases by prefix. */
     filteredItems = $derived.by(() => {
         if (!this.match) return [];
         return filterSlashCommands(this.available, this.query);
@@ -106,11 +117,13 @@ export class SlashMenuController {
     /** @type {number | null} slashStart of a dismissed (Escape) trigger */
     #dismissedKey = $state(null);
 
+    /** Whether the menu should be shown: a trigger at the caret, at least one match, not dismissed, not read-only. */
     open = $derived.by(() => !this.#engine.readonly && !!this.match && this.filteredItems.length > 0 && this.match.slashStart !== this.#dismissedKey);
 
+    /** Index of the highlighted entry in `filteredItems`. */
     selectedIndex = $state(0);
 
-    /** @param {number} delta */
+    /** Move the highlight by `delta` entries, wrapping around. @param {number} delta */
     moveSelection(delta) {
         const n = this.filteredItems.length;
         if (!n) return;

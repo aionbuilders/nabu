@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Application, OptionDefaults } from 'typedoc';
-import { ENTRIES, CONTRACT_EXTRA, CONTRACT_CLASSES, COMPONENT_SUMMARY, CLASS_SUMMARY, PROP_FALLBACK, RELATED_GUIDE } from './api-config.js';
+import { ENTRIES, CONTRACT_EXTRA, CONTRACT_CLASSES, COMPONENT_SUMMARY, PROP_FALLBACK, RELATED_GUIDE } from './api-config.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const MODEL_PATH = resolve(ROOT, 'src/site/api/model.json');
@@ -601,15 +601,6 @@ export async function buildModel() {
   const nabuMember = items['root/Nabu'].members.find((m) => m.name === 'internals');
   if (nabuMember) nabuMember.unstable = true;
   internals.stability = 'unstable';
-
-  // `Nabu` has no JSDoc of its own: the `NabuInternals` typedef written right above it sticks to the class
-  const stuck = items['root/Nabu'];
-  if (stuck && /^The engine machinery behind/.test(stuck.summary)) {
-    if (!internals.summary) { internals.summary = stuck.summary; internals.description = stuck.description; }
-    stuck.summary = CLASS_SUMMARY.Nabu;
-    stuck.description = '';
-    stuck.handwrittenSummary = true;
-  }
 
   // JSDoc gaps
   for (const item of Object.values(items)) {

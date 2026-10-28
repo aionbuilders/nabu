@@ -26,6 +26,9 @@ function findInDescendants(block, predicate) {
 }
 
 
+/**
+ * The base class of every block. A block wraps a node of the document tree (Loro) and holds the behaviour of one block type: the capability flags, the tree accessors, and the handlers for typing, keys, splitting, merging, pasting and serialization that a subclass overrides.
+ */
 export class Block {
     /** @param {Nabu} nabu @param {NabuNode} node */
     constructor(nabu, node) {

@@ -3,6 +3,9 @@ import { FileBlock } from "./file.svelte.js";
 import FileComponent from "./File.svelte";
 import { pickMedia, insertMediaUrl, mediaFileHandler } from "../media/media.helpers.js";
 
+/**
+ * The file block: an attachment (name, size, download link) stored through the `files` option; the `file:*` actions, file paste for any file type and the "File" slash entry.
+ */
 export const FileExtension = extension("file", {
     // @ts-ignore — static-side variance on create()
     block: FileBlock,

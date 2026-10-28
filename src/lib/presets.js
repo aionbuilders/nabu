@@ -58,11 +58,11 @@ export const tabDefaultFor = (preset) => TAB_DEFAULTS.get(preset) ?? 'focus';
 // ---------------------------------------------------------------------------
 
 /**
+ * @typedef {Omit<import('./blocks/nabu.svelte.js').NabuInit, 'extensions'> & { preset?: Extension[], extensions?: Extension[] }} EditorOptions
  * Options of the editor factories: every `NabuInit` option (`files`, `placeholders`, `snapshot`, `keymap`, `tab`, `lang`…, forwarded to
  * `Nabu`) plus the `preset` the factory starts from. `extensions` are appended to the preset's.
  * - `preset`: base extensions (default: `FullPreset`, or the preset of the named factory).
  * - `tab`: default by preset: Minimal / Text `'focus'`, Document / Full `'stay'`, a custom preset array `'focus'`.
- * @typedef {Omit<import('./blocks/nabu.svelte.js').NabuInit, 'extensions'> & { preset?: Extension[], extensions?: Extension[] }} EditorOptions
  */
 
 /**

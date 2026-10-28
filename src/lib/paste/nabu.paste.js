@@ -12,6 +12,9 @@ const versionOf = (fragment) => {
     return typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN;
 };
 
+/**
+ * Paste of `application/x-nabu+json`, the format Nabu writes on copy and cut: copying between Nabu editors keeps the block structure, marks and files.
+ */
 export const NabuPasteExtension = new Extension('nabu-paste', {
     pasteInterpreters: [
         {

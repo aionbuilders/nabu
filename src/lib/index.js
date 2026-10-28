@@ -57,7 +57,7 @@ export { RichTextExtension, TypographyExtension, MarkdownShortcutsExtension } fr
 export { PlainTextPasteExtension, NabuPasteExtension, HtmlPasteExtension, MarkdownPasteExtension } from './paste/index.js';
 
 // ---------------------------------------------------------------------------
-// Subsystems reached from an editor (`nabu.files`, `nabu.regions`, `nabu.todos`…)
+// Subsystems reached from an editor (`Files.get(nabu)`, `Regions.get(nabu)` or `nabu.regions`, `Todos.get(nabu)`…)
 // ---------------------------------------------------------------------------
 
 export { Files, FileRejectedError, MemoryOutbox, REASON_CODES } from './files/index.js';
@@ -83,8 +83,11 @@ export { formatChord } from './utils/keys.js';
 // Types (JSDoc typedefs, importable as `import('@aionbuilders/nabu').NabuInit`…)
 // ---------------------------------------------------------------------------
 
-/** @typedef {import('./blocks/nabu.svelte.js').NabuInit} NabuInit Options of `new Nabu()` (and of the factories). */
-/** @typedef {import('./presets.js').EditorOptions} EditorOptions Options of the factories: `NabuInit` plus `preset`. */
+/** @typedef {import('./blocks/nabu.svelte.js').NabuInit} NabuInit The options of an editor: `new Nabu(init)`, the factories and `createPersistedEditor`. */
+/**
+ * @typedef {import('./presets.js').EditorOptions} EditorOptions
+ * The options of the editor factories (`createEditor` and the preset factories): every `NabuInit` option plus the `preset` to start from.
+ */
 /** @typedef {import('./files/files.svelte.js').FilesConfig} FilesConfig The `files` option: uploads, limits, embedding. */
 /** @typedef {import('./files/files.svelte.js').EmbeddedAsset} EmbeddedAsset */
 /** @typedef {import('./utils/placeholders.js').PlaceholdersOption} PlaceholdersOption */

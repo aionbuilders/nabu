@@ -50,6 +50,9 @@ function markRule(pattern, closeChar, marks, opts = {}) {
     };
 }
 
+/**
+ * Inline markdown shortcuts while typing: `**bold**`, `_italic_`, `` `code` ``, `~~strike~~` turn into marks as the closing delimiter is typed.
+ */
 export const MarkdownShortcutsExtension = new Extension('markdown-shortcuts', {
     // ORDER MATTERS: most-specific (longest) delimiters first.
     // The `(?<!d)` lookbehinds make an opener the START of its delimiter run: `**…*` must not fire

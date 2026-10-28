@@ -1,6 +1,6 @@
 {
 	"name": "@aionbuilders/nabu",
-	"version": "0.1.0-beta.0",
+	"version": "0.1.0",
 	"scripts": {
 		"dev": "vite dev",
 		"predev": "npm run api:model:ensure",
@@ -21,6 +21,7 @@
 	},
 	"files": [
 		"dist",
+		"CHANGELOG.md",
 		"!dist/**/*.test.*",
 		"!dist/**/*.spec.*"
 	],
@@ -93,7 +94,10 @@
 		"type": "git",
 		"url": "git+https://github.com/aionbuilders/nabu.git"
 	},
-	"homepage": "https://github.com/aionbuilders/nabu#readme",
+	"homepage": "https://nabu.aion.builders",
+	"bugs": {
+		"url": "https://github.com/aionbuilders/nabu/issues"
+	},
 	"keywords": [
 		"svelte",
 		"svelte5",
@@ -103,7 +107,9 @@
 		"crdt",
 		"loro",
 		"local-first",
-		"collaborative"
+		"collaborative",
+		"contenteditable",
+		"markdown"
 	],
 	"dependencies": {
 		"@aionbuilders/pulse": "^1.0.1",

@@ -22,6 +22,9 @@ function buildMarkdownRuleset(nabu) {
     return ruleset;
 }
 
+/**
+ * Paste of markdown typed as `text/plain`: parses it into blocks and inline marks through the rules the registered block classes declare (`markdownRules`). It also powers `importMarkdown()`.
+ */
 export const MarkdownPasteExtension = new Extension('markdown-paste', {
     pasteInterpreters: [
         {

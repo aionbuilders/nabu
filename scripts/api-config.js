@@ -39,11 +39,6 @@ export const COMPONENT_SUMMARY = {
   RichText: 'Renders the delta of a text block: marks, links and the trailing-line filler.',
 };
 
-/** Class summaries used when the JSDoc has none (see the `Nabu` / `NabuInternals` note in scripts/api-model.js). */
-export const CLASS_SUMMARY = {
-  Nabu: 'The editor engine. It owns the document (a Loro CRDT), the block tree, the selection, the command registry and the extensions; `NabuEditor` renders it.',
-};
-
 /** Fallback description of a component prop that has none in the source. */
 export const PROP_FALLBACK = {
   engine: 'The editor this component works on (a `Nabu` instance).',

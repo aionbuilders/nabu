@@ -124,6 +124,9 @@ const onBeforeInput = (nabu, event, block) => {
     return CONTINUE;
 };
 
+/**
+ * The divider block (a horizontal rule): the `--- ` shortcut, markdown and HTML paste rules, and the "Divider" slash entry.
+ */
 export const DividerExtension = extension("divider", {
     // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
     block: DividerBlock,

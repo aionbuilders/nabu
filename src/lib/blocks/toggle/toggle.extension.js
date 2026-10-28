@@ -2,6 +2,9 @@ import { extension } from "../../utils/extensions";
 import { ToggleBlock } from "./toggle.svelte.js";
 import ToggleComponent from "./Toggle.svelte";
 
+/**
+ * The toggle block: a collapsible container with its own header text and a body of child blocks; the `toggle` action and the "Toggle" slash entry.
+ */
 export const ToggleExtension = extension("toggle", {
     // @ts-ignore — static-side variance on create()
     block: ToggleBlock,

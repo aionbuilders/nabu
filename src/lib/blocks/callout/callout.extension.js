@@ -65,6 +65,9 @@ const onBeforeInput = (nabu, event, block) => {
     return CONTINUE;
 };
 
+/**
+ * The callout block (`note`, `tip`, `important`, `warning`, `caution` variants): the `! ` shortcut, the `callout` action and the "Callout" slash entry.
+ */
 export const CalloutExtension = extension("callout", {
     // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
     block: CalloutBlock,

@@ -3,6 +3,9 @@ import { VideoBlock } from "./video.svelte.js";
 import VideoComponent from "./Video.svelte";
 import { pickMedia, insertMediaUrl, mediaFileHandler } from "../media/media.helpers.js";
 
+/**
+ * The video block: stored through the `files` option, with the `video:insert` and `video:pick` actions, video file paste and the "Video" slash entry.
+ */
 export const VideoExtension = extension("video", {
     // @ts-ignore — static-side variance on create()
     block: VideoBlock,

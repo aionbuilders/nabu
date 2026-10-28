@@ -68,6 +68,9 @@ const onBeforeInput = (nabu, event, block) => {
     return CONTINUE;
 };
 
+/**
+ * The code block: plain monospace text with a language, the ``` shortcut, the `code:block` action and the "Code" slash entry.
+ */
 export const CodeExtension = extension("code", {
     // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
     block: CodeBlock,

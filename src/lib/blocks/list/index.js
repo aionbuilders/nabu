@@ -9,6 +9,9 @@ import { convertToList } from "./to-list.js";
 import { toggleSelectedTodos, selectedTodoItems } from "./todos-toggle.js";
 import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
 
+/**
+ * The list container (bulleted, numbered or to-do): the `list:*` actions, Tab and Shift+Tab indentation over a selection, and the list slash entries. Always loaded together with `ListItemExtension`.
+ */
 const ListExtension = extension("list", {
     block: List,
     component: ListComponent,
@@ -33,6 +36,9 @@ const ListExtension = extension("list", {
     }
 });
 
+/**
+ * The list item block: Enter, Backspace and Tab behaviour inside lists, the to-do checkbox and `todo:toggle` (`Mod-Enter`). Always loaded together with `ListExtension`.
+ */
 const ListItemExtension = extension("list-item", {
     block: ListItem,
     component: ListItemComponent,

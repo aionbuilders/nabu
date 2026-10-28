@@ -597,6 +597,9 @@ function parseNodes(parent, ruleset, helpers, hooks = {}) {
     return blocks;
 }
 
+/**
+ * Paste of `text/html` (web pages, Google Docs, Word, spreadsheets): turns the markup into blocks through the rules the registered block classes declare (`htmlRules`).
+ */
 export const HtmlPasteExtension = new Extension('html-paste', {
     pasteInterpreters: [
         {

@@ -179,6 +179,9 @@ export function prevGraphemeLength(text, index) {
     return low >= 0xDC00 && low <= 0xDFFF && high >= 0xD800 && high <= 0xDBFF ? 2 : 1;
 }
 
+/**
+ * The editing of a block's rich text: wraps a Loro text and offers the reactive `text` and `delta`, the selection in that text, and insertion, deletion, splitting, marks and links. Text blocks use it through `TextBlock`; a container with a header (list item, toggle) owns one.
+ */
 export class TextBehavior {
     /** @param {Block} block @param {LoroText} [container] */
     constructor(block, container) {

@@ -10,6 +10,9 @@ import { insertMediaFromFile, pickMedia, insertMediaUrl, mediaFileHandler } from
  */
 export const insertImageFromFile = (nabu, file) => insertMediaFromFile(nabu, 'image', file);
 
+/**
+ * The image block: stored through the `files` option, with the `image:insert` and `image:pick` actions, image file paste and the "Image" slash entry.
+ */
 export const ImageExtension = extension("image", {
     // @ts-ignore — static-side variance on create()
     block: ImageBlock,

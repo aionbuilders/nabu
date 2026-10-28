@@ -31,11 +31,11 @@
  */
 
 /**
+ * @typedef {Object} PasteFileHandler
  * What an extension does with a FILE pasted from the clipboard (a screenshot, a file copied from the OS): it makes a block
  * of it. The engine reads the bytes, stores them through `Files` (in the document, or sent to `files.onBeforePersist` with the
  * optimistic `pending` block) and inserts the blocks at the caret, in the order of the files, as ONE undo step. The engine
  * names no block type: whatever an extension accepts is its own business.
- * @typedef {Object} PasteFileHandler
  * @property {number} [priority] - Higher is asked first (default 0). The first handler that accepts a file takes it.
  * @property {(file: File, nabu: Nabu) => boolean} accepts - Whether this handler takes `file` (by MIME type, name…)
  * @property {(file: File, nabu: Nabu) => PasteBlock | null} block - The block the file becomes: `type` and the props other
@@ -120,6 +120,8 @@
 
 /**
  * @typedef {Object} InputRule
+ * A declarative text-replacement rule applied while typing: when the text before the caret matches `pattern`, `handler` runs
+ * (the markdown shortcuts and the typography substitutions are input rules).
  * @property {RegExp} pattern      - Testé sur le texte AVANT le curseur (avec l'inputType "insertText")
  * @property {string} [inputType]  - Défaut: "insertText"
  * @property {(nabu: Nabu, block: Block, match: RegExpMatchArray, sel: {from: number, to: number, isCollapsed: boolean, data: string}) => boolean | void} handler
@@ -128,19 +130,13 @@
  */
 
 /**
- * What `onSplit` receives besides the block: where the text is cut, and the tail that moves to the new block.
  * @typedef {Object} SplitData
+ * What `onSplit` receives besides the block: where the text is cut, and the tail that moves to the new block.
  * @property {number} offset  caret offset in the block's text
  * @property {import('loro-crdt').Delta<string>[]} delta  the text from `offset` to the end, as a Loro delta
  */
 
 /**
- * The hooks an extension can register (`ExtensionInit.hooks`). A hook returns `nabu.BREAK` (or, for `onSplit`, an object)
- * to stop the engine from going on; the others return nothing. Any other name is a custom hook, run with `nabu.trigger(name, ...args)`.
- * Declared as methods, so a handler may narrow the block parameter (`(nabu, block: Paragraph) => ...`).
- *
- * `onBlockCreate`, `onBlockDelete`, `onBlockUpdate`, `onAfterTransaction` and `onInput` are declared for forward compatibility:
- * the engine does not call them yet.
  * @typedef {{
  * onInit(nabu: Nabu): void,
  * onBlockCreate(nabu: Nabu, block: Block): void,
@@ -155,10 +151,18 @@
  * onInput(nabu: Nabu, event: InputEvent, block: Block): void,
  * [hook: string]: (nabu: Nabu, ...args: any[]) => any,
  * }} ExtensionHooks
+ * The hooks an extension can register (`ExtensionInit.hooks`). A hook returns `nabu.BREAK` (or, for `onSplit`, an object)
+ * to stop the engine from going on; the others return nothing. Any other name is a custom hook, run with `nabu.trigger(name, ...args)`.
+ * Declared as methods, so a handler may narrow the block parameter (`(nabu, block: Paragraph) => ...`).
+ *
+ * `onBlockCreate`, `onBlockDelete`, `onBlockUpdate`, `onAfterTransaction` and `onInput` are declared for forward compatibility:
+ * the engine does not call them yet.
  */
 
 /**
  * @typedef {Object} ExtensionInit
+ * What an extension is made of: a block class and its component, hooks, serializers, actions, commands, paste interpreters and
+ * file handlers, input rules, slash menu entries and Loro text styles. Every field is optional; pass it to `extension(name, init)`.
  * @property {string} [name]
  * @property {import('svelte').Component} [component]
  * @property {typeof Block} [block]
@@ -194,38 +198,80 @@
  *   `applyDelta` with these attributes works correctly.
  */
 
+/**
+ * A named bundle of editor behaviour (see {@link ExtensionInit}); the built-in blocks and behaviours are extensions. Build one with
+ * `extension(name, init)` and pass it to `createEditor({ extensions })`.
+ */
 export class Extension {
     /** @param {string} name @param {ExtensionInit} init */
     constructor(name, init = {}) {
+        /** The extension's name (unique in an editor). */
         this.name = name;
+        /** The Svelte component that renders the extension's block. */
         this.component = init.component;
+        /** The block class this extension registers. */
         this.block = init.block;
+        /** Whether `block` is the editor's default text block. */
         this.defaultBlock = !!init.defaultBlock;
-        /** @type {Partial<ExtensionHooks>} */
+        /**
+         * The hooks of the extension, by name (see {@link ExtensionHooks}).
+         * @type {Partial<ExtensionHooks>}
+         */
         this.hooks = init.hooks || {};
-        /** @type {Record<string, (nabu: Nabu) => any>} */
+        /**
+         * Serializers by format name, run by `nabu.serialize(format)`.
+         * @type {Record<string, (nabu: Nabu) => any>}
+         */
         this.serializers = init.serializers || {};
-        /** @type {Record<string, (nabu: Nabu, data: any, topic: string) => any>} */
+        /**
+         * Handlers of the action bus by topic (`nabu.exec(topic, data)`); several extensions may declare the same topic and all run.
+         * @type {Record<string, (nabu: Nabu, data: any, topic: string) => any>}
+         */
         this.actions = init.actions || {};
-        /** @type {Record<string, import('./commands.js').CommandDef>} */
+        /**
+         * The commands this extension declares, by id (see {@link CommandDef}).
+         * @type {Record<string, import('./commands.js').CommandDef>}
+         */
         this.commands = init.commands || {};
-        /** @type {ExtensionInit['commandContext']} */
+        /**
+         * Contributes facts to the context given to command `when` / `run` functions.
+         * @type {ExtensionInit['commandContext']}
+         */
         this.commandContext = init.commandContext;
-        /** @type {PasteInterpreter[]} */
+        /**
+         * Interpreters of clipboard formats (see {@link PasteInterpreter}).
+         * @type {PasteInterpreter[]}
+         */
         this.pasteInterpreters = init.pasteInterpreters || [];
-        /** @type {PasteFileHandler[]} */
+        /**
+         * Handlers that make a block of a pasted file (see {@link PasteFileHandler}).
+         * @type {PasteFileHandler[]}
+         */
         this.pasteFileHandlers = init.pasteFileHandlers || [];
-        /** @type {InputRule[]} */
+        /**
+         * Text-replacement rules applied while typing (see {@link InputRule}).
+         * @type {InputRule[]}
+         */
         this.inputRules = init.inputRules || [];
-        /** @type {import('../ui/slash-menu.svelte.js').SlashCommand[]} */
+        /**
+         * Entries this extension adds to the slash menu.
+         * @type {import('../ui/slash-menu.svelte.js').SlashCommand[]}
+         */
         this.slashCommands = init.slashCommands || [];
-        /** @type {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>} */
+        /**
+         * Loro text style configuration this extension needs for its marks.
+         * @type {Record<string, { expand: 'after' | 'before' | 'both' | 'none' }>}
+         */
         this.loroTextStyles = init.loroTextStyles || {};
     }
 }
 
 
-/** @param {string} name @param {ExtensionInit} init */
+/**
+ * Create an extension: the unit that bundles a block type, its component, hooks, commands, actions, paste handlers and slash entries.
+ * Shorthand for `new Extension(name, init)`.
+ * @param {string} name @param {ExtensionInit} init
+ */
 export const extension = (name, init) => new Extension(name, init);
 
 /**

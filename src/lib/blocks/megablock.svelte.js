@@ -5,6 +5,9 @@ import { handleContainerBeforeInput, findDirectChildOf } from "./container.utils
  * @import { Nabu, NabuNode } from "./nabu.svelte.js";
  */
 
+/**
+ * A block that holds child blocks (a container): list, list item, toggle, region. It keeps its `children` in sync with the tree and delegates positions, word count and event handling to them.
+ */
 export class MegaBlock extends Block {
 
     /** @param {Nabu} nabu @param {NabuNode} node */

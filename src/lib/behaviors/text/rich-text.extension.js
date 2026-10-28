@@ -167,6 +167,9 @@ function safeHref(nabu, href) {
     return safe;
 }
 
+/**
+ * The inline marks (bold, italic, underline, code, strikethrough) and links: the `mark:*` and `link:*` actions and their keyboard shortcuts.
+ */
 export const RichTextExtension = new Extension('rich-text', {
     // Declare all mark attributes so Loro's applyDelta can handle them correctly.
     // Marks are exact (expand: 'none') — they don't auto-extend at boundaries.

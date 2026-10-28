@@ -1,8 +1,21 @@
+# Dokploy (nixpacks) build of the website: SvelteKit + @sveltejs/adapter-node. See docs/deploy.md.
+#
+# - Node is needed besides Bun: the site is served with `node build`, and `bun run build` calls `npm run`.
+# - devDependencies MUST be installed at build time (TypeDoc for the API reference, Vite, Shiki, marked...).
+# - ORIGIN is set in the Dokploy environment, not here (see docs/deploy.md).
+
 [phases.setup]
-nixPkgs = ['bun']
+nixPkgs = ['bun', 'nodejs_22']
 
 [phases.install]
-cmds = ['bun install']
+cmds = ['bun install --frozen-lockfile']
 
 [phases.build]
 cmds = ['bun run build']
+
+[variables]
+PORT = '3000'
+HOST = '0.0.0.0'
+
+[start]
+cmd = 'node build'

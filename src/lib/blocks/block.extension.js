@@ -21,6 +21,9 @@ async function transformBlock(nabu, type, props = {}) {
     if (newBlock) nabu.focus({ from: { block: newBlock, offset }, to: { block: newBlock, offset } });
 }
 
+/**
+ * The `block:transform` action: turn a block into another type (`exec('block:transform', { type, props })`). The block extensions' own actions (`heading:1`, `callout`...) and the slash menu go through it.
+ */
 export const BlockExtension = new Extension('block', {
     actions: {
         'block:transform': (nabu, data) => transformBlock(nabu, data?.type, data?.props ?? {}),

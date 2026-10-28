@@ -14,9 +14,9 @@
 import { detectPlatform, parseChord, chordId, eventChordId, formatChord, hasCommandModifier, isReservedChord } from './keys.js';
 
 /**
+ * @typedef {Object} CommandContext
  * What the engine builds at each key press (and for `nabu.exec` of a command, with `event: null`). Extensions add FACTS
  * (any other property) through `Extension#commandContext`; facts never replace the fields below.
- * @typedef {Object} CommandContext
  * @property {Nabu} nabu
  * @property {KeyboardEvent | null} event  the key press; `null` when the command runs from `exec` / `commands.run`
  * @property {import('../blocks/block.svelte.js').Block | null} block  the block holding the selection anchor
@@ -43,6 +43,8 @@ import { detectPlatform, parseChord, chordId, eventChordId, formatChord, hasComm
 
 /**
  * @typedef {Object} CommandDef
+ * A command: a label, optional default keys, a `when` condition, a `scope` and a `run` function. Declared by extensions
+ * (`ExtensionInit.commands`); every command is also an action of the bus (`nabu.exec(id, data)`).
  * @property {string | ((ctx: CommandContext) => string)} label  text for help, prompts, pickers
  * @property {string[]} [keys]  default chords (`'Mod-Shift-Enter'`, see keys.js); overridable by the `keymap` option
  * @property {(ctx: CommandContext) => boolean} [when]  where the command applies; required for a key without modifier
@@ -54,9 +56,9 @@ import { detectPlatform, parseChord, chordId, eventChordId, formatChord, hasComm
  */
 
 /**
+ * @typedef {Object} CommandInfo
  * What `nabu.commands.list()` / `get()` return: a plain snapshot (the registry is fixed once the editor is built, so it
  * needs no reactivity; read it again after a `keymap` change, i.e. a new editor).
- * @typedef {Object} CommandInfo
  * @property {string} id
  * @property {string} label  resolved (a label function is called with the given / current context)
  * @property {string[]} keys  the chords bound to the command, as written (`'Mod-b'`)
@@ -83,6 +85,10 @@ import { detectPlatform, parseChord, chordId, eventChordId, formatChord, hasComm
  * @property {Platform} [platform]  defaults to the detected platform
  */
 
+/**
+ * Holds the commands of an editor (`nabu.commands` is its public face): registers them from the extensions, resolves the keymap and
+ * the key chords at keydown, and answers `list`, `get`, `has` and `run`.
+ */
 export class CommandRegistry {
     /** @param {Nabu} nabu @param {CommandRegistryOptions} [options] */
     constructor(nabu, { keymap, platform } = {}) {

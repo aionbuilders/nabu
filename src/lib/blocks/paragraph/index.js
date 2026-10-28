@@ -25,6 +25,9 @@ function mayEmptyRoot(nabu) {
     return false;
 }
 
+/**
+ * The paragraph block, the default text block: the `paragraph` action (turn a block back into text) and the "Text" slash entry.
+ */
 const ParagraphExtension = extension("paragraph", {
     block: Paragraph,
     defaultBlock: true,

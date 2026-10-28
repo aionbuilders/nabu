@@ -61,6 +61,9 @@ const onBeforeInput = (nabu, event, block) => {
     return CONTINUE;
 };
 
+/**
+ * The quote block: the `> ` shortcut, Backspace and Enter de-transformations, markdown and HTML paste rules, and the "Quote" slash entry.
+ */
 export const BlockquoteExtension = extension("blockquote", {
     // @ts-ignore — static-side variance on create() (same pattern as Paragraph/Heading)
     block: BlockquoteBlock,

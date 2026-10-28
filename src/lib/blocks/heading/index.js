@@ -12,6 +12,9 @@ import { onBeforeInput } from "./hooks/onBeforeInput.hook";
 /** Total length of the text inserted by a Loro delta. @param {import('loro-crdt').Delta<string>[]} [delta] */
 const deltaLength = (delta) => (delta || []).reduce((n, op) => n + (typeof op.insert === 'string' ? op.insert.length : 0), 0);
 
+/**
+ * The heading block (levels 1 to 6): the `# ` shortcuts, the `heading:1` to `heading:6` actions and the "Heading" slash entries.
+ */
 const HeadingExtension = extension("heading", {
     block: Heading,
     component: HeadingComponent,
