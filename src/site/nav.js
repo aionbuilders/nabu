@@ -8,6 +8,7 @@ export const NAV = [
 ];
 
 export const GITHUB_URL = 'https://github.com/aionbuilders/nabu';
+export const DISCORD_URL = 'https://discord.gg/gKkyqRRuWe';
 export const LICENSE_URL = 'https://opensource.org/licenses/MIT';
 
 /** Footer columns (HomeB). */
@@ -36,6 +37,7 @@ export const FOOTER_COLUMNS = [
       { href: '/architecture/how-it-is-made', label: "How it's made" },
       { href: '/brand', label: 'Brand' },
       { href: GITHUB_URL, label: 'GitHub' },
+      { href: DISCORD_URL, label: 'Discord' },
       { href: LICENSE_URL, label: 'License' }
     ]
   }

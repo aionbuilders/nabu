@@ -56,6 +56,7 @@ test.describe('site shell', () => {
       await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: label, exact: true })).toHaveAttribute('href', href);
     }
     await expect(page.getByRole('link', { name: /GitHub/ }).first()).toHaveAttribute('href', 'https://github.com/aionbuilders/nabu');
+    await expect(page.locator('header').getByRole('link', { name: 'Discord' })).toHaveAttribute('href', 'https://discord.gg/gKkyqRRuWe');
     for (const [label, href] of NAV) {
       const res = await page.goto(href);
       expect(res?.status(), href).toBe(200);
@@ -93,7 +94,7 @@ test.describe('site shell', () => {
     for (const [col, links] of [
       ['Learn', ['Getting started', 'Guides', 'API reference']],
       ['Explore', ['Labs', 'Architecture', 'Limits', 'Decision records']],
-      ['Project', ['Changelog', 'GitHub', 'License']],
+      ['Project', ['Changelog', 'GitHub', 'Discord', 'License']],
     ] as const) {
       const nav = footer.getByRole('navigation', { name: col });
       for (const l of links) await expect(nav.getByRole('link', { name: l, exact: true })).toBeVisible();
@@ -178,6 +179,8 @@ test.describe('site shell', () => {
     const brand = await page.locator('header .brand').boundingBox();
     const github = await page.getByRole('link', { name: /GitHub/ }).first().boundingBox();
     expect(github!.x).toBeGreaterThan(brand!.x + brand!.width); // nothing wrapped onto / over the logo
+    const discord = await page.locator('header').getByRole('link', { name: 'Discord' }).boundingBox();
+    expect(discord!.x).toBeGreaterThan(brand!.x + brand!.width);
   });
 
   test('mobile (375px): menu button opens the nav, no horizontal scroll', async ({ page }) => {
@@ -195,6 +198,7 @@ test.describe('site shell', () => {
     await expect(button).toHaveAttribute('aria-expanded', 'true');
     await expect(nav).toBeVisible();
     for (const [label] of NAV) await expect(nav.getByRole('link', { name: label, exact: true })).toBeVisible();
+    await expect(page.locator('header').getByRole('link', { name: 'Discord' })).toBeVisible();
     expect(await noScroll()).toBe(true);
     // 16px side gutter
     const bar = await page.locator('header .brand').boundingBox();

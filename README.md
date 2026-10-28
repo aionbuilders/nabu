@@ -4,6 +4,8 @@ Nabu is a modular, local-first block editor for **Svelte 5**. It combines the cr
 
 **Website, documentation and live demos: [nabu.aion.builders](https://nabu.aion.builders)**
 
+Community: [join the Discord](https://discord.gg/gKkyqRRuWe)
+
 > **Status: public beta** (`0.1.0`). The editing core is complete and tested, but the API may still change before 1.0. Breaking changes are listed in the [changelog](https://nabu.aion.builders/changelog) ([CHANGELOG.md](CHANGELOG.md)). Known gaps (mobile keyboards, Firefox and Safari, tables, real-time collaboration between machines) are listed honestly on the [limits page](https://nabu.aion.builders/architecture/limits).
 
 ### Versioning (0.x)

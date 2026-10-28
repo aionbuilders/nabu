@@ -1,9 +1,10 @@
 <script>
+  import DiscordIcon from './DiscordIcon.svelte';
   import GitHubIcon from './GitHubIcon.svelte';
   import { page } from '$app/state';
   import Logo from './Logo.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
-  import { NAV, GITHUB_URL } from './nav.js';
+  import { NAV, GITHUB_URL, DISCORD_URL } from './nav.js';
 
   let open = $state(false);
 
@@ -40,7 +41,8 @@
         </nav>
         <span class="spacer"></span>
         <div class="actions">
-          <a class="github" href={GITHUB_URL}><GitHubIcon />GitHub</a>
+          <a class="ext" href={DISCORD_URL} title="Discord"><DiscordIcon size={18} /><span class="ext-name">Discord</span></a>
+          <a class="ext" href={GITHUB_URL} title="GitHub"><GitHubIcon size={18} /><span class="ext-name">GitHub</span></a>
         </div>
       </div>
 
@@ -98,7 +100,7 @@
     font-size: var(--site-fs-small);
   }
   nav a,
-  .github {
+  .ext {
     white-space: nowrap;
   }
   nav a {
@@ -119,19 +121,28 @@
   .actions {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 8px;
   }
-  .github {
+  .ext {
     display: inline-flex;
     align-items: center;
     gap: 0.45em;
-    padding-block: 6px;
+    padding: 6px;
     font-size: var(--site-fs-small);
     text-decoration: none;
     color: var(--site-text);
   }
-  .github:hover {
+  .ext:hover {
     opacity: 0.85;
+  }
+  /* Icons only in the bar; the name stays for screen readers and shows again in the mobile menu. */
+  .ext-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .menu-button {
     display: none;
@@ -154,9 +165,6 @@
     }
     nav {
       gap: var(--site-space-4);
-    }
-    .actions {
-      gap: var(--site-space-3);
     }
   }
 
@@ -217,12 +225,18 @@
       padding-top: var(--site-space-3);
       border-top: 1px solid var(--site-border);
     }
-    .github {
+    .ext {
       display: flex;
       align-items: center;
       gap: 0.3em;
       min-height: 44px;
       padding-inline: var(--site-space-3);
+    }
+    .ext-name {
+      position: static;
+      width: auto;
+      height: auto;
+      clip-path: none;
     }
   }
 </style>
