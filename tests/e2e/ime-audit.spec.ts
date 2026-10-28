@@ -747,3 +747,40 @@ test.describe('8 · programmatic / remote model change during a composition', ()
     await expect.poll(() => allText(b), { timeout: 5000 }).toEqual(['>>baseか']);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. After a committed composition, the editor keeps working (GitHub issue #6)
+// ═══════════════════════════════════════════════════════════════════════════
+
+test.describe('9 · after a commit (issue #6: "Enter stops working after Japanese IME input")', () => {
+  // FINDING (2026-10-28, reproduces issue #6 exactly): a composition started in an empty paragraph, committed, then Enter ×2 and a new
+  // composition in the new empty paragraph — the second commit never lands (`composing` stays true, the text is lost). Fix for 0.1.1.
+  test.fixme('9a · テスト, Enter, Enter, 愛: the Enters split the block, the text lands where typed — FINDING: the second commit is lost', async ({ page }) => {
+    await buildBlocks(page, [Para('')]);
+    await focusEmpty(page);
+    for (const s of ['t', 'て', 'てs', 'てす', 'てすt', 'てすと', 'テスト']) await ime(s);
+    await commit('テスト');
+    await settle(page);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    for (const s of ['a', 'あ', 'あい', '愛']) await ime(s);
+    await commit('愛');
+    await settle(page);
+    await expect.poll(() => allText(page)).toEqual(['テスト', '', '愛']);
+    expect(await composing(page)).toBe(false);
+  });
+
+  test('9b · Backspace and Delete work after a commit', async ({ page }) => {
+    await buildBlocks(page, [Para('ab')]);
+    await focusEnd(page, 'ab');
+    await ime('か'); await ime('かん'); await ime('漢');
+    await commit('漢字');
+    await settle(page);
+    await page.keyboard.press('Backspace');
+    await expect.poll(() => allText(page)).toEqual(['ab漢']);
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Delete');
+    await expect.poll(() => allText(page)).toEqual(['a漢']);
+  });
+});
