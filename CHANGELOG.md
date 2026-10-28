@@ -4,6 +4,14 @@
 
 Nothing yet.
 
+## 0.1.1 — 2026-10-29
+
+Two fixes reported by users of the alpha. No API change.
+
+### Fixed
+- **Japanese (and other IME) input after empty paragraphs** ([#6](https://github.com/aionbuilders/nabu/issues/6)). A composition that started after one or more empty paragraphs could land in an earlier block, or leave the editor stuck in a composing state: the text was lost and Enter stopped working. Chromium locates a composition by plain-text offsets and miscounts the line-break node of each empty block before it; during a composition those nodes are now presented as `<br>` and restored when it ends (nothing changes in the document or the rendering). Covered by `tests/e2e/ime-audit.spec.ts`, section 9.
+- **Word deletion follows the platform conventions** ([#4](https://github.com/aionbuilders/nabu/issues/4)). Alt+Backspace (macOS) and Ctrl+Backspace (Windows, Linux) no longer delete the space before the word: `this is a sentence |` now gives `this is a |`. Word boundaries come from `Intl.Segmenter` (accents, CJK), punctuation is its own stop (`end.|` gives `end|`), and Alt/Ctrl+Delete deletes forward the way each platform does (to the end of the next word on macOS, up to the next word on Windows). Covered by `tests/unit/delete-word.test.js` and `tests/e2e/word-delete.spec.ts`.
+
 ## 0.1.0 — 2026-10-29
 
 Nabu is in **public beta**: a `0.` version means the API can still change before 1.0. Versioning policy:
