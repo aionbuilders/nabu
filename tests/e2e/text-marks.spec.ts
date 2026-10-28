@@ -194,28 +194,28 @@ test.describe('Text editing & marks', () => {
     expect(await fullText(page)).toBe('first|second');
   });
 
-  test('P1 · A6 · Ctrl+Backspace deletes the previous word without leaving an orphan space', async ({ page }) => {
+  test('P1 · A6 · Ctrl+Backspace deletes the previous word and keeps the space before it (platform convention, issue #4)', async ({ page }) => {
     await typeText(page, 'one two three');
     await press(page, `${wordMod}+Backspace`);
 
-    expect(await fullText(page)).toBe('one two');
-    expect((await getSelection(page))?.focusOffset).toBe(7);
+    expect(await fullText(page)).toBe('one two ');
+    expect((await getSelection(page))?.focusOffset).toBe(8);
   });
 
   test('P1 · A6b · Ctrl+Delete deletes the next word from inside the text', async ({ page }) => {
     await typeText(page, 'one two three');
     await press(page, 'Home');
-    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight'); // after "one"
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight'); // at the start of "two"
     await press(page, `${wordMod}+Delete`);
 
-    // Chromium/Linux forward word deletion removes " two" (up to end of next word).
-    // Whatever whitespace policy applies, "two" must be gone, "one" and "three" must survive intact.
+    // macOS deletes "two" (up to the end of the word), Windows "two " (up to the next word): either way "two" is gone and
+    // "one" and "three" survive intact (see wordDeleteRange).
     const text = await fullText(page);
     expect(text).not.toContain('two');
     expect(text.startsWith('one')).toBe(true);
     expect(text.endsWith('three')).toBe(true);
     expect(text.replace(/\s+/g, ' ')).toMatch(/^one ?three$|^one three$/);
-    expect((await getSelection(page))?.focusOffset).toBe(3);
+    expect((await getSelection(page))?.focusOffset).toBe(4);
   });
 
   test('P1 · A8 · Select-all + Backspace over 3 paragraphs leaves one empty paragraph and typing works', async ({ page }) => {

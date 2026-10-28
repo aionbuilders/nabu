@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { TextBehavior } from '#lib/behaviors/text/text.behavior.svelte.js';
+import { wordDeleteRange } from '#lib/utils/words.js';
 import { TypographyExtension } from '#lib/behaviors/text/typography.extension.js';
 
 // ── Mock LoroText container ────────────────────────────────────────────────
@@ -66,20 +67,84 @@ function makeEvent(inputType, data = null) {
   };
 }
 
+/** Run an event on `before|after`-style text: returns the text after the deletion and the span deleted. */
+function run(inputType, marked, selFn) {
+  const caret = marked.indexOf('|');
+  const text = marked.replace('|', '');
+  const b = makeBehavior(text);
+  b.handleBeforeInput(makeEvent(inputType), makeSel(caret));
+  const call = b.container.delete.mock.calls[0];
+  if (!call) return { result: marked, calls: 0 };
+  const [index, length] = call;
+  return { result: text.slice(0, index) + '|' + text.slice(index + length), calls: b.container.delete.mock.calls.length };
+}
+const back = (marked) => run('deleteWordBackward', marked).result;
+const fwd = (marked) => run('deleteWordForward', marked).result;
+
 // ── deleteWordBackward ─────────────────────────────────────────────────────
+// Reference: Chromium contenteditable / <textarea> (same on macOS and Windows): the whitespace between the caret and the word
+// is deleted with the word, the caret lands at the start of the word.
 
 describe('TextBehavior deleteWordBackward', () => {
-  it('deletes the word AND its surrounding whitespace (issue #4)', () => {
-    // "this is a sentence " with cursor at the end → "this is a"
-    const b = makeBehavior('this is a sentence ');
-    b.handleBeforeInput(makeEvent('deleteWordBackward'), makeSel(19));
-    expect(b.container.delete).toHaveBeenCalledWith(9, 10); // " sentence "
+  it.each([
+    // [before, after]
+    ['this is a sentence |', 'this is a |'],      // issue #4: the space BEFORE the word stays
+    ['hello world|', 'hello |'],                  // issue #4
+    ['hello |', '|'],
+    ['one two three|', 'one two |'],
+    ['one two|', 'one |'],
+    ['one two th|ree', 'one two |ree'],           // inside a word: back to its start
+    ['one two |three', 'one |three'],             // right after a space: the space and the word before it
+    ['one two   |', 'one |'],                     // several spaces
+    ['one   two   |', 'one   |'],
+    ['hello   |', '|'],
+    ['   |', '|'],                                // whitespace only
+    ['|hello', '|hello'],                         // start of the block: nothing
+  ])('%j -> %j', (before, after) => {
+    expect(back(before)).toBe(after);
   });
 
-  it('deletes the previous word with its leading space mid-text', () => {
-    const b = makeBehavior('hello world');
-    b.handleBeforeInput(makeEvent('deleteWordBackward'), makeSel(11));
-    expect(b.container.delete).toHaveBeenCalledWith(5, 6); // " world"
+  it.each([
+    ['end.|', 'end|'],                            // punctuation is its own stop
+    ['end. |', 'end|'],
+    ['word, |', 'word|'],
+    ['say word, |', 'say word|'],
+    ['wait...|', 'wait|'],                        // a run of punctuation is one unit
+    ['wait... ok|', 'wait... |'],
+    ['say (word)|', 'say (word|'],
+    ['foo.bar|', 'foo.|'],
+    ["don't stop|", "don't |"],                   // an inner apostrophe keeps the word whole
+    ["don't|", '|'],
+    ['well-known x|', 'well-known |'],
+    ['well-known|', 'well-|'],
+    ['a_b c|', 'a_b |'],
+    ['x 12.5|', 'x |'],
+  ])('punctuation: %j -> %j', (before, after) => {
+    expect(back(before)).toBe(after);
+  });
+
+  it.each([
+    ['你好世界很好|', '你好世界|'],                  // CJK words by Intl.Segmenter
+    ['café olé|', 'café |'],
+    ['café |olé', '|olé'],
+    ['Привет мир|', 'Привет |'],
+  ])('non-Latin: %j -> %j', (before, after) => {
+    expect(back(before)).toBe(after);
+  });
+
+  it('line breaks: a break is deleted by itself, whitespace never reaches across one', () => {
+    expect(back('line one\n|')).toBe('line one|');
+    expect(back('a\nb|')).toBe('a\n|');
+    expect(back('a\n   |')).toBe('a\n|');
+    expect(back('a\n|b')).toBe('a|b');
+  });
+
+  it('deletes in ONE edit and puts the caret at the start of the word', () => {
+    const b = makeBehavior('this is a sentence ');
+    b.handleBeforeInput(makeEvent('deleteWordBackward'), makeSel(19));
+    expect(b.container.delete).toHaveBeenCalledTimes(1);
+    expect(b.container.delete).toHaveBeenCalledWith(10, 9); // "sentence "
+    expect(b.block.commit).toHaveBeenCalledTimes(1);
   });
 
   it('ignores getTargetRanges() for a collapsed selection (Chromium leaves an orphan space otherwise)', () => {
@@ -90,7 +155,7 @@ describe('TextBehavior deleteWordBackward', () => {
     b.calculateOffset = vi.fn(() => 8);
     b.handleBeforeInput(event, makeSel(13));
     expect(b.calculateOffset).not.toHaveBeenCalled();
-    expect(b.container.delete).toHaveBeenCalledWith(7, 6); // " three" -> "one two"
+    expect(b.container.delete).toHaveBeenCalledWith(8, 5); // "three"
   });
 
   it('does nothing at offset 0', () => {
@@ -107,30 +172,32 @@ describe('TextBehavior deleteWordBackward', () => {
 });
 
 // ── deleteWordForward ──────────────────────────────────────────────────────
+// The handler reads the platform: unit tests run in Node (no navigator) = 'other' = the Windows rule. The macOS rule is tested
+// on wordDeleteRange itself.
 
-describe('TextBehavior deleteWordForward', () => {
-  it('removes leading whitespace + word and keeps the separator ("hello| world after")', () => {
-    const b = makeBehavior('hello world after');
-    b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(5));
-    expect(b.container.delete).toHaveBeenCalledWith(5, 6); // " world" -> "hello after"
+describe('TextBehavior deleteWordForward (Windows / Linux rule)', () => {
+  it.each([
+    ['|one two three', '|two three'],             // the word and the whitespace after it, up to the next word
+    ['one |two three', 'one |three'],
+    ['one two |three', 'one two |'],
+    ['one| two three', 'one|two three'],          // at whitespace: that whitespace only
+    ['one|   two', 'one|two'],
+    ['one |   ', 'one |'],
+    ['on|e two', 'on|two'],                       // inside a word: to its end and the whitespace after
+    ['end|. next', 'end|next'],                   // punctuation is its own stop
+    ['a|, b', 'a|b'],
+    ['|你好世界', '|世界'],                         // CJK
+    ['|café olé', '|olé'],
+    ['hello|', 'hello|'],                         // end of the block: nothing
+    ['|', '|'],
+  ])('%j -> %j', (before, after) => {
+    expect(fwd(before)).toBe(after);
   });
 
-  it('removes the word and its trailing whitespace when the cursor is right before it', () => {
-    const b = makeBehavior('one two three');
-    b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(4));
-    expect(b.container.delete).toHaveBeenCalledWith(4, 4); // "two " -> "one three"
-  });
-
-  it('removes the last word with its leading whitespace', () => {
-    const b = makeBehavior('one two three');
-    b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(7));
-    expect(b.container.delete).toHaveBeenCalledWith(7, 6); // " three" -> "one two"
-  });
-
-  it('removes trailing whitespace only when no word follows', () => {
-    const b = makeBehavior('one   ');
-    b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(3));
-    expect(b.container.delete).toHaveBeenCalledWith(3, 3);
+  it('line breaks: a break is deleted by itself, whitespace never reaches across one', () => {
+    expect(fwd('a|\nb')).toBe('a|b');
+    expect(fwd('a |\nb')).toBe('a |b');
+    expect(fwd('a|  \nb')).toBe('a|\nb');
   });
 
   it('ignores getTargetRanges() for a collapsed selection', () => {
@@ -140,13 +207,57 @@ describe('TextBehavior deleteWordForward', () => {
     b.calculateOffset = vi.fn(() => 7);
     b.handleBeforeInput(event, makeSel(3));
     expect(b.calculateOffset).not.toHaveBeenCalled();
-    expect(b.container.delete).toHaveBeenCalledWith(3, 4); // " two"
+    expect(b.container.delete).toHaveBeenCalledWith(3, 1); // " "
   });
 
   it('does nothing at end of text', () => {
     const b = makeBehavior('hello');
     b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(5));
     expect(b.container.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes the selection when not collapsed', () => {
+    const b = makeBehavior('hello world');
+    b.handleBeforeInput(makeEvent('deleteWordForward'), makeSel(2, 7));
+    expect(b.container.delete).toHaveBeenCalledWith(2, 5);
+  });
+});
+
+// ── wordDeleteRange, per platform ──────────────────────────────────────────
+
+describe('wordDeleteRange', () => {
+  const del = (marked, direction, platform) => {
+    const caret = marked.indexOf('|');
+    const text = marked.replace('|', '');
+    const { from, to } = wordDeleteRange(text, caret, direction, { platform });
+    return text.slice(0, from) + '|' + text.slice(to);
+  };
+
+  it('backward is the same on macOS and Windows', () => {
+    for (const platform of ['mac', 'other']) {
+      expect(del('this is a sentence |', 'backward', platform)).toBe('this is a |');
+      expect(del('hello world|', 'backward', platform)).toBe('hello |');
+      expect(del('word, |', 'backward', platform)).toBe('word|');
+    }
+  });
+
+  it.each([
+    // [text, mac, windows]
+    ['|one two three', '| two three', '|two three'],
+    ['one |two three', 'one | three', 'one |three'],
+    ['one| two three', 'one| three', 'one|two three'],
+    ['one|   two', 'one|', 'one|two'],
+    ['end|. next', 'end| next', 'end|next'],
+    ['x| ... y', 'x| y', 'x|... y'],
+    ['|你好世界', '|世界', '|世界'],
+    ['hello|', 'hello|', 'hello|'],
+  ])('forward %j: macOS %j, Windows %j', (marked, mac, windows) => {
+    expect(del(marked, 'forward', 'mac')).toBe(mac);
+    expect(del(marked, 'forward', 'other')).toBe(windows);
+  });
+
+  it('forward on macOS: whitespace, then the word after it', () => {
+    expect(del('hello| world after', 'forward', 'mac')).toBe('hello| after');
   });
 });
 

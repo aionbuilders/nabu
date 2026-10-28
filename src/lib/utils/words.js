@@ -60,3 +60,88 @@ export function countWords(text, lang) {
     }
     return count;
 }
+
+/**
+ * Word deletion (`deleteWordBackward` / `deleteWordForward`: Ctrl+Backspace / Ctrl+Delete, Option+Backspace / Option+Delete).
+ *
+ * The text is cut into tokens: a word (`Intl.Segmenter` word granularity, so CJK and accented words are cut as the reader would),
+ * a run of punctuation (`...`, `?!`), a run of horizontal whitespace, a line break (`\n`), or any other single
+ * segment (an emoji, a symbol). The rules follow what Chromium does in a native `contenteditable` / `<textarea>`:
+ *
+ * - Backward (same on macOS and Windows): the whitespace before the caret goes with the token before it, and the caret lands at
+ *   the start of that token: `"this is a sentence |"` -> `"this is a |"`, `"hello world|"` -> `"hello |"`, `"word, |"` -> `"word|"`,
+ *   `"end.|"` -> `"end|"`. Only whitespace before the caret: all of it, and the token before it.
+ * - Forward on macOS (and Linux): up to the END of the next token, whitespace in between included: `"hello| world"` -> `"hello|"`,
+ *   `"one |two three"` -> `"one | three"`.
+ * - Forward on Windows: the next token and the whitespace after it, up to the START of the following one (Chromium's
+ *   `ShouldSkipSpaceWhenMovingRight`): `"one |two three"` -> `"one |three"`. At whitespace, that whitespace only.
+ * - A caret inside a token deletes to the token's edge (`"th|ree"` backward -> `"|ree"`). A line break is deleted by itself, and
+ *   whitespace never reaches across one. Nothing at the start (backward) or the end (forward) of the text.
+ *
+ * @param {string} text
+ * @param {number} caret offset in `text`
+ * @param {'backward' | 'forward'} direction
+ * @param {{ platform?: 'mac' | 'other', lang?: string }} [options] `platform`: `'mac'` for the macOS forward rule, anything else is Windows / Linux-as-Windows
+ * @returns {{ from: number, to: number }} the span to delete (empty when there is nothing to delete)
+ */
+export function wordDeleteRange(text, caret, direction, { platform = 'other', lang } = {}) {
+    const empty = { from: caret, to: caret };
+    if (direction === 'backward' ? caret <= 0 : caret >= text.length) return empty;
+    const tokens = wordTokens(text, lang);
+    const i = tokens.findIndex((t) => direction === 'backward' ? t.start < caret && caret <= t.end : t.start <= caret && caret < t.end);
+    if (i === -1) return empty;
+    const token = tokens[i];
+    if (direction === 'backward') {
+        let from = token.start;
+        if (token.kind === 'space' && i > 0 && tokens[i - 1].kind !== 'break') from = tokens[i - 1].start;
+        return { from, to: caret };
+    }
+    let to = token.end;
+    const next = tokens[i + 1];
+    if (next && next.kind !== 'break') {
+        // macOS: whitespace then the word after it; Windows: the word then the whitespace after it.
+        if (platform === 'mac' ? token.kind === 'space' : token.kind !== 'space' && token.kind !== 'break' && next.kind === 'space') to = next.end;
+    }
+    return { from: caret, to };
+}
+
+/** @typedef {{ start: number, end: number, kind: 'word' | 'punct' | 'space' | 'break' | 'other' }} WordToken */
+
+const PUNCT = /^\p{P}+$/u;
+const WORDISH = /^[\p{L}\p{N}\p{M}_]+$/u;
+
+/**
+ * @param {string} text @param {string | undefined} lang
+ * @returns {WordToken[]}
+ */
+function wordTokens(text, lang) {
+    /** @type {WordToken[]} */
+    const tokens = [];
+    /** @param {number} start @param {string} piece @param {boolean | undefined} wordLike */
+    const push = (start, piece, wordLike) => {
+        /** @type {WordToken['kind']} */
+        let kind;
+        if (piece === '\n') kind = 'break';
+        else if (/^[^\S\n]+$/.test(piece)) kind = 'space';
+        else if (wordLike ?? WORDISH.test(piece)) kind = 'word';
+        else if (PUNCT.test(piece)) kind = 'punct';
+        else kind = 'other';
+        const last = tokens[tokens.length - 1];
+        // Runs of punctuation (`...`, `?!`) and of whitespace are one token; words are not merged (the segmenter decided).
+        if (last && last.end === start && last.kind === kind && (kind === 'punct' || kind === 'space')) last.end = start + piece.length;
+        else tokens.push({ start, end: start + piece.length, kind });
+    };
+    const segmenter = segmenterFor(lang);
+    if (segmenter) {
+        for (const part of segmenter.segment(text)) {
+            // UAX #29 keeps `foo.bar` whole (a dot between letters); an editor stops at the dot, as Chromium does.
+            if (part.isWordLike && part.segment.includes('.')) {
+                let at = part.index;
+                for (const piece of part.segment.split(/(?<=\p{L})(\.)(?=\p{L})/u)) { push(at, piece, piece !== '.'); at += piece.length; }
+            } else push(part.index, part.segment, part.isWordLike);
+        }
+    } else {
+        for (const m of text.matchAll(/[\p{L}\p{N}\p{M}_]+|\p{P}+|[^\S\n]+|\n|[\s\S]/gu)) push(m.index, m[0], undefined);
+    }
+    return tokens;
+}

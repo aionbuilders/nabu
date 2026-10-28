@@ -6,7 +6,8 @@ import { LoroText } from "loro-crdt";
 import { tick } from "svelte";
 import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 import { escapeMarkdownText, escapeBlockStart } from "./markdown-syntax.js";
-import { countWords } from "../../utils/words.js";
+import { countWords, wordDeleteRange } from "../../utils/words.js";
+import { detectPlatform } from "../../utils/keys.js";
 
 /**
  * Converts a Loro text delta to inline HTML.
@@ -559,73 +560,34 @@ export class TextBehavior {
     }
 
     /**
-     * Deletes the word before the cursor (Ctrl+Backspace on Win/Linux,
-     * Option+Delete on Mac), including the whitespace that precedes it
-     * so no orphan space is left behind (issue #4).
+     * Deletes the word before the cursor (Ctrl+Backspace on Win/Linux, Option+Backspace on Mac): the whitespace between the
+     * caret and the word goes with it, and the caret lands where the word started ("one two |" -> "one |", issue #4).
      *
-     * For a collapsed selection the range is always computed from the model
-     * text, never from `event.getTargetRanges()`: browsers disagree on it
-     * (Chromium stops right after the previous space, leaving "one two " from
-     * "one two three"), so the behavior would differ per engine.
-     * Rule: remove `\s* \S+ \s*` ending at the cursor ("one two three|" -> "one two").
+     * For a collapsed selection the range is computed from the model text, never from `event.getTargetRanges()`: browsers
+     * disagree on it (Chromium stops right after the previous space, leaving "one two " from "one two three"), so the
+     * behavior would differ per engine. The rules (words by `Intl.Segmenter`, punctuation, line breaks) are in
+     * {@link wordDeleteRange}. A selection is deleted whole.
      * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
      */
     handleDeleteWordBackward(event, sel = this.selection) {
         if (!sel) return;
-        if (!sel.isCollapsed) {
-            this.delete({ index: sel.from, length: sel.to - sel.from });
-            this.block.commit();
-            tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
-            return true;
-        }
-        const textBefore = this.text.slice(0, sel.from);
-        // \s* leading : l'espace qui précède le mot est supprimé aussi (comportement Mac)
-        const wordMatch = textBefore.match(/(\s*\S+\s*)$/);
-        const deleteFrom = wordMatch ? sel.from - wordMatch[0].length : 0;
-        const len = sel.from - deleteFrom;
-        if (len > 0) this.delete({ index: deleteFrom, length: len });
-        this.block.commit();
-        tick().then(() => this.nabu.selection.setCursor(this.block, deleteFrom));
-        return true;
+        if (!sel.isCollapsed) return this.#deleteSpan(sel.from, sel.to);
+        const { from } = wordDeleteRange(this.text, sel.from, 'backward', { lang: this.nabu?.lang });
+        return this.#deleteSpan(from, sel.from);
     }
 
     /**
-     * Deletes the word after the cursor (Ctrl+Delete / Option+Fn+Delete).
-     *
-     * Like backward deletion, a collapsed selection is resolved from the model
-     * text only (`getTargetRanges()` is ignored: it is engine-dependent).
-     * Rule, so that the result never has a double space nor glued words:
-     *  - the cursor is right before the word ("one |two three") -> remove the
-     *    word and its trailing whitespace -> "one three";
-     *  - whitespace sits between the cursor and the word ("one| two three")
-     *    -> remove that leading whitespace and the word, keep the trailing
-     *    whitespace -> "one three";
-     *  - last word of the text -> remove it with its leading whitespace
-     *    ("one two| three" -> "one two").
-     * If only whitespace remains after the cursor, it is all removed.
+     * Deletes the word after the cursor (Ctrl+Delete on Win/Linux, Option+Fn+Delete on Mac). Like the backward deletion it is
+     * resolved from the model text only (`getTargetRanges()` is engine-dependent). macOS deletes up to the end of the next
+     * word ("one |two three" -> "one | three"), Windows up to the start of the one after ("one |two three" -> "one |three");
+     * see {@link wordDeleteRange}. A selection is deleted whole.
      * @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel]
      */
     handleDeleteWordForward(event, sel = this.selection) {
         if (!sel) return;
-        if (!sel.isCollapsed) {
-            this.delete({ index: sel.from, length: sel.to - sel.from });
-            this.block.commit();
-            tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
-            return true;
-        }
-        const textAfter = this.text.slice(sel.from);
-        const wordMatch = textAfter.match(/^(\s*)(\S+)(\s*)/);
-        let len;
-        if (!wordMatch) len = textAfter.length;
-        else {
-            const [, leading, word, trailing] = wordMatch;
-            // Leading whitespace present: keep the trailing one as the separator.
-            len = leading ? leading.length + word.length : word.length + trailing.length;
-        }
-        if (len > 0) this.delete({ index: sel.from, length: len });
-        this.block.commit();
-        tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));
-        return true;
+        if (!sel.isCollapsed) return this.#deleteSpan(sel.from, sel.to);
+        const { to } = wordDeleteRange(this.text, sel.from, 'forward', { platform: detectPlatform(), lang: this.nabu?.lang });
+        return this.#deleteSpan(sel.from, to);
     }
 
     /**

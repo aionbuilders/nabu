@@ -18,6 +18,7 @@ import { moveBlocks } from './move.js';
 import { closestWithin } from '../utils/dom-scope.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset, revealFocus } from './undo-selection.js';
 import { LARGE_DOC } from './chunks.js';
+import { swapEmptyBlocks, restoreEmptyBlocks } from '../utils/composition.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
 
@@ -190,6 +191,8 @@ export class Nabu {
      * @type {import('./undo-selection.js').Endpoint | null}
      */
     #compositionAnchor = null;
+    /** Empty blocks before the composing one, their "\n" placeholder swapped for a `<br>` meanwhile (Chromium offset drift, issue #6). @type {Array<{ br: Element, text: Text }>} */
+    #swappedEmpties = [];
     /** The block a composition runs in, reactive: its placeholder is hidden meanwhile (P-103). @type {Block | null} */
     #composingBlock = $state.raw(null);
     /**
@@ -1395,6 +1398,8 @@ export class Nabu {
         this.#compositionStartOffset = sel?.from ?? 0;
                 this.#compositionAnchor = behavior ? makeEndpoint(anchor, sel?.from ?? 0, 'end') : null;
         this.#composingBlock = anchor;
+        restoreEmptyBlocks(this.#swappedEmpties); // (a composition that never ended)
+        this.#swappedEmpties = swapEmptyBlocks(anchor.element);
         /** @type {any} */ (behavior)?.snapshotForComposition?.();
     }
 
@@ -1441,6 +1446,8 @@ export class Nabu {
         const composedIn = this.#compositionStartBlock?.behaviors?.get('text');
         const composedBlock = this.#compositionStartBlock;
         this.#composingBlock = null;
+        restoreEmptyBlocks(this.#swappedEmpties);
+        this.#swappedEmpties = [];
         /** @type {any} */ (composedIn)?.restoreAfterComposition?.(e.data || ''); // before the model catches up: no duplicate of the composed text
         try {
             this.#syncComposition(e);

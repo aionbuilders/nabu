@@ -753,9 +753,21 @@ test.describe('8 · programmatic / remote model change during a composition', ()
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('9 · after a commit (issue #6: "Enter stops working after Japanese IME input")', () => {
-  // FINDING (2026-10-28, reproduces issue #6 exactly): a composition started in an empty paragraph, committed, then Enter ×2 and a new
-  // composition in the new empty paragraph — the second commit never lands (`composing` stays true, the text is lost). Fix for 0.1.1.
-  test.fixme('9a · テスト, Enter, Enter, 愛: the Enters split the block, the text lands where typed — FINDING: the second commit is lost', async ({ page }) => {
+  // ROOT CAUSE (issue #6): an empty block renders a lone "\n" text node. Chromium finds the running composition by plain-text offsets and
+  // that mapping drifts by one per such node BEFORE the composition: the composed text landed in the previous block and the next
+  // `compositionupdate` deleted the blocks in between, so the commit never came. Fixed by swapping those nodes for a <br> while a composition
+  // runs (utils/composition.js). The first composition is not needed: any composition after empty blocks reproduces it.
+  /** The nth block's text of the live DOM, per top-level paragraph, and whether it still renders the lone "\n" placeholder. */
+  const placeholders = (page: Page) => page.evaluate(() =>
+    [...document.querySelectorAll('[data-nabu-root] [data-block-type]')].map((el) => ({ type: (el as HTMLElement).dataset.blockType, text: el.textContent, br: el.querySelectorAll('br').length })));
+  /** A full `a, あ, あい, 愛` composition committed with `愛`. */
+  const composeAi = async (page: Page) => {
+    for (const s of ['a', 'あ', 'あい', '愛']) await ime(s);
+    await commit('愛');
+    await settle(page);
+  };
+
+  test('9a · テスト, Enter, Enter, 愛: the Enters split the block, the text lands where typed', async ({ page }) => {
     await buildBlocks(page, [Para('')]);
     await focusEmpty(page);
     for (const s of ['t', 'て', 'てs', 'てす', 'てすt', 'てすと', 'テスト']) await ime(s);
@@ -763,11 +775,89 @@ test.describe('9 · after a commit (issue #6: "Enter stops working after Japanes
     await settle(page);
     await page.keyboard.press('Enter');
     await page.keyboard.press('Enter');
-    for (const s of ['a', 'あ', 'あい', '愛']) await ime(s);
-    await commit('愛');
-    await settle(page);
+    await composeAi(page);
     await expect.poll(() => allText(page)).toEqual(['テスト', '', '愛']);
     expect(await composing(page)).toBe(false);
+    await expect.poll(() => caret(page)).toBe('愛|');
+    // the empty block in the middle still renders its placeholder, untouched by the workaround
+    expect(await placeholders(page)).toEqual([
+      { type: 'paragraph', text: 'テスト', br: 0 }, { type: 'paragraph', text: '\n', br: 0 }, { type: 'paragraph', text: '愛', br: 0 },
+    ]);
+  });
+
+  test('9a2 · the same, then Enter and a third composition: the editor keeps working', async ({ page }) => {
+    await buildBlocks(page, [Para('')]);
+    await focusEmpty(page);
+    await ime('か'); await commit('か'); await settle(page);
+    await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+    await composeAi(page);
+    await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+    await ime('に'); await commit('日'); await settle(page);
+    await expect.poll(() => allText(page)).toEqual(['か', '', '愛', '', '日']);
+    expect(await composing(page)).toBe(false);
+    await expect.poll(() => caret(page)).toBe('日|');
+    await page.keyboard.type('x');
+    await expect.poll(() => allText(page)).toEqual(['か', '', '愛', '', '日x']);
+  });
+
+  test('9c · no first composition needed: the second of two empty paragraphs gets the composed text, the first stays empty', async ({ page }) => {
+    await buildBlocks(page, [Para(''), Para('')]);
+    await focusEmpty(page, 1);
+    await composeAi(page);
+    await expect.poll(() => flat(page)).toBe('p(∅) ; p(愛)');
+    expect(await composing(page)).toBe(false);
+    await expect.poll(() => caret(page)).toBe('愛|');
+  });
+
+  test('9d · the third of three empty paragraphs (two empty blocks before the composition)', async ({ page }) => {
+    await buildBlocks(page, [Para(''), Para(''), Para('')]);
+    await focusEmpty(page, 2);
+    await composeAi(page);
+    await expect.poll(() => flat(page)).toBe('p(∅) ; p(∅) ; p(愛)');
+    expect(await composing(page)).toBe(false);
+    expect(await placeholders(page)).toEqual([
+      { type: 'paragraph', text: '\n', br: 0 }, { type: 'paragraph', text: '\n', br: 0 }, { type: 'paragraph', text: '愛', br: 0 },
+    ]);
+  });
+
+  test('9e · composing at the END of a filled paragraph that follows empty ones', async ({ page }) => {
+    await buildBlocks(page, [Para(''), Para(''), Para('ab')]);
+    await focusEnd(page, 'ab');
+    await ime('か'); await ime('漢');
+    await commit('漢');
+    await settle(page);
+    await expect.poll(() => flat(page)).toBe('p(∅) ; p(∅) ; p(ab漢)');
+    await expect.poll(() => caret(page)).toBe('ab漢|');
+    expect(await composing(page)).toBe(false);
+  });
+
+  test('9f · a heading and a list item after empty paragraphs', async ({ page }) => {
+    await buildBlocks(page, [Para(''), Para(''), H('', 2)]);
+    await focusEmpty(page, 2);
+    await composeAi(page);
+    await expect.poll(() => flat(page)).toBe('p(∅) ; p(∅) ; h2(愛)');
+    await buildDoc(page, [P(''), P(''), UL(I(''))]);
+    await focusEmpty(page, 2);
+    await composeAi(page);
+    await expect.poll(() => outline(page)).toContain('愛');
+    await expect.poll(() => allText(page)).toEqual(['', '', '愛']);
+    expect(await composing(page)).toBe(false);
+  });
+
+  test('9g · a composition canceled after empty paragraphs leaves the placeholders and the caret in place', async ({ page }) => {
+    await buildBlocks(page, [Para(''), Para(''), Para('')]);
+    await focusEmpty(page, 2);
+    await ime('か'); await ime('かな');
+    await imeKey('Escape');
+    await ime('');
+    await settle(page);
+    await expect.poll(() => flat(page)).toBe('p(∅) ; p(∅) ; p(∅)');
+    expect(await composing(page)).toBe(false);
+    expect(await placeholders(page)).toEqual([
+      { type: 'paragraph', text: '\n', br: 0 }, { type: 'paragraph', text: '\n', br: 0 }, { type: 'paragraph', text: '\n', br: 0 },
+    ]);
+    await page.keyboard.type('d');
+    await expect.poll(() => flat(page)).toBe('p(∅) ; p(∅) ; p(d)');
   });
 
   test('9b · Backspace and Delete work after a commit', async ({ page }) => {
