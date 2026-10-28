@@ -8,7 +8,7 @@
   // No analytics in dev, nor in the e2e production build (`build:e2e`): keeps the test pages free of third-party requests.
   const analytics = !dev && import.meta.env.VITE_NABU_E2E !== '1';
 
-  const DEFAULT_TITLE = 'Nabu — Modular block editor engine for Svelte 5';
+  const DEFAULT_TITLE = 'Nabu — a block editor for Svelte 5, built on a CRDT';
   const DESCRIPTION = 'A local-first, modular block editor engine for Svelte 5. Single contenteditable, Loro-CRDT state, and an extension registry for custom block types.';
 
   const jsonLd = JSON.stringify({
