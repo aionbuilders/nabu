@@ -31,7 +31,7 @@ export const SWITCH = {
  */
 export const CHAPTERS_FALLBACK = [
   { n: 1, title: 'One contenteditable', description: 'Why the whole document is one editable surface, and what that costs us.', adrs: [1, 3] },
-  { n: 2, title: 'The model is the truth', description: 'A Loro tree holds the document. Blocks are Svelte classes over it. The DOM only reflects.', adrs: [2, 4, 10] },
+  { n: 2, title: 'The model is the truth', description: 'A Loro tree holds the document. Blocks are Svelte classes over it. The DOM only reflects.', adrs: [0, 2, 4, 10] },
   { n: 3, title: 'The life of a keystroke', description: 'From your key to the paint: every step, timed live.', adrs: [7, 8] },
   { n: 4, title: 'Where is the caret?', description: 'Mapping a browser selection to the model and back, and why undo puts it back.', adrs: [6, 15] },
   { n: 5, title: 'Commands, not keycodes', description: 'One action bus, a keymap you can rebind, confirmations that never trap you.', adrs: [11, 17] },
@@ -69,6 +69,7 @@ export const STORY_LINKS = [
 
 /** The short name of a record in the timeline (the title of an ADR is a sentence). A record missing here shows its own title. */
 export const ADR_SHORT = /** @type {Record<number, string>} */ ({
+  0: 'A CRDT as the source of truth',
   1: 'A single contenteditable',
   2: 'State in Svelte 5 classes',
   3: 'Flat map, recursive rendering',

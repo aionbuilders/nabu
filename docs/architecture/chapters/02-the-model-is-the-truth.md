@@ -2,7 +2,7 @@
 title: The model is the truth
 description: A Loro tree holds the document. Blocks are Svelte classes over it. The DOM only reflects.
 chapter: 2
-adrs: [2, 4, 10]
+adrs: [0, 2, 4, 10]
 xray: model-truth
 ---
 
@@ -17,7 +17,7 @@ The document is a [Loro](https://loro.dev) tree named `blocks`. One node per blo
 this.tree = this.doc.getTree("blocks");
 ```
 
-Loro is a CRDT, so two copies of this tree can be edited apart and merged later without a server deciding who wins. We use that for tabs today ([chapter 06](/architecture/chapters/nothing-gets-lost)). Nothing in the editor depends on a network.
+Loro is a CRDT, so two copies of this tree can be edited apart and merged later without a server deciding who wins ([ADR 000](/architecture/decisions/000) says why a CRDT, and why this one). We use that for tabs today ([chapter 06](/architecture/chapters/nothing-gets-lost)). Nothing in the editor depends on a network.
 
 ## Blocks are Svelte classes over it
 
