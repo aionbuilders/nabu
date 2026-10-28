@@ -2,7 +2,7 @@
   import '../lib/nabu-theme.css';
   import { dev } from '$app/env';
   import { page } from '$app/state';
-  import { SITE_URL } from '../site/url.js';
+  import { SITE_URL, COUNTERSCALE_URL, COUNTERSCALE_SITE_ID } from '../site/url.js';
   import pkg from '../../package.json';
 
   // No analytics in dev, nor in the e2e production build (`build:e2e`): keeps the test pages free of third-party requests.
@@ -75,10 +75,9 @@
   <!-- JSON-LD -->
   {@html `<script type="application/ld+json">${jsonLd}<` + `/script>`}
 
-  <!-- Plausible Analytics (production only) -->
+  <!-- Counterscale analytics (production only): no cookies, self-hosted on Cloudflare Workers -->
   {#if analytics}
-    <script async src="https://plausible.io/js/pa-FXhGAcvagGM3pf-uN0Xmj.js"></script>
-    {@html `<script>window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};plausible.init()<` + `/script>`}
+    <script id="counterscale-script" data-site-id={COUNTERSCALE_SITE_ID} src="{COUNTERSCALE_URL}/tracker.js" defer></script>
   {/if}
 </svelte:head>
 
