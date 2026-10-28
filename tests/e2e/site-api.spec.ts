@@ -12,7 +12,7 @@ test.describe('API reference', () => {
   test('/api lists the three entry points, each with its exports grouped by kind', async ({ page }) => {
     await page.goto('/api');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('API reference');
-    await expect(page).toHaveTitle('API reference — Nabu');
+    await expect(page).toHaveTitle('API reference · Nabu');
     for (const spec of ['@aionbuilders/nabu', '@aionbuilders/nabu/ui', '@aionbuilders/nabu/extend']) {
       await expect(page.getByRole('heading', { level: 2, name: spec, exact: true })).toBeVisible();
     }
@@ -121,7 +121,7 @@ test.describe('API reference', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('nabu.internals');
     const warning = page.getByRole('note').filter({ hasText: 'may change in any minor version' });
     await expect(warning).toBeVisible();
-    await expect(warning.getByRole('heading')).toHaveText(/Unstable\s+—\s+may change in any minor version/);
+    await expect(warning.getByRole('heading')).toHaveText(/Unstable:\s+may change in any minor version/);
     await expect(page.getByText('Stability: unstable', { exact: true })).toBeVisible();
     const keys = page.getByRole('table', { name: 'Keys of nabu.internals' });
     await expect(keys.locator('td.name code', { hasText: /^handleKeydown$/ })).toBeVisible();

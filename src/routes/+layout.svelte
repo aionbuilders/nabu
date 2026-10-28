@@ -8,7 +8,7 @@
   // No analytics in dev, nor in the e2e production build (`build:e2e`): keeps the test pages free of third-party requests.
   const analytics = !dev && import.meta.env.VITE_NABU_E2E !== '1';
 
-  const DEFAULT_TITLE = 'Nabu — a block editor for Svelte 5, built on a CRDT';
+  const DEFAULT_TITLE = 'Nabu: a block editor for Svelte 5, built on a CRDT';
   const DESCRIPTION = 'A local-first, modular block editor engine for Svelte 5. Single contenteditable, Loro-CRDT state, and an extension registry for custom block types.';
 
   const jsonLd = JSON.stringify({
@@ -38,7 +38,7 @@
   // <title> would be rendered next to this one (duplicate tags), so the single source of truth stays here.
   // An error page (404 and the like, src/routes/+error.svelte) is not indexed and has no canonical URL.
   const failed = $derived(page.status >= 400);
-  const TITLE = $derived(failed ? (page.status === 404 ? 'Page not found — Nabu' : 'Something went wrong — Nabu') : (page.data.title ?? DEFAULT_TITLE));
+  const TITLE = $derived(failed ? (page.status === 404 ? 'Page not found · Nabu' : 'Something went wrong · Nabu') : (page.data.title ?? DEFAULT_TITLE));
   // Same for the description (the documentation pages take theirs from their frontmatter).
   const DESC = $derived(page.data.description ?? DESCRIPTION);
   const canonical = $derived(SITE_URL + (page.url.pathname === '/' ? '' : page.url.pathname));

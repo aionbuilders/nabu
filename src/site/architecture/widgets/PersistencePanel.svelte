@@ -44,7 +44,7 @@
   });
 
   const kb = (/** @type {number} */ n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
-  const at = (/** @type {number | null | undefined} */ t) => (t ? new Date(t).toLocaleTimeString() : '—');
+  const at = (/** @type {number | null | undefined} */ t) => (t ? new Date(t).toLocaleTimeString() : 'n/a');
 
   async function saveNow() {
     saving = true;
@@ -60,7 +60,7 @@
   <dl class="rows">
     <div class="row"><dt>last save</dt><dd data-testid="persist-saved-at">{at(p?.lastSavedAt)}</dd></div>
     <div class="row"><dt>stored in</dt><dd class="w-muted">IndexedDB · nabu · snapshots</dd></div>
-    <div class="row"><dt>snapshot</dt><dd data-testid="persist-size">{bytes ? kb(bytes) : '—'}</dd></div>
+    <div class="row"><dt>snapshot</dt><dd data-testid="persist-size">{bytes ? kb(bytes) : 'n/a'}</dd></div>
     <div class="row"><dt>live sync between tabs</dt><dd data-testid="persist-sync" class:w-accent={p?.sync}>{p?.sync ? 'on' : 'off'}</dd></div>
     <div class="row"><dt>updates from other tabs</dt><dd data-testid="persist-received">{received}{received ? ` · last ${at(receivedAt)}` : ''}</dd></div>
   </dl>

@@ -64,9 +64,9 @@ export function pushBounded(list, value, max) {
   return next;
 }
 
-/** `4.2` / `16.7` / `118` (no unit); `<0.1` below a tenth; `—` for NaN. @param {number} ms */
+/** `4.2` / `16.7` / `118` (no unit); `<0.1` below a tenth; `n/a` for NaN. @param {number} ms */
 export function formatMs(ms) {
-  if (!Number.isFinite(ms)) return '—';
+  if (!Number.isFinite(ms)) return 'n/a';
   if (ms < 0.1) return '<0.1';
   return ms < 100 ? ms.toFixed(1) : String(Math.round(ms));
 }

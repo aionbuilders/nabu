@@ -83,7 +83,7 @@ test.describe('the documentation pages', () => {
       await hydrated(page);
 
       // the title and the description come from the frontmatter
-      await expect(page).toHaveTitle(`${d.title} — Docs — Nabu`);
+      await expect(page).toHaveTitle(`${d.title} · Docs · Nabu`);
       await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', d.description);
       await expect(page.locator('meta[property="og:description"]')).toHaveAttribute('content', d.description);
       await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow');
@@ -126,7 +126,7 @@ test.describe('the documentation pages', () => {
   test('/docs lists every page under its section', async ({ page }) => {
     const res = await page.goto('/docs');
     expect(res?.status()).toBe(200);
-    await expect(page).toHaveTitle('Docs — Nabu');
+    await expect(page).toHaveTitle('Docs · Nabu');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Docs');
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow');
     for (const [id, title] of [['getting-started', 'Getting started'], ['guides', 'Guides'], ['recipes', 'Recipes']]) {
@@ -146,7 +146,7 @@ test.describe('the documentation pages', () => {
     const res = await page.goto('/changelog');
     expect(res?.status()).toBe(200);
     await hydrated(page);
-    await expect(page).toHaveTitle('Changelog — Nabu');
+    await expect(page).toHaveTitle('Changelog · Nabu');
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Changelog');
     const root = page.locator(ROOT);

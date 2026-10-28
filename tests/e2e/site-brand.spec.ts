@@ -31,7 +31,7 @@ test.describe('brand page', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('The scribe’s mark');
     for (const name of SECTIONS) await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2 })).toHaveCount(SECTIONS.length);
-    await expect(page).toHaveTitle('Brand — Nabu');
+    await expect(page).toHaveTitle('Brand · Nabu');
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /Nabu brand/);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://nabu.aion.builders/brand');
     // the three readings
@@ -46,7 +46,7 @@ test.describe('brand page', () => {
   test('is prerendered (the HTML carries the content before any script runs)', async ({ request }) => {
     const html = await (await request.get('/brand')).text();
     expect(html).toContain('The scribe’s mark');
-    expect(html).toContain('<title>Brand — Nabu</title>');
+    expect(html).toContain('<title>Brand · Nabu</title>');
     expect(html).toContain('rel="canonical" href="https://nabu.aion.builders/brand"');
     expect(html).toContain('5.4:1');
   });

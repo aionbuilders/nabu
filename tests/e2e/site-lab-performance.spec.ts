@@ -37,13 +37,13 @@ test.describe('performance lab', () => {
   test('the page: title, size control, meter at rest, "How we measure" closed', async ({ page }) => {
     await page.goto('/labs/performance?blocks=1000');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(/10,000 blocks\.\s*One frame\./);
-    await expect(page).toHaveTitle('Performance lab — Nabu');
+    await expect(page).toHaveTitle('Performance lab · Nabu');
     const radios = page.getByTestId('lab-sizes').getByRole('radio');
     await expect(radios).toHaveCount(3);
     await expect(page.getByTestId('lab-sizes')).toContainText('1,000');
     await expect(page.getByTestId('lab-sizes')).toContainText('5,000');
     await expect(page.getByTestId('lab-sizes')).toContainText('10,000');
-    await expect(page.getByTestId('lab-last')).toContainText('—');
+    await expect(page.getByTestId('lab-last')).toContainText('n/a');
     await expect(page.getByTestId('lab-how')).not.toHaveAttribute('open', '');
     await expect(loaded(page)).toBeVisible({ timeout: 120_000 });
   });

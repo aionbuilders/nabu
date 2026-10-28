@@ -23,7 +23,7 @@ export const load = async ({ params }) => {
   const model = records();
   const story = storyList(chapters());
   return {
-    title: `${chapter.title} — Architecture — Nabu`,
+    title: `${chapter.title} · Architecture · Nabu`,
     description: chapter.description,
     chapter: { n: chapter.n, number: chapterNumber(chapter.n), title: chapter.title, file: chapter.file },
     lead: await build(lead, 1),

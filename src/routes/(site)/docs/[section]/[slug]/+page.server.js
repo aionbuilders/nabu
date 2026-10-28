@@ -13,7 +13,7 @@ export const load = async ({ params }) => {
   const { prev, next } = docsNav().neighbours(page.href);
   const brief = (/** @type {typeof page | null} */ p) => (p ? { title: p.title, href: p.href } : null);
   return {
-    title: `${page.title} — Docs — Nabu`,
+    title: `${page.title} · Docs · Nabu`,
     description: page.description,
     page: { title: page.title, section: page.section, sectionTitle: SECTIONS.find((s) => s.id === page.section)?.title ?? page.section },
     doc: { snapshot, ids, code },

@@ -10,7 +10,7 @@ export const load = async () => {
   const { prev, next } = docsNav().neighbours(PAGE.href);
   const brief = (/** @type {typeof PAGE | null} */ p) => (p ? { title: p.title, href: p.href } : null);
   return {
-    title: `${PAGE.title} — Docs — Nabu`,
+    title: `${PAGE.title} · Docs · Nabu`,
     description: PAGE.description,
     wide: true, // the docs layout: the whole width, no "On this page", the navigation behind its button
     page: { title: PAGE.title, section: PAGE.section, sectionTitle: SECTIONS.find((s) => s.id === PAGE.section)?.title ?? PAGE.section },

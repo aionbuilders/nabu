@@ -16,7 +16,7 @@ export const COMPARISON_CHECKED = '2026-10-27';
 export const COMPARISON_NOTES = 'docs/architecture/sources/comparison-2026-10-27.md';
 export const COMPARISON_TITLE = 'Nabu and the others';
 export const COMPARISON_LEAD =
-  'If you write Svelte and need a rich editor, these are your real options. Where Nabu is different, where the others are clearly ahead — and how we checked.';
+  'If you write Svelte and need a rich editor, these are your real options. Where Nabu is different, where the others are clearly ahead, and how we checked.';
 export const COMPARISON_DESCRIPTION =
   'Nabu next to the editors a Svelte developer can really choose: Tiptap, ProseKit, svelte-lexical and Svedit. Where Nabu is different, where the others are clearly ahead, a side-by-side table with a source for every cell.';
 
@@ -145,11 +145,11 @@ export const CELLS = {
     prosemirror: { text: 'adapter', url: npm('@prosemirror-adapter/svelte') },
     tiptap: { text: 'guide · wrapper', url: 'https://tiptap.dev/docs/editor/getting-started/install/svelte' },
     lexical: { text: 'wrapper', url: npm('svelte-lexical') },
-    slate: { text: '—', url: GH('ianstormtaylor/slate'), note: 'React only: Slate is "built on top of React"' },
-    blocknote: { text: '—', url: 'https://www.blocknotejs.org/', note: 'React-first; no Svelte package found' },
+    slate: { text: 'none', url: GH('ianstormtaylor/slate'), note: 'React only: Slate is "built on top of React"' },
+    blocknote: { text: 'none', url: 'https://www.blocknotejs.org/', note: 'React-first; no Svelte package found' },
     editorjs: { text: 'vanilla JS', url: GH('codex-team/editor.js'), unverified: true, note: 'No official Svelte package found; community wrappers not checked' },
     quill: { text: 'vanilla JS', unverified: true, note: 'No official Svelte package found; wrappers not checked' },
-    milkdown: { text: '—', unverified: true, note: 'No official Svelte package on npm; the ready-made UI depends on Vue' },
+    milkdown: { text: 'none', unverified: true, note: 'No official Svelte package on npm; the ready-made UI depends on Vue' },
     svedit: { text: 'native', url: GH('michael/svedit') },
     nabu: { text: 'native', url: repo('package.json') },
   },
@@ -178,13 +178,13 @@ export const CELLS = {
     nabu: { text: 'Loro inside; BYO transport', url: repo('docs/guides/persistence-and-sync.md') },
   },
   offline: {
-    prosemirror: { text: '—', url: PM_GUIDE, note: 'No built-in offline persistence' },
+    prosemirror: { text: 'none built in', url: PM_GUIDE, note: 'No built-in offline persistence' },
     tiptap: { text: 'y-indexeddb guide', url: 'https://tiptap.dev/docs/guides/offline-support' },
     lexical: { text: 'via provider', url: 'https://lexical.dev/docs/collaboration/react' },
     slate: { text: 'Plate: IndexedDB provider', url: 'https://unpkg.com/@platejs/yjs/README.md' },
     blocknote: { text: 'y-indexeddb', url: 'https://www.blocknotejs.org/docs/features/collaboration' },
-    editorjs: { text: '—', unverified: true, note: 'No offline persistence found' },
-    quill: { text: '—', unverified: true, note: 'No offline persistence found' },
+    editorjs: { text: 'none found', unverified: true, note: 'No offline persistence found' },
+    quill: { text: 'none found', unverified: true, note: 'No offline persistence found' },
     milkdown: { text: 'not stated', unverified: true, note: 'Not stated on the pages read' },
     svedit: { text: 'not stated', url: GH('michael/svedit') },
     nabu: { text: 'built in', url: repo('docs/guides/persistence-and-sync.md') },

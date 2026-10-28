@@ -87,7 +87,7 @@ const CASES: Case[] = [
       await expect(page.getByTestId('persist-sync')).toHaveText('on');
       // the autosave lands (2 s after the last key), and the panel says so
       await expect(page.getByTestId('persist-status')).toHaveAttribute('data-status', 'saved', { timeout: 8000 });
-      await expect(page.getByTestId('persist-saved-at')).not.toHaveText('—');
+      await expect(page.getByTestId('persist-saved-at')).not.toHaveText('n/a');
     },
   },
   {

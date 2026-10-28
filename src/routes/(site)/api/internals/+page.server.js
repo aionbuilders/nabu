@@ -7,7 +7,7 @@ export const load = async () => {
   const { item, hl } = await renderItem({ ...(/** @type {any} */ (model.items)[model.internals.id]), members: [member] });
   const rendered = item.members[0];
   return {
-    title: 'nabu.internals — API — Nabu',
+    title: 'nabu.internals · API · Nabu',
     description: rendered.descriptionHtml || rendered.summaryHtml,
     summary: rendered.summaryHtml,
     typeId: model.internals.id,

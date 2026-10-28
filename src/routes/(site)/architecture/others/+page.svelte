@@ -72,7 +72,7 @@
       <h2 id="ahead-title" class="section">Where the others are clearly ahead</h2>
       <ul>
         {#each AHEAD as d (d.title)}
-          <li><span class="mark minus" aria-hidden="true">–</span><span class="item"><strong>{d.title}</strong><span>{d.text}</span></span></li>
+          <li><span class="mark minus" aria-hidden="true">−</span><span class="item"><strong>{d.title}</strong><span>{d.text}</span></span></li>
         {/each}
       </ul>
     </section>

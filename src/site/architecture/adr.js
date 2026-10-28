@@ -65,7 +65,7 @@ export function parseAdr(raw, file) {
   let i = 0;
   while (i < lines.length && !lines[i].trim()) i++;
   const h1 = /^#\s+(.+)$/.exec(lines[i] ?? '');
-  if (!h1) throw new Error(`${file}: the first line must be the H1 "# ADR NNN — Title"`);
+  if (!h1) throw new Error(`${file}: the first line must be the H1 "# ADR NNN: Title"`);
   const title = h1[1].replace(/^ADR\s*\d+\s*[—–:-]\s*/i, '').trim();
   i++;
 

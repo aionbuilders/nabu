@@ -10,7 +10,7 @@ import { contrast } from './helpers/ui.js';
 const SHOTS = '/tmp/claude-1000/-home-killiandvcz-workspace--aionbuilders-nabu/80c82aab-d2d3-4d76-9871-9dafb82b36a2/scratchpad/site-shots';
 
 const SEED =
-  'p(Start typing — this is Nabu.) ; p(Press / for blocks, ::: for a region, ⌘Z to rewind.) ; ' +
+  'p(Start typing. This is Nabu.) ; p(Press / for blocks, ::: for a region, ⌘Z to rewind.) ; ' +
   'R:section-2(The bank){ ul[Bold, italic, links, code, Lists, quotes, code blocks] ; p(Everything you type is kept in this browser.) }';
 const LAST = 'Everything you type is kept in this browser.';
 
@@ -22,7 +22,7 @@ const scope = (page: Page) => page.getByTestId('hero-editor');
 const panel = (page: Page) => page.getByTestId('xray');
 const treeLines = (page: Page) => page.getByTestId('xray-tree').locator('.line');
 const ops = (page: Page) => page.getByTestId('xray-op');
-const FIRST = 'Start typing — this is Nabu.';
+const FIRST = 'Start typing. This is Nabu.';
 const SECOND = 'Press / for blocks, ::: for a region, ⌘Z to rewind.';
 
 async function open(page: Page) {
@@ -133,7 +133,7 @@ test.describe('home editor', () => {
 
   test('the floating toolbar appears on a selection, inside the scope', async ({ page }) => {
     await open(page);
-    await selectRange(page, 'Start typing — this is Nabu.', 0, 'Start typing — this is Nabu.', 5);
+    await selectRange(page, 'Start typing. This is Nabu.', 0, 'Start typing. This is Nabu.', 5);
     const bar = page.getByRole('toolbar', { name: 'Text formatting' });
     await expect(bar).toBeVisible();
     expect(await bar.evaluate((el) => !!el.closest('.nb-theme-atelier'))).toBe(true);
@@ -178,7 +178,7 @@ test.describe('home editor', () => {
     await expect(toggle).toHaveAttribute('data-mode', 'light');
     expect(await read()).toMatchObject({ bg: LIGHT.pane, color: LIGHT.text, scheme: 'light', caret: 'rgb(194, 56, 31)' });
     // floating UI follows too
-    await selectRange(page, 'Start typing — this is Nabu.', 0, 'Start typing — this is Nabu.', 5);
+    await selectRange(page, 'Start typing. This is Nabu.', 0, 'Start typing. This is Nabu.', 5);
     await expect(page.locator('.nabu-toolbar')).toBeVisible();
     expect(await page.locator('.nabu-toolbar').evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(LIGHT.float);
     // text contrast on the pane, in both schemes (WCAG 4.5:1)
@@ -212,7 +212,7 @@ test.describe('home editor', () => {
         const c = await contrast(page, sel, { pseudo });
         expect(c.ratio, `${mode}: ${name} ${c.fg} on ${c.bg}`).toBeGreaterThanOrEqual(4.5);
       }
-      await selectRange(page, 'Start typing — this is Nabu.', 0, 'Start typing — this is Nabu.', 5);
+      await selectRange(page, 'Start typing. This is Nabu.', 0, 'Start typing. This is Nabu.', 5);
       await expect(page.locator('.nabu-toolbar')).toBeVisible();
       const c = await contrast(page, '.nabu-toolbar-btn');
       expect(c.ratio, `${mode}: toolbar button ${c.fg} on ${c.bg}`).toBeGreaterThanOrEqual(4.5);
@@ -349,7 +349,7 @@ test.describe('home editor', () => {
     await expect(panel(page)).toContainText('model');
     await expect(panel(page)).toContainText('live');
     await expect.poll(async () => (await treeLines(page).allTextContents()).map((t) => t.replace(/#\d+/, '#_'))).toEqual([
-      'paragraph#_ "Start typing — this is Nabu."',
+      'paragraph#_ "Start typing. This is Nabu."',
       'bold [0, 12]',
       'paragraph#_ "Press / for blocks, ::: for a region, ⌘Z…"',
       'region#_ section-2 "The bank"',
@@ -373,8 +373,8 @@ test.describe('home editor', () => {
     await expect(treeLines(page).first()).toContainText(`"${FIRST}!?"`);
     await expect(ops(page)).toHaveCount(2);
     // newest first, the latest in coral, the older muted; a real, numeric time
-    await expect(ops(page).nth(0)).toHaveText(/^\+ insert "\?" @ 29 · \d+(\.\d)? ms$/);
-    await expect(ops(page).nth(1)).toHaveText(/^\+ insert "!" @ 28 · \d+(\.\d)? ms$/);
+    await expect(ops(page).nth(0)).toHaveText(/^\+ insert "\?" @ 28 · \d+(\.\d)? ms$/);
+    await expect(ops(page).nth(1)).toHaveText(/^\+ insert "!" @ 27 · \d+(\.\d)? ms$/);
     const colors = await ops(page).evaluateAll((els) => els.map((el) => getComputedStyle(el).color));
     expect(colors[0]).toBe('rgb(255, 111, 97)');
     expect(colors[1]).not.toBe(colors[0]);
@@ -384,7 +384,7 @@ test.describe('home editor', () => {
     expect(ms).toBeLessThan(1000);
     // a deletion
     await page.keyboard.press('Backspace');
-    await expect(ops(page).nth(0)).toHaveText(/^− delete 1 @ 29 · \d+(\.\d)? ms$/);
+    await expect(ops(page).nth(0)).toHaveText(/^− delete 1 @ 28 · \d+(\.\d)? ms$/);
     await expect(treeLines(page).first()).toContainText(`"${FIRST}!"`);
     // only the last five are kept
     await page.keyboard.type('abcdefg');
@@ -531,7 +531,7 @@ test.describe('home editor, phone: the X-ray', () => {
     await expect(treeLines(page).first()).toContainText(`"${FIRST}"`);
     await focusEnd(page, FIRST);
     await page.keyboard.type('!');
-    await expect(ops(page).first()).toHaveText(/^\+ insert "!" @ 28 · \d+(\.\d)? ms$/);
+    await expect(ops(page).first()).toHaveText(/^\+ insert "!" @ 27 · \d+(\.\d)? ms$/);
     const dims = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
     expect(dims.sw).toBeLessThanOrEqual(dims.iw);
     await toggle.click();
@@ -603,7 +603,7 @@ test.describe('home editor, screenshots', () => {
     const page = await ctx.newPage();
     await open(page);
     await page.evaluate(() => document.fonts.ready);
-    await selectRange(page, 'Start typing — this is Nabu.', 0, 'Start typing — this is Nabu.', 5);
+    await selectRange(page, 'Start typing. This is Nabu.', 0, 'Start typing. This is Nabu.', 5);
     await expect(page.locator('.nabu-toolbar')).toBeVisible();
     await shot(page, 'hero-toolbar-dark-v2');
     await focusEnd(page, 'Press / for blocks, ::: for a region, ⌘Z to rewind.');

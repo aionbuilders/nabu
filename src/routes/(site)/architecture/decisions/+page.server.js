@@ -5,7 +5,7 @@ import { ADR_SHORT } from '../../../../site/architecture/data.js';
 export const load = () => {
   const model = records();
   return {
-    title: 'Decision records — Architecture — Nabu',
+    title: 'Decision records · Architecture · Nabu',
     description: `Every architectural decision of Nabu, as it was taken: context, decision, consequences and status. ${model.counts.all} records, ${model.counts.superseded} superseded.`,
     list: model.adrs.map((a) => ({
       id: a.id,

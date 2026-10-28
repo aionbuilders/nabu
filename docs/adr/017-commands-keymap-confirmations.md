@@ -1,10 +1,10 @@
-# ADR 017 — Commands, keymap and confirmations
+# ADR 017: Commands, keymap and confirmations
 
 **Status:** Accepted (2026-10-22, validated by the owner)
 **Date:** 2026-10-22
 **Original:** [French](fr/017-commands-keymap-confirmations.md)
-**Reference design for `hold`:** canvas "Zones — exploration", board **8b** (hint above the label, left-aligned, no bubble, amber tint `#B45309`, hairline that drains in the same tint, no shift of the text).
-**Related:** ADR 011 (action bus `nabu.exec`), ADR 016 (Regions — first client: "cut here", protected merge), canvas "Zones — exploration" (board 8: merge by holding ⌫)
+**Reference design for `hold`:** the "Zones" exploration canvas, board **8b** (hint above the label, left-aligned, no bubble, amber tint `#B45309`, hairline that drains in the same tint, no shift of the text).
+**Related:** ADR 011 (action bus `nabu.exec`), ADR 016 (Regions, the first client: "cut here", protected merge), the "Zones" exploration canvas (board 8: merge by holding ⌫)
 
 ---
 
@@ -50,7 +50,7 @@ extension('regions', {
 
 - A command **is** an action of the bus: `nabu.exec('region:split')` always works, without a keyboard (palette, menu, API).
 - `keys`: normalized chords (`Mod` = Cmd on macOS, Ctrl elsewhere; explicit `Ctrl`, `Alt`, `Shift`, `KeyboardEvent.key` key names). Chords reserved by the browser or the system (Cmd/Ctrl+W, T, N, Q…) are refused with a warning.
-- `when(ctx)`: the context where the command applies. `ctx` is built by the core on every `keydown`: `nabu`, `block`, `selection`, `isCollapsed`, the chain of ancestors (types), plus **facts enriched by the extensions** (e.g. `atStartOfRegion`, `region`, `previousRegion` provided by Regions) — the core knows no block type.
+- `when(ctx)`: the context where the command applies. `ctx` is built by the core on every `keydown`: `nabu`, `block`, `selection`, `isCollapsed`, the chain of ancestors (types), plus **facts enriched by the extensions** (e.g. `atStartOfRegion`, `region`, `previousRegion` provided by Regions); the core knows no block type.
 - `label`: text (or function of the context) for the help, the invite and the chooser.
 
 ### 3.2 Key resolution
@@ -67,30 +67,30 @@ On every `keydown` (capture phase, **ignored during an IME composition**):
 
 - **At registration**: two commands with the same chord **and** the same declared `scope` → developer warning (`nabu.warn`); overlaps between `when` conditions can only be detected at run time (§3.2 point 4).
 - **Customization**: `createEditor({ keymap: { 'region:split': ['Mod-Shift-Enter'], 'mark:bold': [] } })` replaces or disables shortcuts.
-- **Help**: `nabu.commands.list()` returns the commands, their labels and their shortcuts **formatted for the platform** (⌘ ⌥ ⇧ on macOS) — the keyboard sheet (board 4) generates itself.
+- **Help**: `nabu.commands.list()` returns the commands, their labels and their shortcuts **formatted for the platform** (⌘ ⌥ ⇧ on macOS), so the keyboard sheet (board 4) generates itself.
 
 ### 3.4 The three confirmation strategies
 
 The pending state is exposed, reactive: `nabu.pendingCommand = { id, strategy, label, target?, progress?, options? } | null`. The core handles the keyboard; **the appearance belongs to the integrator** (a neutral default rendering is provided; dedicated design later).
 
-**a) `hold` — hold on the target** (board 8)
+**a) `hold`: hold on the target** (board 8)
 
 - A **fresh press** (`event.repeat === false`) started in the command's context starts the count (`holdMs`, default 700 ms); `progress` goes from 0 to 1; the **target** (e.g. the region's seam) displays the progress.
 - **Releasing before the end cancels.** Any other key cancels (and performs its normal action).
-- **A hold started elsewhere never counts**: the repeats (`repeat === true`) of a key held down before reaching the context are **stopped** at the context — the key must be released and pressed again. *(Protects someone erasing a sentence by keeping ⌫ pressed.)*
+- **A hold started elsewhere never counts**: the repeats (`repeat === true`) of a key held down before reaching the context are **stopped** at the context: the key must be released and pressed again. *(Protects someone erasing a sentence by keeping ⌫ pressed.)*
 - Announcement to screen readers through an `aria-live` region (e.g. "Hold Backspace to merge with The treeline").
 - The command is always executable **without a hold** (menu, palette, `nabu.exec`): accessibility.
 
-**b) `invite` — invite at the cursor**
+**b) `invite`: invite at the cursor**
 
-- First press: `pendingCommand` (strategy `invite`) — an invite appears at the cursor ("⌫ to confirm · Escape to cancel").
+- First press: `pendingCommand` (strategy `invite`): an invite appears at the cursor ("⌫ to confirm · Escape to cancel").
 - Same chord again (fresh press) → executes; Escape, any other key, a click or a timeout (default 5 s) → cancels.
 
-**c) `choose` — choose between several actions**
+**c) `choose`: choose between several actions**
 
 - Used automatically in case of real ambiguity (§3.2), or explicitly by a command that offers variants.
 - The options (`label`, shortcut) are displayed at the cursor: arrows + Enter, digits, click; Escape cancels.
-- Design rule: the chooser is a **safety net**, not a normal mode — default shortcuts must be designed not to step on each other.
+- Design rule: the chooser is a **safety net**, not a normal mode: default shortcuts must be designed not to step on each other.
 
 ### 3.5 What does not change
 
@@ -100,21 +100,21 @@ The pending state is exposed, reactive: `nabu.pendingCommand = { id, strategy, l
 
 ## 4. Breakdown
 
-1. **Lot 1** — registry (`commands` in `Extension`), per-platform chord normalization, context enriched by the extensions, resolution + priorities, customization (`keymap`), `nabu.commands.list()`, conflict warnings. Migration of a few existing shortcuts to prove the model (undo/redo, marks, todo).
-2. **Lot 2** — `hold`, `invite`, `choose` strategies + `nabu.pendingCommand` + neutral default renderings (progress hairline, invite, chooser) + `aria-live` announcements.
-3. **Lot 3** — migration of the other keyboard hooks (lists, code, toggle…); the `onKeyDown` hooks remain supported for third-party extensions.
+1. **Lot 1**: registry (`commands` in `Extension`), per-platform chord normalization, context enriched by the extensions, resolution + priorities, customization (`keymap`), `nabu.commands.list()`, conflict warnings. Migration of a few existing shortcuts to prove the model (undo/redo, marks, todo).
+2. **Lot 2**: `hold`, `invite`, `choose` strategies + `nabu.pendingCommand` + neutral default renderings (progress hairline, invite, chooser) + `aria-live` announcements.
+3. **Lot 3**: migration of the other keyboard hooks (lists, code, toggle…); the `onKeyDown` hooks remain supported for third-party extensions.
 
 Only then: **Regions lot 2** (cut here = `Mod-Enter`, protected merge by holding ⌫ on the seam, move, move up/down, navigate), plugged directly into the registry.
 
 ## 5. Open questions
 
-1. ~~Hold duration~~ — **decided**: 700 ms by default, adjustable.
-2. ~~Command palette~~ — **decided**: core only (`nabu.commands.list()` + execution); the visual palette will be designed in a design session.
-3. ~~Single-key shortcuts~~ — **decided**: enforced — a command bound to a key without a modifier (Backspace, Enter, Tab, letter…) and without `when` is **refused** at registration.
+1. ~~Hold duration~~: **decided**: 700 ms by default, adjustable.
+2. ~~Command palette~~: **decided**: core only (`nabu.commands.list()` + execution); the visual palette will be designed in a design session.
+3. ~~Single-key shortcuts~~: **decided**: enforced. A command bound to a key without a modifier (Backspace, Enter, Tab, letter…) and without `when` is **refused** at registration.
 
 ---
 
-## 6. Implementation notes — lot 1 (2026-10-22)
+## 6. Implementation notes: lot 1 (2026-10-22)
 
 Code: `src/lib/utils/keys.js` (chords), `src/lib/utils/commands.js` (`CommandRegistry`), `Extension#commands` / `Extension#commandContext` (`utils/extensions.js`), wiring in `Nabu` (constructor, `#registerCommands`, `handleKeydown`, `NabuInit.keymap` / `platform`). Tests: `tests/unit/keys.test.js`, `tests/unit/commands.test.js`, `tests/e2e/commands.spec.ts`.
 
@@ -134,7 +134,7 @@ Code: `src/lib/utils/keys.js` (chords), `src/lib/utils/commands.js` (`CommandReg
 
 ---
 
-## 7. Implementation notes — lot 2 (2026-10-22)
+## 7. Implementation notes: lot 2 (2026-10-22)
 
 Code: `src/lib/utils/command-confirm.svelte.js` (`CommandConfirmation`, `PendingCommand`), the dispatch in `CommandRegistry#handleKeydown` / `register` (`utils/commands.js`), wiring in `Nabu` (`commandConfirm` init option, `pendingCommand`, `cancelPendingCommand()`, `pendingCommandOn()`, `commandAnnouncement`; a `systems` entry attaches the document listeners), `Nabu.svelte` (live region, target marking), `ui/CommandInvite.svelte`, `ui/CommandChooser.svelte`, `ui/anchor.js`. Tests: `tests/unit/command-confirm.test.js` (fake clock), `tests/e2e/command-confirm.spec.ts` with the dev-only demo commands of `/e2e?commands=demo` (`src/routes/e2e/demo-commands.js`).
 
@@ -150,6 +150,6 @@ Code: `src/lib/utils/command-confirm.svelte.js` (`CommandConfirmation`, `Pending
 
 ---
 
-## 8. Implementation notes — Regions lot 2 (2026-10-22)
+## 8. Implementation notes: Regions lot 2 (2026-10-22)
 
 The first client of `hold` (ADR 016 §8): `region:merge-previous` (`Backspace`, `Shift-Backspace`) and `region:merge-next` (`Delete`), `confirm: { strategy: 'hold', target: marker, messages: { hold } }` where `target` is the seam being removed and `messages.hold` builds the prompt from the command label ("Hold Backspace to merge with “…”"). Facts: `atStartOfRegion` / `atEndOfRegion` / `region` / `previousRegion` / `nextRegion` / `inRootTextBlock`. `region:split` on `Mod-Enter` has no confirmation and coexists with `todo:toggle` (different `when`: the split needs a root text block; the toggle is scoped to list items). Learned: (1) a command with `confirm` on a bare key swallows the repeats while its `when` holds, which is exactly the "erasing a word stops at the boundary" rule; no extra code in the extension. (2) A key cannot carry `data`, so a command parameterised by `data` (`region:move`) needs fixed-argument siblings (`region:move-up` / `move-down`) to be bindable. (3) A confirmation protects only what goes through the command: the engine's own text merge got a generic `onBeforeMerge(nabu, survivor, victim)` hook (`TextBehavior`, both directions) so that an extension can refuse a merge whatever started it.

@@ -1,4 +1,4 @@
-# ADR 009 — Global Toggle Behavior for Rich Text Marks
+# ADR 009: Global Toggle Behavior for Rich Text Marks
 
 **Status:** Accepted
 **Date:** 2026-03-12
@@ -8,9 +8,9 @@
 
 When a keyboard shortcut applies a mark (e.g. Ctrl+B for bold) to a selection that may span **several blocks**, the expected behavior was not defined. Two approaches were possible:
 
-**Option A — Independent per-block toggle:** Each block decides on its own whether to toggle, based on its own internal state. Problem: a fully bold block removes bold while a partially bold block applies it, which gives an inconsistent result.
+**Option A: Independent per-block toggle:** Each block decides on its own whether to toggle, based on its own internal state. Problem: a fully bold block removes bold while a partially bold block applies it, which gives an inconsistent result.
 
-**Option B — Global toggle (editor standard):** The state of the mark is evaluated over the whole selection, then applied or removed uniformly.
+**Option B: Global toggle (editor standard):** The state of the mark is evaluated over the whole selection, then applied or removed uniformly.
 
 ## Decision
 
@@ -37,6 +37,6 @@ The method `isMarkActive(markName, sel)` on `TextBehavior` returns `true` only i
 
 ## Consequences
 
-- **UX consistency:** Identical behavior to all mainstream editors — no surprise for the user
+- **UX consistency:** Identical behavior to all mainstream editors, so no surprise for the user
 - **Native multi-block support:** Works correctly on a selection crossing N blocks
 - **Zero duplication:** The detection logic (`isMarkActive`) stays in `TextBehavior`; only the multi-block coordination lives in the extension

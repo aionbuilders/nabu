@@ -31,7 +31,7 @@
     let timers = [];
 
     /** @param {{ start: string, end: string | null } | null} m */
-    const sentence = (m) => (m ? (m.end ? `${m.start}  →  ${m.end}` : m.start) : '—');
+    const sentence = (m) => (m ? (m.end ? `${m.start}  →  ${m.end}` : m.start) : 'none');
 
     const read = () => {
       raf = 0;
@@ -50,8 +50,8 @@
         const st = engine.selection.start;
         const en = engine.selection.end;
         m = {
-          start: st ? describeModelPoint(st.block, st.from) : '—',
-          end: range.collapsed ? null : en ? describeModelPoint(en.block, en.to) : '—',
+          start: st ? describeModelPoint(st.block, st.from) : 'none',
+          end: range.collapsed ? null : en ? describeModelPoint(en.block, en.to) : 'none',
           direction,
         };
       } catch { /* the selection state is not ready */ }
@@ -94,7 +94,7 @@
       <p class="val" data-testid="model-start"><span class="w-muted">{model.end ? 'start' : 'caret'}</span> <span class="w-accent">{model.start}</span></p>
       {#if model.end}<p class="val" data-testid="model-end"><span class="w-muted">end</span> <span class="w-accent">{model.end}</span></p>{/if}
     {:else}
-      <p class="val w-muted" data-testid="model-none">—</p>
+      <p class="val w-muted" data-testid="model-none">none</p>
     {/if}
   </section>
   <section aria-label="What the last undo or redo restored">

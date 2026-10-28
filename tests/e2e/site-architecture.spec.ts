@@ -35,7 +35,7 @@ const ADRS: Adr[] = readdirSync(resolve('docs/adr'))
       status: by ? 'superseded' : /^proposed/i.test(status) ? 'proposed' : 'accepted',
       by: by ? by.padStart(3, '0') : null,
       date: /^\*\*Date:\*\*\s*(.*)$/m.exec(raw)![1].trim(),
-      title: /^#\s+ADR\s+\d+\s*[—–-]\s*(.*)$/m.exec(raw)![1].trim(),
+      title: /^#\s+ADR\s+\d+\s*[—–:-]\s*(.*)$/m.exec(raw)![1].trim(),
       original: /^\*\*Original:\*\*\s*\[French\]\(([^)]+)\)/m.exec(raw)![1],
     } as Adr;
   });
@@ -105,7 +105,7 @@ test.describe('every page of the section', () => {
       const h1 = page.locator('h1');
       await expect(h1).toHaveCount(1);
       expect(norm(await h1.innerText()).length).toBeGreaterThan(3);
-      await expect(page).toHaveTitle(/ — Nabu$/);
+      await expect(page).toHaveTitle(/ · Nabu$/);
       const desc = await page.locator('meta[name="description"]').getAttribute('content');
       expect((desc ?? '').length).toBeGreaterThan(20);
       expect(desc).not.toMatch(/^A local-first, modular block editor engine/); // the site default: every page of the section has its own
@@ -135,7 +135,7 @@ test.describe('/architecture', () => {
 
   test('the title, the lead and "Should you switch?" with its three yes and three wait', async ({ page }) => {
     await page.goto('/architecture');
-    await expect(page).toHaveTitle('Architecture — Nabu');
+    await expect(page).toHaveTitle('Architecture · Nabu');
     await expect(page.locator('h1')).toHaveText(/How Nabu works,\s*and why it works that way\./);
     await expect(page.getByText('Seven short chapters, written by the people who made the choices')).toBeVisible();
     const box = page.getByRole('complementary', { name: 'Should you switch?' });
@@ -335,7 +335,7 @@ test.describe('the chapter route', () => {
     const errors = watchErrors(page);
     await page.goto(FIXTURE.path);
     await hydrated(page);
-    await expect(page).toHaveTitle(`${FIXTURE.title} — Architecture — Nabu`);
+    await expect(page).toHaveTitle(`${FIXTURE.title} · Architecture · Nabu`);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', FIXTURE.description);
     await expect(page.locator('.chapter .eyebrow')).toHaveText('CHAPTER 99');
     await expect(page.locator('h1')).toHaveText(FIXTURE.title);
@@ -463,16 +463,17 @@ test.describe('/architecture/limits', () => {
     await page.goto('/architecture/limits');
     await expect(page.locator('h1')).toHaveText(/What Nabu doesn.t do well \(yet\)/);
     await expect(page.getByText('Updated 2026-10-28')).toBeVisible();
-    await expect(page.getByRole('link', { name: /^0\.1\.0/ })).toHaveAttribute('href', '/changelog');
+    const { version } = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
+    await expect(page.getByRole('link', { name: new RegExp(`^${version.replace(/\./g, '\\.')}`) })).toHaveAttribute('href', '/changelog');
     const limits = page.getByTestId('limit');
     await expect(limits).toHaveCount(8);
     const expected: Record<string, [string, string]> = {
       'Loading huge documents': ['known · planned', '9 s'],
-      'Mobile keyboards': ['known · planned', '—'],
+      'Mobile keyboards': ['known · planned', 'n/a'],
       'Firefox and Safari': ['known · planned', '1 / 3'],
       'Real-time collaboration': ['by design, not yet', 'tabs'],
       Tables: ['planned', '0'],
-      'Browser extensions (Grammarly…)': ['known · untested', '—'],
+      'Browser extensions (Grammarly…)': ['known · untested', 'n/a'],
       'Bundle weight': ['by design', '1.2 MB'],
       Setup: ['by design', '1 plugin'],
     };

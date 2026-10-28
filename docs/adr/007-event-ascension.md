@@ -1,4 +1,4 @@
-# ADR 007 — Event Ascension (Chain of Responsibility)
+# ADR 007: Event Ascension (Chain of Responsibility)
 
 **Status:** Accepted
 **Date:** 2026-02-22

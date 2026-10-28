@@ -1,4 +1,4 @@
-# ADR 008 — Shared Multi-Block Logic: the Spine Pattern (container.utils.js)
+# ADR 008: Shared Multi-Block Logic and the Spine Pattern (container.utils.js)
 
 **Status:** Accepted
 **Date:** 2026-03-12
@@ -31,7 +31,7 @@ beforeinput(e) {
 }
 ```
 
-## Mechanism — the spine approach
+## Mechanism: the spine approach
 
 For each end of the selection (`startBlock`, `endBlock`), we walk up the chain of parents to the container, building a **spine**:
 
@@ -47,7 +47,7 @@ The **end spine** prunes the blocks before each node (what comes "before the end
 
 Once the spines are built, we identify the **direct children of the container** in each spine, then delete the intermediate blocks between those two children.
 
-## Unification problem — how the spines terminate
+## Unification problem: how the spines terminate
 
 The key difference between `MegaBlock` and `Nabu` is how the spine terminates:
 
@@ -70,10 +70,10 @@ const directChild = (spine) => spine.at(-1) === container ? spine.at(-2) : spine
 
 Inheritance was considered but rejected for three reasons:
 1. **Circular dependency:** `Block → Nabu`, `MegaBlock → Block`, `Nabu → MegaBlock → Block → Nabu`
-2. **Constructor incompatibility:** `MegaBlock(nabu, node)` — Nabu has no `LoroTreeNode`
+2. **Constructor incompatibility:** `MegaBlock(nabu, node)`, but Nabu has no `LoroTreeNode`
 3. **Inheriting useless baggage:** `selected`, `element`, `behaviors`, `parent` and `index` have no meaning on Nabu
 
-## Addendum — `deleteRange` (P-44)
+## Addendum: `deleteRange` (P-44)
 
 The spine logic existed in two copies (`handleContainerBeforeInput` and `deleteSelectionContent`, used by cut and paste), and they had diverged: cut destroyed the root common to both spines (corrupting the document), and both moved the survivors of the end spine in the wrong order. There is now a single implementation, `deleteRange(nabu, { startBlock, startOffset, endBlock, endOffset })`; `handleContainerBeforeInput` (Backspace, typing, Enter on a selection) and `deleteSelectionContent` (cut, paste) both call it.
 

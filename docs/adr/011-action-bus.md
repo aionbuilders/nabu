@@ -1,4 +1,4 @@
-# ADR 011 — Action Bus: `nabu.exec()` Wrapping Pulse
+# ADR 011: Action Bus, `nabu.exec()` Wrapping Pulse
 
 **Status:** Accepted
 **Date:** 2026-03-16
@@ -10,19 +10,19 @@ The floating toolbar (and any external UI component) needs to trigger actions on
 
 Three approaches were evaluated:
 
-### Option A — Direct methods on Nabu
+### Option A: Direct methods on Nabu
 ```js
 nabu.toggleMark('bold')
 nabu.transformBlock('heading', { level: 2 })
 ```
 Problem: makes `Nabu` grow indefinitely, creates tight coupling, and is not extensible.
 
-### Option B — Command registry
+### Option B: Command registry
 A `Map<string, Function>` on Nabu, where extensions register named handlers.
 Problem: complicates Nabu, introduces a system parallel to the hooks, and is a redundant pattern.
 
-### Option C — Event bus with an abstraction (chosen)
-`nabu.exec(topic, data)` as the single public entry point. The internal implementation uses Pulse (`@aionbuilders/pulse`, already a dependency) hidden behind a private field `#pulse`. Extensions declare their handlers through an `actions` property — the same pattern as `hooks` and `serializers`.
+### Option C: Event bus with an abstraction (chosen)
+`nabu.exec(topic, data)` as the single public entry point. The internal implementation uses Pulse (`@aionbuilders/pulse`, already a dependency) hidden behind a private field `#pulse`. Extensions declare their handlers through an `actions` property, the same pattern as `hooks` and `serializers`.
 
 ## Decision
 
@@ -31,7 +31,7 @@ Problem: complicates Nabu, introduces a system parallel to the hooks, and is a r
 ### Why Pulse internally
 - Already a dependency of the project
 - Hierarchical pattern matching (`mark:toggle`, `bold`, etc.) is native
-- Async by default — no synchronous blocking
+- Async by default, with no synchronous blocking
 - Wildcard (`mark:**`) available if needed in the future
 
 ### Why abstract Pulse
@@ -104,8 +104,8 @@ Consistency: if `HeadingExtension` is not included, `heading:1` does not exist.
 ✅ Clean API for external UI components (toolbar, slash menu, etc.)
 ✅ No coupling between Nabu and Pulse on the consumer side
 ✅ Extensions declare their API surface in a way that is consistent with the rest of the system
-✅ `onKeyDown` can delegate to `exec` — centralized logic, not duplicated
-⚠️ `exec` is async (Pulse) — do not expect a synchronous return value
+✅ `onKeyDown` can delegate to `exec`: centralized logic, not duplicated
+⚠️ `exec` is async (Pulse): do not expect a synchronous return value
 ⚠️ If `BlockExtension` is not included, `block:transform` and the heading/paragraph aliases silently do not work
 
 ## Note (2026-10-27)

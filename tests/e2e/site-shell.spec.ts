@@ -70,7 +70,7 @@ test.describe('site shell', () => {
       else if (href === '/architecture') await expect(page.getByRole('heading', { level: 2, name: 'Should you switch?' })).toBeVisible();
       await expect(page.getByRole('banner')).toBeVisible();
       await expect(page.locator('footer')).toBeVisible();
-      await expect(page).toHaveTitle(`${title} — Nabu`);
+      await expect(page).toHaveTitle(`${title} · Nabu`);
       // active item follows the route
       const current = page.getByRole('navigation', { name: 'Main' }).locator('a[aria-current="page"]');
       await expect(current).toHaveCount(1);

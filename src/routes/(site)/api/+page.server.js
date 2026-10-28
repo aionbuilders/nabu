@@ -23,7 +23,7 @@ export const load = async () => {
     })),
   );
   return {
-    title: 'API reference — Nabu',
+    title: 'API reference · Nabu',
     version: model.version,
     entries,
     toc: [

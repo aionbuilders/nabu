@@ -5,7 +5,7 @@ export const load = async () => {
   const { body, dir, edit } = getChangelog();
   const { snapshot, ids, code, toc, headings } = await buildDoc(body, { dir });
   return {
-    title: 'Changelog — Nabu',
+    title: 'Changelog · Nabu',
     description: 'What changed in each release of Nabu, the block editor for Svelte 5: added, changed and breaking, with the unreleased work on top.',
     doc: { snapshot, ids, code },
     toc,

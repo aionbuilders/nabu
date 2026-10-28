@@ -41,7 +41,7 @@
 
   const VOICE = [
     ['We say “we”.', 'A project made by people, not a product talking about itself.'],
-    ['We show the numbers — the bad ones too.', '“88 ms at 10,000 blocks, and here is why” beats “blazing fast”.'],
+    ['We show the numbers, the bad ones too.', '“88 ms at 10,000 blocks, and here is why” beats “blazing fast”.'],
     ['Every claim links to its proof.', 'A test, a lab, a line of code.'],
     ['Short sentences. No superlatives.', 'If it needs “revolutionary”, it isn’t.'],
     ['We tell the story of our mistakes.', 'We got regions wrong once. It’s a chapter.']
@@ -67,7 +67,7 @@
       <span class="eyebrow">Brand</span>
       <h1 id="brand-title">The scribe’s mark</h1>
       <p class="lead">
-        Nabu is named after the Mesopotamian god of writing, the patron of scribes. Its mark is an N drawn in negative space — and, if you look again, a pair of quotation marks, or wedges a scribe would press into clay. Here is how to use it, and how not to.
+        Nabu is named after the Mesopotamian god of writing, the patron of scribes. Its mark is an N drawn in negative space and, if you look again, a pair of quotation marks, or wedges a scribe would press into clay. Here is how to use it, and how not to.
       </p>
       <div class="actions">
         <a class="btn primary" href={KIT_URL} download>Download the kit (.zip)</a>
@@ -109,7 +109,7 @@
         <figcaption>
           <span class="eyebrow">Reading 3</span>
           <strong>Wedges in clay</strong>
-          <span class="desc">The strokes a scribe pressed into wet clay with a reed — cuneiform, the writing Nabu was god of.</span>
+          <span class="desc">The strokes a scribe pressed into wet clay with a reed: cuneiform, the writing Nabu was god of.</span>
         </figcaption>
       </figure>
     </div>
@@ -143,7 +143,7 @@
     </div>
     <ul class="rules">
       <li><strong>The word</strong> is “nabu” in Syne 700, lowercase, tracked −0.02 em, drawn as outlines.</li>
-      <li><strong>The mark</strong> is 1.2 × the height of the “b”, centred on the middle of the x-height — not sat on the baseline.</li>
+      <li><strong>The mark</strong> is 1.2 × the height of the “b”, centred on the middle of the x-height, not sat on the baseline.</li>
       <li><strong>The gap</strong> between mark and word is 0.3 × the mark’s height.</li>
       <li><strong>Clear space</strong> around the lockup: the height of the “n”, on every side. Smallest size: 72 px wide (lockup), 16 px (mark alone).</li>
     </ul>
@@ -164,7 +164,7 @@
         </div>
       {/each}
       <span class="grow"></span>
-      <p class="icon-note">For favicons, app icons and avatars, when the word would be too small to read. Coral on dark, coral vif on white — never the other way round.</p>
+      <p class="icon-note">For favicons, app icons and avatars, when the word would be too small to read. Coral on dark, coral vif on white. Never the other way round.</p>
     </div>
     <ul class="files" aria-label="Icon and mark files">
       <li>
@@ -193,7 +193,7 @@
       {/each}
     </div>
     <p class="fine" data-testid="contrast-note">
-      Coral is an accent: one coral thing per screen is usually enough. Contrast: link coral on white <span data-testid="contrast-link">{linkOnWhite}</span>, pastel on night <span data-testid="contrast-pastel">{pastelOnNight}</span>, coral vif on white <span data-testid="contrast-vif">{vifOnWhite}</span> — so coral vif is for the mark and large type only, never for small text.
+      Coral is an accent: one coral thing per screen is usually enough. Contrast: link coral on white <span data-testid="contrast-link">{linkOnWhite}</span>, pastel on night <span data-testid="contrast-pastel">{pastelOnNight}</span>, coral vif on white <span data-testid="contrast-vif">{vifOnWhite}</span>, so coral vif is for the mark and large type only, never for small text.
     </p>
   </section>
 
@@ -238,7 +238,7 @@
       </header>
       <div class="story">
         <p class="story-line">The <strong>ferryman</strong> waited under the eaves, an <em>unlit</em> lantern in his hand. Nobody had crossed since noon.</p>
-        <p class="story-note">Every example in our docs, labs and tests tells the same little story: a river, a ferryman, a traveller who is late. Use it when you need sample text — never lorem ipsum.</p>
+        <p class="story-note">Every example in our docs, labs and tests tells the same little story: a river, a ferryman, a traveller who is late. Use it when you need sample text, never lorem ipsum.</p>
       </div>
       <ul class="tags" aria-label="Words of the story">
         {#each STORY_TAGS as tag (tag)}

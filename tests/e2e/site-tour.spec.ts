@@ -51,7 +51,7 @@ test.describe('the page', () => {
     const res = await page.goto(PATH);
     expect(res?.status()).toBe(200);
     await hydrated(page);
-    await expect(page).toHaveTitle('Tour of the blocks — Docs — Nabu');
+    await expect(page).toHaveTitle('Tour of the blocks · Docs · Nabu');
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /every block Nabu ships/);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow');
     await expect(page.locator('h1')).toHaveCount(1);
@@ -606,7 +606,7 @@ test.describe('the docs around it', () => {
     await expect(page.locator('section[aria-labelledby="guides"]').getByRole('link', { name: 'Blocks reference', exact: true })).toHaveAttribute('href', REFERENCE);
     await page.goto(REFERENCE);
     await page.locator('[data-nabu-root][data-nabu-readonly]').waitFor();
-    await expect(page).toHaveTitle('Blocks reference — Docs — Nabu');
+    await expect(page).toHaveTitle('Blocks reference · Docs · Nabu');
     await expect(page.locator('h1').first()).toHaveText('Blocks reference');
     await expect(page.locator('[id="toggle--toggle"]')).toHaveCount(1);
     await expect(page.locator('[data-nabu-root] a.nabu-link[href="/docs/getting-started/tour-of-the-blocks"]')).toHaveCount(1);

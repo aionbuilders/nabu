@@ -13,7 +13,7 @@ export const load = async ({ params }) => {
     ? `import type { ${item.name} } from '${specifier}';`
     : `import { ${item.name} } from '${specifier}';`;
   return {
-    title: `${item.name} — API — Nabu`,
+    title: `${item.name} · API · Nabu`,
     item,
     specifier,
     importHtml: hl(importCode, 'ts'),

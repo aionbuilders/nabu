@@ -1,4 +1,4 @@
-# ADR 015 — Undo restores the selection with Loro stable cursors
+# ADR 015: Undo restores the selection with Loro stable cursors
 
 **Status:** Accepted (2026-10-21, owner decision)
 **Date:** 2026-10-21

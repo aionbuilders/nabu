@@ -22,7 +22,7 @@ export const load = async ({ params }) => {
   const chapter = storyList(chapters()).find((c) => c.href && c.adrs.includes(adr.number));
 
   return {
-    title: `ADR ${adr.id} · ${adr.title} — Nabu`,
+    title: `ADR ${adr.id} · ${adr.title} · Nabu`,
     description: describeAdr(adr.body),
     record: {
       id: adr.id,
@@ -34,7 +34,7 @@ export const load = async ({ params }) => {
       successor: brief(successor),
       supersedes: adr.supersedes.flatMap((n) => { const b = brief(model.get(n)); return b ? [b] : []; }),
       note: adr.status === 'superseded' ? ADR_NOTES[adr.number] ?? `It was replaced by ADR ${successor?.id ?? ''}.`.replace(' .', '.') : null,
-      proposal: adr.status === 'proposed' ? plain(adr.statusText.replace(/^\s*proposed\s*[—–-]*\s*/i, '')) : null,
+      proposal: adr.status === 'proposed' ? plain(adr.statusText.replace(/^\s*proposed\s*[—–:.-]*\s*/i, '')) : null,
       story: chapter ? { href: chapter.href, label: `the story, chapter ${String(chapter.n).padStart(2, '0')}` } : null,
       frenchUrl: adr.original ? githubBlob(`${ADR_DIR}/${adr.original}`) : null,
       sourceUrl: githubBlob(adr.file),

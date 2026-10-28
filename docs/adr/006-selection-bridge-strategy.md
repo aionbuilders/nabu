@@ -1,4 +1,4 @@
-# ADR 006 — Selection Bridge Strategy (DOM ↔ Model)
+# ADR 006: Selection Bridge Strategy (DOM ↔ Model)
 
 **Status:** Accepted
 **Date:** 2026-02-22

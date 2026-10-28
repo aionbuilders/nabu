@@ -26,7 +26,7 @@
 <section class="meter" aria-label="Typing latency" data-testid="lab-meter">
   <span class="label caption">Key to next paint</span>
   <p class="big" data-testid="lab-last" data-ms={last ? last.paint : ''}>
-    <span class="num">{last ? formatMs(last.paint) : '—'}</span><span class="unit"> ms</span>
+    <span class="num">{last ? formatMs(last.paint) : 'n/a'}</span>{#if last}<span class="unit"> ms</span>{/if}
   </p>
   <p class="verdict" class:over={within === false}>
     {#if !last}
@@ -45,11 +45,11 @@
   <p class="budget-label label"><span aria-hidden="true">┄</span> one frame · {formatMs(FRAME_MS)} ms</p>
 
   <dl class="stats">
-    <div><dt class="label">p50</dt><dd data-testid="lab-p50">{samples.length ? formatMs(paintAll.p50) + ' ms' : '—'}</dd></div>
-    <div><dt class="label">p95</dt><dd data-testid="lab-p95">{samples.length ? formatMs(paintAll.p95) + ' ms' : '—'}</dd></div>
+    <div><dt class="label">p50</dt><dd data-testid="lab-p50">{samples.length ? formatMs(paintAll.p50) + ' ms' : 'n/a'}</dd></div>
+    <div><dt class="label">p95</dt><dd data-testid="lab-p95">{samples.length ? formatMs(paintAll.p95) + ' ms' : 'n/a'}</dd></div>
     <div><dt class="label">keys</dt><dd data-testid="lab-count">{samples.length}</dd></div>
   </dl>
-  <p class="engine" data-testid="lab-engine">Engine work · p50 {samples.length ? formatMs(engineAll.p50) + ' ms' : '—'}</p>
+  <p class="engine" data-testid="lab-engine">Engine work · p50 {samples.length ? formatMs(engineAll.p50) + ' ms' : 'n/a'}</p>
 </section>
 
 <style>

@@ -109,6 +109,41 @@ for (const scheme of ['dark', 'light'] as const) {
   }
 }
 
+// ── Em dashes ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// House rule for the English copy: an em dash ("—") is fine punctuation, but its overuse reads as machine-written, so a page keeps at most
+// about one, never for a dramatic reveal ("Not X — Y"). The allowance here is 2 rather than 1: a little slack for a quoted example or a
+// literal (the typography demo of the tour shows what `-- ` turns into). The unit twin is tests/unit/em-dashes.test.js (the markdown sources).
+const MAX_EM_DASHES = 2;
+/**
+ * Pages left out for now, each with its reason (remove the entry when it is gone):
+ *  - the "How Nabu is made" page is being rewritten and is checked once its copy settles;
+ *  - the API reference (/api, /api/<entry>/<name>) is generated from the JSDoc of src/lib, which has its own contracts and is not reworded here.
+ */
+const EM_DASH_EXEMPT = (path: string) => path === '/api' || /^\/api\/[^/]+\/[^/]+$/.test(path);
+
+test.describe('em dashes in the visible English text', () => {
+  test.use({ colorScheme: 'dark', viewport: { width: 1440, height: 900 } });
+
+  test(`no prerendered page has more than ${MAX_EM_DASHES} (code, <pre>, lang="fr", the API reference entries and the how-it-is-made page excluded)`, async ({ page, request }) => {
+    test.setTimeout(600_000);
+    const paths = (await sitemapPaths(request)).filter((p) => !EM_DASH_EXEMPT(p));
+    expect(paths.length).toBeGreaterThan(40);
+    const over: string[] = [];
+    for (const path of paths) {
+      const res = await gotoRetry(page, path);
+      expect(res?.status(), path).toBe(200);
+      const count = await page.evaluate(() => {
+        const root = document.body.cloneNode(true) as HTMLElement;
+        for (const el of root.querySelectorAll('code, pre, .nabu-code, script, style, noscript, [lang="fr"], [lang="fr"] *')) el.remove();
+        // the tab title is read too: "Page — Section — Nabu" used to be the worst offender
+        return ((root.textContent ?? '') + ' ' + document.title).split('\u2014').length - 1;
+      });
+      if (count > MAX_EM_DASHES) over.push(`${path}: ${count}`);
+    }
+    expect(over, `${paths.length} pages checked, at most ${MAX_EM_DASHES} em dashes each`).toEqual([]);
+  });
+});
+
 test.describe('404 page', () => {
   test.use({ colorScheme: 'dark', viewport: { width: 1440, height: 900 } });
 
@@ -120,7 +155,7 @@ test.describe('404 page', () => {
     await expect(page.locator('footer')).toHaveCount(1);
     await expect(page.getByTestId('error-page').getByRole('link', { name: 'Back to the home page' })).toHaveAttribute('href', '/');
     await expect(page.getByTestId('error-page').getByRole('link', { name: 'Read the docs' })).toHaveAttribute('href', '/docs');
-    await expect(page).toHaveTitle('Page not found — Nabu');
+    await expect(page).toHaveTitle('Page not found · Nabu');
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, follow');
     await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
     mkdirSync(SHOTS, { recursive: true });

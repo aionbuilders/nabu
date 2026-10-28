@@ -1,4 +1,4 @@
-# ADR 003 — Hybrid Structure (Flat Map and Recursive Rendering)
+# ADR 003: Hybrid Structure (Flat Map and Recursive Rendering)
 
 **Status:** Accepted
 **Date:** 2026-02-19

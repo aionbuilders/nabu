@@ -59,7 +59,7 @@ export const LIMITS = [
     status: 'known-planned',
     description:
       'Android and iOS keyboards send their own input events (autocorrect, swipe, predictive text). Nabu has not been tuned on them yet.',
-    value: '—',
+    value: 'n/a',
     unit: 'not measured',
     source: { path: 'docs/guides/ime-and-languages.md', label: 'docs/guides/ime-and-languages.md' },
   },
@@ -98,7 +98,7 @@ export const LIMITS = [
     status: 'known-untested',
     description:
       'Extensions that rewrite the editable surface can fight with a single contenteditable. Not tested yet; `spellcheck: false` adds the opt-out hints Grammarly reads.',
-    value: '—',
+    value: 'n/a',
     unit: 'not tested',
     source: { path: 'docs/guides/ime-and-languages.md', label: 'docs/guides/ime-and-languages.md' },
   },

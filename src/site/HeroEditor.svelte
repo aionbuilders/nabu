@@ -41,7 +41,7 @@
     await eng.importJSON({
       version,
       blocks: [
-        { type: 'paragraph', content: [{ text: 'Start typing', bold: true }, { text: ' — this is Nabu.' }] },
+        { type: 'paragraph', content: [{ text: 'Start typing', bold: true }, { text: '. This is Nabu.' }] },
         { type: 'paragraph', content: 'Press / for blocks, ::: for a region, ⌘Z to rewind.' },
         {
           type: 'region',

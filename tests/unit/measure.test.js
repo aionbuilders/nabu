@@ -37,7 +37,7 @@ describe('formatMs', () => {
     expect(formatMs(16.67)).toBe('16.7');
     expect(formatMs(118.4)).toBe('118');
     expect(formatMs(0.04)).toBe('<0.1');
-    expect(formatMs(NaN)).toBe('—');
+    expect(formatMs(NaN)).toBe('n/a');
   });
   it('the frame is 1/60 s', () => {
     expect(FRAME_MS).toBeCloseTo(16.667, 2);

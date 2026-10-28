@@ -1,4 +1,4 @@
-# ADR 005 — Typing with Strict JSDoc
+# ADR 005: Typing with Strict JSDoc
 
 **Status:** Accepted
 **Date:** 2026-02-19

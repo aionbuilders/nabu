@@ -4,7 +4,7 @@
 
 Nothing yet.
 
-## 0.1.1 — 2026-10-29
+## 0.1.1 (2026-10-29)
 
 Two fixes reported by users of the alpha. No API change.
 
@@ -12,7 +12,7 @@ Two fixes reported by users of the alpha. No API change.
 - **Japanese (and other IME) input after empty paragraphs** ([#6](https://github.com/aionbuilders/nabu/issues/6)). A composition that started after one or more empty paragraphs could land in an earlier block, or leave the editor stuck in a composing state: the text was lost and Enter stopped working. Chromium locates a composition by plain-text offsets and miscounts the line-break node of each empty block before it; during a composition those nodes are now presented as `<br>` and restored when it ends (nothing changes in the document or the rendering). Covered by `tests/e2e/ime-audit.spec.ts`, section 9.
 - **Word deletion follows the platform conventions** ([#4](https://github.com/aionbuilders/nabu/issues/4)). Alt+Backspace (macOS) and Ctrl+Backspace (Windows, Linux) no longer delete the space before the word: `this is a sentence |` now gives `this is a |`. Word boundaries come from `Intl.Segmenter` (accents, CJK), punctuation is its own stop (`end.|` gives `end|`), and Alt/Ctrl+Delete deletes forward the way each platform does (to the end of the next word on macOS, up to the next word on Windows). Covered by `tests/unit/delete-word.test.js` and `tests/e2e/word-delete.spec.ts`.
 
-## 0.1.0 — 2026-10-29
+## 0.1.0 (2026-10-29)
 
 Nabu is in **public beta**: a `0.` version means the API can still change before 1.0. Versioning policy:
 
@@ -195,7 +195,7 @@ What matters if you upgrade from `0.1.0-beta.0` or an alpha:
 
 ### Persistence, files and drag and drop
 
-#### Files — behavior change (ADR 014, lot 1)
+#### Files: behavior change (ADR 014, lot 1)
 - **Files are no longer stored inside the Loro document.** The bytes of an image / video / file go to a separate **asset store**; the document only holds a reference and a small metadata index. Ref format: `nabu-asset:sha256-<64 hex>` (SHA-256 of the bytes), so the same file added twice (picker, paste, import) is stored ONCE and gets the same ref. The Loro map `assetIndex` holds `hash -> { mime, name, size, url? }` (never bytes; `url` is reserved for the host location, lot 2). Before, every upload stayed forever in the saved snapshot (Loro keeps history), even after the block was deleted.
 - Stores (`files/store.js`, `persistence/asset-store.js`): `MemoryAssetStore` for `createEditor()` / `new Nabu()` (lost with the page, like the document); `IndexedDBAssetStore` for `createPersistedEditor()` (database `nabu`, object store `assets`, shared by all the documents of the origin). New option `files.store` to plug your own (`has`, `get`, `put`, `delete`, `keys`, optional `stat`). The IndexedDB store also keeps `docRefs[docId] -> hashes`, refreshed on every save (used by the later cleanup).
 - **IndexedDB schema 1 -> 2**: the `nabu` database goes to version 2 and gains the `assets` and `docRefs` object stores; the upgrade only adds stores, existing snapshots are untouched. Open connections close themselves on a version change, so another tab never blocks the upgrade.
@@ -207,7 +207,7 @@ What matters if you upgrade from `0.1.0-beta.0` or an alpha:
 - Dev dependency: `fake-indexeddb` (unit tests of the IndexedDB store and schema upgrade).
 - TODO(ADR-014 lot 3), marked in the code: history modes / compaction / cleanup of unreferenced files, drag and drop (the lot 2 items of this list are done, see below).
 
-#### Files — host mode, outbox, upload state (ADR 014, lot 2)
+#### Files: host mode, outbox, upload state (ADR 014, lot 2)
 - **Host mode (`files.onBeforePersist`) no longer swaps the ref.** The bytes are ingested into the local store first, the block keeps its `nabu-asset:sha256-…` ref FOREVER (status `pending`), the upload runs in the background with `{ signal, onProgress }`, and on success `assetIndex[hash].url = <ref returned by the hook>` and the block becomes `ready` in a silent commit (not an undo step). On failure: status `error`, local copy kept. Display resolves the local bytes first, then the index `url` (through `files.resolve`). Documents whose blocks hold plain host URLs keep working unchanged. Pasting (`stage`, `adoptAssets`, `importRemote`, beta clipboards) follows the same model: the hash ref is kept, the block is `pending` until the host has the file. **Behaviour change** for hosts: the block ref is no longer the one you return; read it from `assetIndex[hash].url` (the display layer does it for you). `Files#persist(file)` now resolves with the hash ref right after the local write and starts the upload in the background.
 - The upload queue is driven by the document (new `files/uploads.svelte.js`): a `pending` hash-ref block with local bytes and no host `url` starts an upload (this is also how it resumes after a reload, and how an undo that brings a deleted block back restarts it); an upload whose last block is deleted is aborted through the `AbortSignal`. Only media ref/status changes (and a node deletion while an upload runs) trigger a pass: typing costs nothing.
 - **Outbox with resume**: the pending uploads (`{ hash, attempts, state }`, per document) are kept next to the asset store, never inside the Loro doc: `IndexedDBOutbox` (`persistence/outbox.js`) for `createPersistedEditor`, `MemoryOutbox` otherwise, `files.outbox` to plug your own (`list`, `put`, `delete`, optional `clear`). **IndexedDB schema 2 -> 3**: new object store `outbox` (keyPath `[docId, hash]`, index `docId`); the upgrade only adds the store, snapshots / assets / docRefs are untouched. On open, pending uploads for files the document references resume automatically; an upload that FAILED is not retried on its own (`block.retry()`); entries for files the document no longer references, already hosted or without a local copy are dropped. A document opened where neither the bytes nor a host url exist (another device, upload not finished) shows `missing` with the reason `interrupted`.
@@ -328,7 +328,7 @@ Reference: `docs/design/import-export.md` (JSON schema with version, markdown ma
 
 ### Editing behaviour
 
-#### Editor options — `spellcheck` and `lang`
+#### Editor options: `spellcheck` and `lang`
 - New init options (accepted by `new Nabu()`, `createEditor` / the factories and `createPersistedEditor`), both reactive at runtime (`nabu.spellcheck`, `nabu.lang`). `spellcheck` (default `true`) drives the root's `spellcheck` attribute; when `false` the root also gets `data-gramm="false"`, `data-gramm_editor="false"` and `data-enable-grammarly="false"` (opt-out hints of the Grammarly extension). Code blocks always stay `spellcheck="false"`. `lang` (BCP 47 tag, invalid -> ignored with `nabu.warn`) sets `lang` on the root for the browser's spellchecker / hyphenation / screen readers; unset = inherit the page language. See the README ("Spellcheck & language", including a privacy note about Chrome's enhanced spell check).
 
 #### Multi-block deletion
@@ -436,7 +436,7 @@ Reference: `docs/design/import-export.md` (JSON schema with version, markdown ma
 
 ## 0.1.0-beta.0
 
-First beta. The library is feature-complete for the beta milestone: everything beyond the stability baseline is **opt-in** — a dedicated extension or a mounted UI component — so `MinimalPreset` stays paragraph-only. 287/287 unit tests, `prepack` + `publint` clean.
+First beta. The library is feature-complete for the beta milestone: everything beyond the stability baseline is **opt-in** (a dedicated extension or a mounted UI component), so `MinimalPreset` stays paragraph-only. 287/287 unit tests, `prepack` + `publint` clean.
 
 ### Stability & packaging
 - **Beta cut**: version `0.1.0-beta.0`; corrected `repository.url` to the `git+https://….git` form (publint suggestion).
@@ -450,18 +450,18 @@ First beta. The library is feature-complete for the beta milestone: everything b
 - New declarative **input rules** system: extensions can register `inputRules` (`pattern` tested against the text before the cursor + `handler`). The `--` → `—` substitution moved from `TextBehavior` into the new `TypographyExtension`.
 - `nabu.transact(mutateFn, cursorIntent?)` centralizes the mutate → commit → setCursor dance. Migrated `mark:*`, `block:transform` and `zone:set*` actions.
 - Incremental `wordCount`: every block exposes `wordCount` ($derived); containers sum their children. `ZoneBlock` no longer re-traverses its whole subtree on each keystroke.
-- **Capability flags** on `Block` — `splitsOnEnter`, `transformsEnabled`, `marksEnabled` (all default `true`): declarative engine opt-outs so a block can shape core behavior without overriding handlers (Code disables inline transforms, void blocks disable Enter-splitting).
+- **Capability flags** on `Block`: `splitsOnEnter`, `transformsEnabled`, `marksEnabled` (all default `true`): declarative engine opt-outs so a block can shape core behavior without overriding handlers (Code disables inline transforms, void blocks disable Enter-splitting).
 
 ### Native behavior audit
-- Implemented `deleteWordBackward` / `deleteWordForward` / `deleteSoftLineBackward` / `historyUndo` / `historyRedo` inputTypes. Word deletion now removes the whitespace surrounding the word — closes issue #4 (Alt+Delete orphan space).
+- Implemented `deleteWordBackward` / `deleteWordForward` / `deleteSoftLineBackward` / `historyUndo` / `historyRedo` inputTypes. Word deletion now removes the whitespace surrounding the word, which closes issue #4 (Alt+Delete orphan space).
 - **IME composition support** (closes issue #6): `compositionstart/update/end` are now handled. During composition the browser mutates the DOM freely (`insertCompositionText` is no longer blocked); the composed text is synced into Loro at `compositionend`, with guards for canceled compositions and destroyed blocks.
 
 ### New blocks & features
 - **Blockquote** block (`> ` shortcut, Backspace/Enter de-transformations, markdown/HTML paste rules).
-- **Divider** block — first non-textual block (`--- ` shortcut, `<hr>` rendering, markdown `---`).
-- **Code** block — multi-line monospace, ```` ``` ```` shortcut, stores plain text only (pluggable syntax highlighting deferred — see `docs/adr/013`).
-- **Callout** block — `note` / `tip` / `important` / `warning` / `caution` variants, `! ` shortcut.
-- **Toggle** block — collapsible (hybrid MegaBlock: own text + child blocks, collapsed state in metadata; Enter spawns a body child, Backspace de-transforms).
+- **Divider** block: first non-textual block (`--- ` shortcut, `<hr>` rendering, markdown `---`).
+- **Code** block: multi-line monospace, ```` ``` ```` shortcut, stores plain text only (pluggable syntax highlighting deferred, see `docs/adr/013`).
+- **Callout** block: `note` / `tip` / `important` / `warning` / `caution` variants, `! ` shortcut.
+- **Toggle** block: collapsible (hybrid MegaBlock: own text + child blocks, collapsed state in metadata; Enter spawns a body child, Backspace de-transforms).
 - **Checklist / to-do lists** (`listType: 'todo'`) with interactive checkboxes, plus a reactive **`Todos`** registry (`Todos.get(nabu)`) that mirrors the Zones system for document-wide task tracking.
 - **Image / Video / File** void media blocks on a shared `MediaBlock` base, with an optimistic local preview while the asset persists.
 - **Link mark**: `link:set` / `link:remove` / `link:toggle` actions, `<a>` rendering, `[text](href)` markdown and `<a href>` HTML serialization, link parsing on HTML paste.
@@ -473,10 +473,10 @@ First beta. The library is feature-complete for the beta milestone: everything b
 - **File handling**: by default an uploaded file is stored as a blob in a separate Loro `assets` map (the document stays the single source of truth); a `files.onBeforePersist` hook lets the host redirect uploads to its own backend; `Files.get(nabu).resolve(ref)` turns a stored ref into a display URL. Warns above a 2 MB inline threshold.
 
 ### Editor UX
-- **Slash menu** (`ui/SlashMenu.svelte`) — opt-in command palette: type `/` to open, filter by typing, `↑`/`↓`+`Enter` to run, `Esc` to close. Built-ins cover Text, Headings 1–3, bulleted / numbered / to-do lists, Code, Callout, Quote, Toggle, Divider, Image, Video, File; extend or override via the `commands` prop.
-- **Inline markdown shortcuts** (`MarkdownShortcutsExtension`) — `**bold**`, `__bold__`, `*italic*`, `_italic_`, `` `code` ``, `~~strike~~` transform as you type.
-- **Stored marks** (ProseMirror-style active formatting) — toggling a mark at a collapsed cursor (e.g. Ctrl+B) starts formatting for the next typed text; marks now use `expand: 'none'` so they no longer leak past their range; cleared on cursor navigation.
-- **Drag handles** (`ui/DragHandle.svelte`) — opt-in overlay: hover a block to reveal a `⠿` grip and drag to reorder. Pointer-events based, custom drop indicator, reorder by proximity via `moveBefore` / `moveAfter` on the Loro tree (single transaction → collaborative & undo-safe), `wrapOrphan` structural repair, and an anti-cycle guard.
+- **Slash menu** (`ui/SlashMenu.svelte`): opt-in command palette: type `/` to open, filter by typing, `↑`/`↓`+`Enter` to run, `Esc` to close. Built-ins cover Text, Headings 1–3, bulleted / numbered / to-do lists, Code, Callout, Quote, Toggle, Divider, Image, Video, File; extend or override via the `commands` prop.
+- **Inline markdown shortcuts** (`MarkdownShortcutsExtension`): `**bold**`, `__bold__`, `*italic*`, `_italic_`, `` `code` ``, `~~strike~~` transform as you type.
+- **Stored marks** (ProseMirror-style active formatting): toggling a mark at a collapsed cursor (e.g. Ctrl+B) starts formatting for the next typed text; marks now use `expand: 'none'` so they no longer leak past their range; cleared on cursor navigation.
+- **Drag handles** (`ui/DragHandle.svelte`): opt-in overlay: hover a block to reveal a `⠿` grip and drag to reorder. Pointer-events based, custom drop indicator, reorder by proximity via `moveBefore` / `moveAfter` on the Loro tree (single transaction → collaborative & undo-safe), `wrapOrphan` structural repair, and an anti-cycle guard.
 
 ## alpha.10
 
@@ -506,23 +506,23 @@ Complete rewrite of `findNearestTextNode` in `selection.svelte.js`. The previous
 - Shift+arrow into an inert element now corrects only the focus, preserving the anchor (non-collapsed selection)
 - `data-nabu-ui` elements (zone title input, etc.) bypass normalization entirely
 
-### Zones — nested zones
+### Zones: nested zones
 
 `zone:insert` and `zone:wrap` now support zones inside zones.
 
 - `zone:insert` detects the nearest zone ancestor and inserts inside it rather than always jumping to root level
-- `zone:wrap` (single-block) no longer bails when wrapping inside a zone — creates a nested zone at the correct position
+- `zone:wrap` (single-block) no longer bails when wrapping inside a zone, and creates a nested zone at the correct position
 - `zone:wrap` (multi-block) allows wrapping a selection of zones into a new zone
 
-### Zones — UI
+### Zones: UI
 
-- **Breadcrumb (top)** — when a zone is nested, the title area shows the full ancestor chain: `› Partie II › Chapitre 7`
-- **Closing chevrons (bottom)** — replaces the plain bottom boundary line with `‹ Partie II ‹ Chapitre 7` right-aligned, indicating zone exit context
-- **Word count** — now displayed on all zones, not only nested ones
+- **Breadcrumb (top)**: when a zone is nested, the title area shows the full ancestor chain: `› Partie II › Chapitre 7`
+- **Closing chevrons (bottom)**: replaces the plain bottom boundary line with `‹ Partie II ‹ Chapitre 7` right-aligned, indicating zone exit context
+- **Word count**: now displayed on all zones, not only nested ones
 
-### BlockGap — inter-block gap system
+### BlockGap: inter-block gap system
 
-New `BlockGap.svelte` component rendered after every block via `Block.svelte`. Hovering the gap between two blocks reveals a subtle `+` line. Clicking emits `gap:click` via `nabu.exec` with `{ parentId, insertIndex }` — completely agnostic, any extension can handle it.
+New `BlockGap.svelte` component rendered after every block via `Block.svelte`. Hovering the gap between two blocks reveals a subtle `+` line. Clicking emits `gap:click` via `nabu.exec` with `{ parentId, insertIndex }`. It is completely agnostic: any extension can handle it.
 
 `ParagraphExtension` registers a `gap:click` handler that inserts a paragraph at the gap position and moves the cursor there. This solves the "two consecutive zones with no way to insert content between them" problem.
 

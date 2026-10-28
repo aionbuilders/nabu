@@ -154,12 +154,12 @@ describe('widget helpers', () => {
   it('writes model positions and DOM points', () => {
     expect(shortBlockId('12@7340')).toBe('12');
     expect(describeModelPoint({ id: '12@7340', type: 'paragraph' }, 17)).toBe('paragraph#12 · index 17');
-    expect(describeModelPoint(null, 0)).toBe('—');
+    expect(describeModelPoint(null, 0)).toBe('none');
     const p = document.createElement('div');
     p.setAttribute('data-block-type', 'paragraph');
     p.textContent = 'Across the river, the bank was dark';
     expect(describeDomPoint(p.firstChild, 12)).toBe('#text "Across the riv…" @ 12 in div');
-    expect(describeDomPoint(null, 0)).toBe('—');
+    expect(describeDomPoint(null, 0)).toBe('none');
     expect(describeDomPoint(p, 1)).toBe('<div> @ child 1');
   });
 

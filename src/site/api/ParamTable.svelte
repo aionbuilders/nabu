@@ -29,9 +29,9 @@
         </td>
         <td class="type" data-label="Type"><code class="doc-code"><Parts parts={row.type} /></code></td>
         {#if hasDefault}
-          <td class="default" data-label="Default">{#if row.default !== undefined}<code class="doc-code">{row.default}</code>{:else}<span class="none">&mdash;</span>{/if}</td>
+          <td class="default" data-label="Default">{#if row.default !== undefined}<code class="doc-code">{row.default}</code>{:else}<span class="none">n/a</span>{/if}</td>
         {/if}
-        <td class="desc" data-label="Description">{#if row.descriptionHtml}<Prose html={row.descriptionHtml} />{:else}<span class="none">&mdash;</span>{/if}</td>
+        <td class="desc" data-label="Description">{#if row.descriptionHtml}<Prose html={row.descriptionHtml} />{:else}<span class="none">n/a</span>{/if}</td>
       </tr>
     {/each}
   </tbody>

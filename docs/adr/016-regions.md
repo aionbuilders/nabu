@@ -1,10 +1,10 @@
-# ADR 016 — Regions: structuring a continuous text with markers
+# ADR 016: Regions, structuring a continuous text with markers
 
-**Status:** Accepted (2026-10-22, validated by the owner) — **data model superseded by ADR 018** (2026-10-23: regions are containers in Loro, seams are the interface). Types, fields, numbering, registry, commands and protection remain valid.
+**Status:** Accepted (2026-10-22, validated by the owner), **data model superseded by ADR 018** (2026-10-23: regions are containers in Loro, seams are the interface). Types, fields, numbering, registry, commands and protection remain valid.
 **Date:** 2026-10-22
 **Original:** [French](fr/016-regions.md)
 **Supersedes:** the Zone block (removed from Nabu on 2026-10-22, nested container)
-**Related:** `docs/design/variables.md` (to be reworked on top of Regions), exploration canvas "Zones — exploration" (boards 5–7: Nabu only), ADR 014 (history), audit 2026-10 roadmap
+**Related:** `docs/design/variables.md` (to be reworked on top of Regions), the "Zones" exploration canvas (boards 5–7: Nabu only), ADR 014 (history), audit 2026-10 roadmap
 
 ---
 
@@ -46,7 +46,7 @@ RegionsExtension({
 - `level`: depth (1 = highest). The extent of a region is deduced from the levels.
 - `label`: display template (`{index}`, `{path}` → "2.3", `{title}`).
 - `numbering`: `'parent'` (restarts at 1 in each parent region, default), `'document'` (continues over the whole document), `'none'`.
-- `fields`: typed fields (`text`, `richtext` = LoroText, `number`, `boolean`, `enum`, `date`) — Nabu stores them and makes them reactive; their meaning (synopsis, status, goal…) belongs to the integrator.
+- `fields`: typed fields (`text`, `richtext` = LoroText, `number`, `boolean`, `enum`, `date`): Nabu stores them and makes them reactive; their meaning (synopsis, status, goal…) belongs to the integrator.
 - Without configuration: a generic `section` type (levels 1–3, labels "1.", "1.1"…).
 
 ### 3.3 Reactive registry `nabu.regions`
@@ -61,11 +61,11 @@ RegionsExtension({
 
 | Action | Effect in the marker model |
 |---|---|
-| `region:split` — cut here | cuts the block at the cursor if needed, inserts a marker of the same type as the current region; the cursor moves to the start of the new region |
+| `region:split` (cut here) | cuts the block at the cursor if needed, inserts a marker of the same type as the current region; the cursor moves to the start of the new region |
 | `region:insert` | inserts a marker (given type) after the current region or at the cursor |
 | `region:merge` | removes the marker: the content joins the previous region |
 | `region:move` (`up`/`down`) | moves the region **with its sub-regions** (its block range) before / after its neighbor of the same level |
-| `region:promote` / `region:demote` | changes the level (the type) — in a marker model, this is all it takes to re-nest |
+| `region:promote` / `region:demote` | changes the level (the type); in a marker model, this is all it takes to re-nest |
 | `region:next` / `region:prev` / `region:parent` | navigation: cursor at the start of the targeted region |
 
 - Each structural action is **one undo step** (mechanism already in place) and Ctrl+Z restores the selection (ADR 015).
@@ -79,7 +79,7 @@ RegionsExtension({
 
 ### 3.6 Serialization, clipboard, paste
 
-- **JSON**: `{ type: 'region', props: { regionType, fields } }` — exact round trip.
+- **JSON**: `{ type: 'region', props: { regionType, fields } }`, an exact round trip.
 - **Internal clipboard**: markers travel as blocks; pasted elsewhere, they regain their role.
 - **Markdown**: data comment + readable heading (decided, question 4; see the lot 3 notes).
 - Pasting a marker into a container (list, toggle): rule of §3.1.
@@ -87,7 +87,7 @@ RegionsExtension({
 ### 3.7 Collaboration and history
 
 - Markers and fields live in Loro: synchronized and versioned like the text.
-- Two authors cutting at the same place produce two adjacent markers (an empty, visible region) — no structural conflict.
+- Two authors cutting at the same place produce two adjacent markers (an empty, visible region), so there is no structural conflict.
 
 ## 4. Out of scope (following workstreams, each with its own ADR)
 
@@ -98,21 +98,21 @@ RegionsExtension({
 
 ## 5. Breakdown
 
-1. **Lot 1** — marker block, types, normalizer (root), reactive registry, numbering, default rendering.
-2. **Lot 2** — actions and keyboard (§3.4).
-3. **Lot 3** — JSON / markdown / HTML serialization, clipboard, paste.
+1. **Lot 1**: marker block, types, normalizer (root), reactive registry, numbering, default rendering.
+2. **Lot 2**: actions and keyboard (§3.4).
+3. **Lot 3**: JSON / markdown / HTML serialization, clipboard, paste.
 
 ## 6. Open questions (to be settled before or during the relevant lot)
 
-1. ~~**Backspace at the start of the first line of a region**~~ — **decided (2026-10-22, owner)**: **protect**. A Backspace at the very start of the first text block of a region never merges the text across the marker; the merge is a **hold** of the key (ADR 017 `hold`, 700 ms) on the seam, command `region:merge-previous`; symmetric for Delete (`region:merge-next`, the NEXT marker disappears). First region without a preamble: nothing (no target, no hold).
-2. ~~**"Cut here" shortcut**~~ — **decided**: `Mod+Enter` (`region:split`, no confirmation), which coexists with `todo:toggle` (the latter, limited to list items, keeps `Mod+Enter` in a task list).
-3. ~~Marker pasted into a toggle~~ — **decided**: lifted right after the toggle (as for lists; the structure is never lost).
-4. ~~Markdown~~ — **decided**: an HTML comment carrying the data (`<!-- region:chapter {"title":"The forest"} -->`), read back exactly by Nabu (targeted exception, like `<details>`), **followed by a readable heading** (`## Chapter 2 — The forest`) for humans and other tools.
-5. ~~**Preamble**~~ — **decided**: allowed as is (content before the first marker = outside any region).
+1. ~~**Backspace at the start of the first line of a region**~~: **decided (2026-10-22, owner)**: **protect**. A Backspace at the very start of the first text block of a region never merges the text across the marker; the merge is a **hold** of the key (ADR 017 `hold`, 700 ms) on the seam, command `region:merge-previous`; symmetric for Delete (`region:merge-next`, the NEXT marker disappears). First region without a preamble: nothing (no target, no hold).
+2. ~~**"Cut here" shortcut**~~: **decided**: `Mod+Enter` (`region:split`, no confirmation), which coexists with `todo:toggle` (the latter, limited to list items, keeps `Mod+Enter` in a task list).
+3. ~~Marker pasted into a toggle~~: **decided**: lifted right after the toggle (as for lists; the structure is never lost).
+4. ~~Markdown~~: **decided**: an HTML comment carrying the data (`<!-- region:chapter {"title":"The forest"} -->`), read back exactly by Nabu (targeted exception, like `<details>`), **followed by a readable heading** (`## Chapter 2 — The forest`) for humans and other tools.
+5. ~~**Preamble**~~: **decided**: allowed as is (content before the first marker = outside any region).
 
 ---
 
-## 7. Implementation notes — lot 1 (2026-10-22)
+## 7. Implementation notes: lot 1 (2026-10-22)
 
 Code: `src/lib/blocks/region/` (`types.js`, `region.svelte.js`, `Region.svelte`, `regions.svelte.js`, `normalize.js`, `insert.js`, `region.extension.js`). Tests: `tests/unit/regions.test.js`, `tests/e2e/regions.spec.ts`.
 
@@ -122,17 +122,17 @@ Code: `src/lib/blocks/region/` (`types.js`, `region.svelte.js`, `Region.svelte`,
 - **Levels and extent**: as §2. A marker whose type is NOT declared (a document coming from a richer editor) is a leaf at the deepest declared level, unnumbered, labelled by its title. Numbering: `parent` counts per (parent region, type), `document` per type over the whole document, `none` gives no index; `path` = the indexes of the numbered ancestors then its own (`"2.1"`; array in `path`, text in `pathString`).
 - **Range**: `first` is the marker, `last` the last ROOT block of the range; `blocks` = everything after the marker up to `last`, sub-regions' markers and content included; `ownBlocks` stops at the first sub-region. `wordCount` / `ownWordCount` follow the same split (markers weigh 0). `next` / `prev` walk document order (a sub-region comes right after its parent).
 - **Fields**: `title` plus the declared fields, read through `marker.fields` (reactive): a declared field that is unset or holds a value of the wrong type reads `null` (the stored value is untouched); `richtext` reads as its plain string, the LoroText is `marker.richtext(name)`; unknown fields are returned and exported as-is. `setField` refuses an invalid value for a declared field (returns false, `nabu.warn`); `null` clears. Dates: ISO 8601 `YYYY-MM-DD`, with an optional time; a `Date` is stored as its ISO string.
-- **Root-only normalizer** (`normalize.js`, `onBeforeTransaction`, so the move belongs to the transaction — one undo step — of the operation that displaced the marker): a marker with a parent is moved RIGHT AFTER the top-level container holding it; several markers of one container keep their order. A node retyped into a marker while nested is caught too. It runs after the list normalizer (extension order), so a marker in a list item position is first split out of the list by the list rules; what is left (toggle body, callout…) is hoisted by this one. The target is isolated in `hoistTarget()` so that the open question 3 (toggle) can change it in one line (e.g. "convert to a title" would be another branch of the same function).
-- **Void block**: modelled on the divider (`positions = 1`, `getDOMPoint` null, `data-nabu-inert`, `contenteditable="false"`); the caret skipping and `openTrailingCaret` are the engine's generic ones. Backspace / Delete next to a marker have NO hook yet: the text merge goes THROUGH the marker (`p(above) ; R ; p(below)` + Backspace → `p(abovebelow) ; R`, one undo step, document valid) — pinned by e2e, to be replaced by the decision of open question 1 in lot 2.
+- **Root-only normalizer** (`normalize.js`, `onBeforeTransaction`, so the move belongs to the transaction (one undo step) of the operation that displaced the marker): a marker with a parent is moved RIGHT AFTER the top-level container holding it; several markers of one container keep their order. A node retyped into a marker while nested is caught too. It runs after the list normalizer (extension order), so a marker in a list item position is first split out of the list by the list rules; what is left (toggle body, callout…) is hoisted by this one. The target is isolated in `hoistTarget()` so that the open question 3 (toggle) can change it in one line (e.g. "convert to a title" would be another branch of the same function).
+- **Void block**: modelled on the divider (`positions = 1`, `getDOMPoint` null, `data-nabu-inert`, `contenteditable="false"`); the caret skipping and `openTrailingCaret` are the engine's generic ones. Backspace / Delete next to a marker have NO hook yet: the text merge goes THROUGH the marker (`p(above) ; R ; p(below)` + Backspace → `p(abovebelow) ; R`, one undo step, document valid). This is pinned by e2e, to be replaced by the decision of open question 1 in lot 2.
 - **Serialisation (minimal)**: JSON `{ type: 'region', props: { regionType, fields } }` (richtext fields as Loro deltas), same shape on the internal clipboard format; markdown / HTML are empty for now. `TODO(ADR-016 lot 3)` marks the spots.
 - **What lot 2 needs from here**: `insertRegion` and `RegionBlock#setRegionType` (promote / demote), `Region#start` / `end` / `ownEnd` (root indexes, for `region:move` and `region:merge`), `Regions#at()` (current region for `split` / `insert`), `config.defaultType`, the hoisting normalizer already guarding the root-only rule, and the Backspace / Delete decision.
 
 
 ---
 
-## 8. Implementation notes — lot 2 (2026-10-22)
+## 8. Implementation notes: lot 2 (2026-10-22)
 
-Code: `src/lib/blocks/region/` — `commands.js` (the commands), `facts.js` (`commandContext` facts + the merge veto), `actions.js` (the operations), `messages.js` (overridable texts), `Region.svelte` (hold rendering), `insert.js` (`createMarker`, the commit-less building block). One engine change, generic: the `onBeforeMerge` hook (below). Tests: `tests/unit/region-commands.test.js`, `tests/e2e/regions.spec.ts`.
+Code: `src/lib/blocks/region/`, with `commands.js` (the commands), `facts.js` (`commandContext` facts + the merge veto), `actions.js` (the operations), `messages.js` (overridable texts), `Region.svelte` (hold rendering), `insert.js` (`createMarker`, the commit-less building block). One engine change, generic: the `onBeforeMerge` hook (below). Tests: `tests/unit/region-commands.test.js`, `tests/e2e/regions.spec.ts`.
 
 - **Commands** (`region:*`, each also an action: `nabu.exec(id, data)`; `data.region` = a `Region`, its marker block or its marker id, acts on that region instead of the caret's). Default keys: `region:split` `Mod-Enter`, `region:merge-previous` `Backspace` + `Shift-Backspace` (hold), `region:merge-next` `Delete` (hold). No default keys for `insert`, `move` (+ `move-up` / `move-down`, the same with the direction built in, because a key cannot carry `data`), `promote`, `demote`, `next`, `prev`, `parent`: the arrow chords are mostly taken by the OS / browser; integrators bind them with `keymap`. `exec` runs a command directly: the hold is a keyboard concern (ADR 017 §3.4a), the accessible path has none.
 - **Facts** (`commandContext`): `region` (deepest, `null` in the preamble), `previousRegion` (document order), `nextRegion` (first marker after the caret block; the first region from the preamble), `inRootTextBlock` (top-level text block without children: not a list item, toggle, callout…), `atStartOfRegion` (collapsed, offset 0, root text block, and NO text block between the marker and here: an image or divider in between does not count), `atEndOfRegion` (collapsed, end of text, and the block a Delete would merge into this one lies in ANOTHER region; this one is not limited to root blocks, so a Delete at the end of the last list item before a marker is protected too).
@@ -143,14 +143,14 @@ Code: `src/lib/blocks/region/` — `commands.js` (the commands), `facts.js` (`co
 - **`region:move`**: moves the root blocks `[start, end)` of the region (sub-regions included) with Loro `moveBefore` / `moveAfter`, one commit. The sibling is the neighbour in the parent's `children` (the top level for a root region) and must be of the SAME level; at an edge or next to a sibling of another level nothing moves and nothing is committed. The caret is put back.
 - **`region:promote` / `demote`**: `setRegionType` to the first declared type of level -1 / +1; no-op when there is none or the marker's type is not declared. Following regions re-nest by their levels (the model of §3.4: the type is all that has to change).
 - **Navigation**: `next` / `prev` / `parent` put the caret at the first text position of the target region (its own content, else its first sub-region) and scroll it into view (`scrollIntoView({ block: 'center' })`); a region without text only scrolls its seam. `prev` has no target from the first region (the preamble is not a region).
-- **Undo**: every structural command is one commit / one step; the selection captured before it (ADR 015) comes back on Ctrl+Z, including after a merge (marker restored, caret back at the start of the block) — e2e.
+- **Undo**: every structural command is one commit / one step; the selection captured before it (ADR 015) comes back on Ctrl+Z, including after a merge (marker restored, caret back at the start of the block); covered by e2e.
 - **Hold rendering (default seam)**: `Region.svelte` reads `nabu.pendingCommandOn(block)`; when it is a hold it shows the pending message (`Hold Backspace to merge with “One”`; the controller's `hold` text built from the command label) in a `[data-region-hint]` span, `position: absolute; bottom: 100%` inside the seam's top margin (left-aligned, no bubble / background / border, `--nb-region-warning`, default `#B45309`), and a 1 px warning-tint overlay on the hairline whose `scaleX` is `1 - progress` (it drains). Nothing is in the flow, so the seam does not move (e2e compares the bounding box); it relies on `--nb-region-margin` leaving about one line above the seam (the default does). The engine's default target outline / fill is switched off on a seam. The hint is `aria-hidden` (the live region announces the same text). Nothing remains once the marker is gone. The "Merged with … · Ctrl+Z to undo" confirmation line (board 8b, state 3) is NOT done: it needs a transient element that belongs to no marker.
 - **Texts**: `RegionsExtension({ messages })` (`messages.js`): labels of the commands and the hold prompt, English by default.
 - **Left for lot 3**: serialization (JSON is done; markdown / HTML), clipboard and paste rules for markers, the open question 3 (marker pasted into a toggle). Not covered by the protection: the first item of a list or the first child of a container at the start of a region keeps its own Backspace (outdent / convert), as it does not merge text through the marker.
 
 ---
 
-## 9. Implementation notes — lot 3 (2026-10-22)
+## 9. Implementation notes: lot 3 (2026-10-22)
 
 Code: `src/lib/blocks/region/format.js` (pure text forms: comment, echo, HTML), `region.svelte.js` (serializers, `toMarkdown` / `toHtml`, `markdownRules` / `fromMarkdown`, `htmlRules` / `fromHTML`). The core is untouched (the guard test stays green): the engine already dispatches `BlockClass.toMarkdown` / `toHtml` / `markdownRules` / `htmlRules`. Tests: `tests/unit/regions-io.test.js`, `tests/unit/roundtrip-structure.test.js` (the kitchen sink holds markers), `tests/e2e/regions-clipboard.spec.ts`. Reference of the forms: `docs/design/import-export.md` ("The region marker exception"), `docs/design/clipboard-format.md`.
 

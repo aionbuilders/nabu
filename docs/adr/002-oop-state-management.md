@@ -1,4 +1,4 @@
-# ADR 002 — State Management with Svelte 5 Classes (OOP)
+# ADR 002: State Management with Svelte 5 Classes (OOP)
 
 **Status:** Accepted
 **Date:** 2026-02-19

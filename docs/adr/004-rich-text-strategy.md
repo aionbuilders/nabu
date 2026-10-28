@@ -1,4 +1,4 @@
-# ADR 004 — Rich Text Strategy (LoroText vs Nested Blocks)
+# ADR 004: Rich Text Strategy (LoroText vs Nested Blocks)
 
 **Status:** Accepted
 **Date:** 2026-02-19

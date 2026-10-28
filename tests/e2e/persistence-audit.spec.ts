@@ -1,6 +1,6 @@
 /**
  * E2E — AUDIT 2026-10, theme 8a (PERSISTENCE): `createPersistedEditor` (ADR 010 snapshot + debounce, ADR 014 asset store /
- * outbox / history modes). Findings P-91 … P-97 are fixed (ADR 010, "Implementation notes — 2026-10 (theme 8)" and "— lot 2"): section 4
+ * outbox / history modes). Findings P-91 … P-97 are fixed (ADR 010, "Implementation notes, 2026-10 (theme 8)" and "— lot 2"): section 4
  * covers the two-tab behaviour (P-94: merge on save + live sync), section 9 the automatic retry of the uploads on open (P-97).
  *
  * These tests describe the EXPECTED behaviour. A scenario that fails today is marked `test.fixme('… — FINDING: …')` (body kept, so it

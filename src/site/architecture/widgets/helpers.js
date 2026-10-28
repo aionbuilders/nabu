@@ -110,7 +110,7 @@ export function keyLabel(key) {
   return key === ' ' ? 'Space' : key;
 }
 
-/** Milliseconds for a step row: `2.6 ms`; `—` when unknown. @param {number | null | undefined} ms */
+/** Milliseconds for a step row: `2.6 ms`; empty when unknown. @param {number | null | undefined} ms */
 export function stepMs(ms) {
   if (ms === null || ms === undefined || !Number.isFinite(ms)) return '';
   if (ms < 0.1) return '<0.1 ms';
@@ -127,7 +127,7 @@ export const shortBlockId = (id) => String(id).split('@')[0];
  * @param {Node | null} node @param {number} offset
  */
 export function describeDomPoint(node, offset) {
-  if (!node) return '—';
+  if (!node) return 'none';
   const clip = (/** @type {string} */ s, /** @type {number} */ n) => (s.length > n ? s.slice(0, n) + '…' : s);
   if (node.nodeType === 3) {
     const parent = /** @type {Element | null} */ (node.parentElement);
@@ -144,7 +144,7 @@ export function describeDomPoint(node, offset) {
  * @param {{ id: string, type: string } | null | undefined} block @param {number} index
  */
 export function describeModelPoint(block, index) {
-  if (!block) return '—';
+  if (!block) return 'none';
   return `${block.type}#${shortBlockId(block.id)} · index ${index}`;
 }
 

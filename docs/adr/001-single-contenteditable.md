@@ -1,4 +1,4 @@
-# ADR 001 — Single ContentEditable Architecture
+# ADR 001: Single ContentEditable Architecture
 
 **Status:** Accepted
 **Date:** 2026-02-19

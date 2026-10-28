@@ -3,7 +3,7 @@ import { docsNav } from '../../../site/docs/content.server.js';
 export const load = () => {
   const nav = docsNav();
   return {
-    title: 'Docs — Nabu',
+    title: 'Docs · Nabu',
     description: 'Guides, recipes and getting-started pages for Nabu, the block editor for Svelte 5 built on a CRDT: install it, mount an editor, extend it, persist and sync it, theme it.',
     sections: nav.sections.map((s) => ({
       id: s.id,

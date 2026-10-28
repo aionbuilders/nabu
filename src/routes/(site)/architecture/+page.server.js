@@ -8,7 +8,7 @@ export const load = () => {
   const supersededBy = new Map(model.adrs.map((a) => [a.number, a.supersededBy]));
   const story = storyList(chapters()).map((c) => ({ ...c, adrLine: adrLine(c.adrs, supersededBy) }));
   return {
-    title: 'Architecture — Nabu',
+    title: 'Architecture · Nabu',
     description: ARCH_DESCRIPTION,
     story,
     counts: model.counts,

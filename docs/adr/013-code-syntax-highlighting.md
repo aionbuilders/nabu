@@ -1,6 +1,6 @@
-# ADR 013 — Syntax Highlighting for Code Blocks: a Pluggable Highlighter
+# ADR 013: Syntax Highlighting for Code Blocks with a Pluggable Highlighter
 
-**Status:** Proposed — **deferred** (after the beta critical path). The v1 `CodeBlock` renders plain monospace text; the seam described here is not yet implemented.
+**Status:** Proposed: **deferred** (after the beta critical path). The v1 `CodeBlock` renders plain monospace text; the seam described here is not yet implemented.
 **Date:** 2026-06-14
 **Original:** [French](fr/013-code-syntax-highlighting.md)
 
@@ -8,7 +8,7 @@
 
 The `CodeBlock` (shipped in v1, with no dependency) stores text only (a multi-line `LoroText`). In the long run, we want editor-grade syntax highlighting.
 
-Initial intuition (validated): highlighting follows the same rendering principle as our `bold`/`italic` marks — turn a string into a sequence of styled segments, then render colored `<span>` elements. And since the cursor mapping (`getDOMPoint` / `calculateOffset`) walks the **text nodes** while counting characters, it works **for free** across these spans — exactly as RichText does today.
+Initial intuition (validated): highlighting follows the same rendering principle as our `bold`/`italic` marks: turn a string into a sequence of styled segments, then render colored `<span>` elements. And since the cursor mapping (`getDOMPoint` / `calculateOffset`) walks the **text nodes** while counting characters, it works **for free** across these spans, exactly as RichText does today.
 
 ### Key conceptual correction: derived, not stored
 
@@ -43,23 +43,23 @@ TextMate grammars + oniguruma (WASM), VS Code themes. Maximum fidelity. But **as
 
 **A pluggable, opt-in highlighter; the core stays dependency-free.**
 
-> The `CodeBlock` stays *dumb*: it exposes `segments = $derived(highlighter(text, language))`. The `highlighter` is an **injectable function** `(text: string, language: string | null) => Array<{ text: string, scope?: string }>`, whose **default is the identity** (a single segment, no color — the current plain rendering). An **opt-in** `PrismHighlightExtension` provides the highlighter and the CSS of the scopes (wired to the `--nb-*` tokens). Anyone who wants Shiki plugs in their own.
+> The `CodeBlock` stays *dumb*: it exposes `segments = $derived(highlighter(text, language))`. The `highlighter` is an **injectable function** `(text: string, language: string | null) => Array<{ text: string, scope?: string }>`, whose **default is the identity** (a single segment, no color: the current plain rendering). An **opt-in** `PrismHighlightExtension` provides the highlighter and the CSS of the scopes (wired to the `--nb-*` tokens). Anyone who wants Shiki plugs in their own.
 
 This is consistent with the beta's opt-in invariant and the extension-first dogma: highlighting is an add-on, never part of the core.
 
 ## Architecture (to be implemented)
 
-1. **Rendering seam** — `Code.svelte` renders from `block.segments` (and no longer from `{block.text}`), each segment as a `<span class="nabu-tok-{scope}">`. The verbatim invariant guarantees that the cursor lands correctly.
-2. **Highlighter injection** — resolved through a registry (e.g. `nabu.codeHighlighter`) fed by the opt-in extension; default = identity. `CodeBlock.segments` reads that highlighter.
-3. **`PrismHighlightExtension`** — opt-in (never in MinimalPreset). Loads Prism and the language grammar on demand, provides the highlighter, and ships the themed scope CSS.
-4. **IME guard** — do NOT re-tokenize or re-render during an active composition (`#composing`, see ADR/issue #6), so as not to break CJK typing.
-5. **Cursor** — no new machinery: the existing post-mutation `tick().then(() => setCursor(block, offset))` repositions the caret by model offset on the new spans.
-6. **Performance** — v1: full re-tokenization on change (negligible for normal blocks). Incremental parsing (tree-sitter/Lezer) is reserved for very large blocks, later. Debouncing is possible if needed (plain rendering is instantaneous, colors arrive one tick later).
+1. **Rendering seam**: `Code.svelte` renders from `block.segments` (and no longer from `{block.text}`), each segment as a `<span class="nabu-tok-{scope}">`. The verbatim invariant guarantees that the cursor lands correctly.
+2. **Highlighter injection**: resolved through a registry (e.g. `nabu.codeHighlighter`) fed by the opt-in extension; default = identity. `CodeBlock.segments` reads that highlighter.
+3. **`PrismHighlightExtension`**: opt-in (never in MinimalPreset). Loads Prism and the language grammar on demand, provides the highlighter, and ships the themed scope CSS.
+4. **IME guard**: do NOT re-tokenize or re-render during an active composition (`#composing`, see ADR/issue #6), so as not to break CJK typing.
+5. **Cursor**: no new machinery: the existing post-mutation `tick().then(() => setCursor(block, offset))` repositions the caret by model offset on the new spans.
+6. **Performance**: v1: full re-tokenization on change (negligible for normal blocks). Incremental parsing (tree-sitter/Lezer) is reserved for very large blocks, later. Debouncing is possible if needed (plain rendering is instantaneous, colors arrive one tick later).
 
 ## Consequences
 
 ✅ The core `CodeBlock` has no dependency; highlighting is a choice for the integrator (Prism / Shiki / none).
-✅ Fully reuses the existing span-aware cursor mapping — no new selection logic.
+✅ Fully reuses the existing span-aware cursor mapping, with no new selection logic.
 ✅ Nothing in Loro: no CRDT pollution, no possible desynchronization.
 ✅ An ideal "wow" candidate for the beta launch demo.
 ⚠️ The `join === source` invariant must be verified for each tokenization library adopted.

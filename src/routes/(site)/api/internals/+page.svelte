@@ -16,7 +16,7 @@
 </header>
 
 <section id="warning" class="warning" role="note" aria-labelledby="warning-title">
-  <h2 id="warning-title">Unstable &mdash; may change in any minor version</h2>
+  <h2 id="warning-title">Unstable: may change in any minor version</h2>
   <p>
     Nothing reached through <code class="doc-code">nabu.internals</code> is a promise. A key, its type or its behaviour can change, move
     or disappear in <strong>any minor version</strong>. The door itself (the getter) is part of the stable contract; what is behind it is not.
