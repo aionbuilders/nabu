@@ -112,7 +112,10 @@ describe('recordsModel', () => {
     expect(model.counts.superseded).toBe(1);
     expect(model.counts.proposed).toBe(1);
     expect(model.counts.accepted + model.counts.superseded + model.counts.proposed).toBe(model.counts.all);
-    expect(model.neighbours(1).prev).toBeNull();
+    expect(model.neighbours(0).prev).toBeNull(); // 000 is the first record: the decision before 001, written afterwards
+    expect(model.neighbours(1).prev?.number).toBe(0);
+    expect(model.get(0)?.id).toBe('000'); // record 0 is not lost to a falsy check
+    expect(adrHref(0)).toBe('/architecture/decisions/000');
     expect(model.neighbours(11).next?.number).toBe(13); // there is no 012
     expect(model.neighbours(13).prev?.number).toBe(11);
     expect(model.neighbours(18).next).toBeNull();
