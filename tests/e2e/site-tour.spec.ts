@@ -772,11 +772,12 @@ test.describe('a phone, 375px', () => {
     await card(page, 'code').locator('button.open').tap();
     const open = page.locator(OPEN);
     await expect(open).toBeVisible();
-    const [tile, box, next] = await Promise.all([card(page, 'code').boundingBox(), open.boundingBox(), card(page, 'callout').boundingBox()]);
-    expect(box!.y).toBeGreaterThanOrEqual(tile!.y + tile!.height);
-    expect(next!.y).toBeGreaterThanOrEqual(box!.y + box!.height - 1);
-    const [left, right] = await Promise.all([open.locator('.left').boundingBox(), open.locator('.right').boundingBox()]);
-    expect(right!.y).toBeGreaterThanOrEqual(left!.y + left!.height - 1);
+    // the open card may still be settling (its own scroll into view / layout) when it becomes visible: poll the geometry
+    await expect.poll(async () => {
+      const [tile, box, next] = await Promise.all([card(page, 'code').boundingBox(), open.boundingBox(), card(page, 'callout').boundingBox()]);
+      const [left, right] = await Promise.all([open.locator('.left').boundingBox(), open.locator('.right').boundingBox()]);
+      return box!.y >= tile!.y + tile!.height && next!.y >= box!.y + box!.height - 1 && right!.y >= left!.y + left!.height - 1;
+    }).toBe(true);
     expect(await noHorizontalScroll(page)).toBe(true);
     // a tab of the state works by touch
     await open.getByRole('tab', { name: 'Markdown' }).tap();

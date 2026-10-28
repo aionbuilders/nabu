@@ -167,18 +167,18 @@ test.describe('home: the performance proof', () => {
     const proofs = page.getByTestId('proofs');
     await expect(proofs).toBeVisible();
     const perf = page.getByTestId('proof-perf');
-    await expect(perf).toContainText('Every keystroke on screen within one frame');
+    await expect(perf).toContainText('A keystroke on screen within one frame');
     await expect(perf).toContainText('even at 10,000 blocks');
     await expect(perf.getByRole('link')).toHaveAttribute('href', '/labs/performance');
     // no latency figure on the page ("3 ms" and the like)
     await expect(proofs).not.toContainText(/\d\s?ms\b/);
-    // every proof link points to something that exists: an in-page anchor, a route of the site (200), or the GitHub docs folder
+    // every proof link points to something that exists: an in-page anchor, a route of the site (200), or the tests folder on GitHub
     const hrefs = await proofs.getByRole('link').evaluateAll((as) => as.map((a) => a.getAttribute('href')!));
     expect(hrefs.length).toBe(4);
     for (const href of hrefs) {
       if (href.startsWith('#')) await expect(page.locator(href)).toHaveCount(1);
       else if (href.startsWith('/')) expect((await page.request.get(href)).status(), href).toBe(200);
-      else expect(href).toBe('https://github.com/aionbuilders/nabu/tree/main/docs');
+      else expect(href).toBe('https://github.com/aionbuilders/nabu/tree/main/tests');
     }
     await perf.getByRole('link').click();
     await expect(page).toHaveURL(/\/labs\/performance$/);

@@ -207,20 +207,30 @@ test.describe('reading still works', () => {
     expect(await page.evaluate(() => window.getSelection()!.toString().trim())).toBe('First paragraph');
   });
 
-  test('a link opens as a normal link', async ({ page }) => {
+  test('a link opens as a normal link: a link to this site in place, a link to another site in a new tab', async ({ page }) => {
     await viewer(page, []);
     const origin = new URL(page.url()).origin;
     await page.evaluate(async (href) => {
       const n = (window as any).nabu;
-      n.insert('paragraph', { delta: [{ insert: 'see ' }, { insert: 'the link', attributes: { link: href } }] });
+      n.insert('paragraph', { delta: [{ insert: 'see ' }, { insert: 'the same-site link', attributes: { link: href } }, { insert: ' and ' }, { insert: 'the other-site link', attributes: { link: 'https://example.com/guide' } }] });
       await n.commit();
-    }, `${origin}/e2e`);
+    }, `${origin}/e2e/multi`);
     await flushRender(page);
-    const link = page.locator('a.nabu-link');
-    await expect(link).toHaveAttribute('href', `${origin}/e2e`);
-    const [popup] = await Promise.all([page.waitForEvent('popup'), link.click()]);
-    expect(popup.url()).toContain('/e2e');
-    await popup.close();
+
+    // another site: a new tab, with no access to this one
+    const other = page.locator('a.nabu-link[href="https://example.com/guide"]');
+    await expect(other).toHaveAttribute('target', '_blank');
+    await expect(other).toHaveAttribute('rel', 'noopener noreferrer');
+
+    // this site: no target, the click navigates the tab itself
+    const same = page.locator(`a.nabu-link[href="${origin}/e2e/multi"]`);
+    await expect(same).not.toHaveAttribute('target', /.+/);
+    await expect(same).not.toHaveAttribute('rel', /.+/);
+    const popups: unknown[] = [];
+    page.on('popup', (p) => popups.push(p));
+    await same.click();
+    await expect(page).toHaveURL(`${origin}/e2e/multi`);
+    expect(popups).toEqual([]);
   });
 
   test('a toggle opens to be read, but the document is not touched (view state)', async ({ page }) => {

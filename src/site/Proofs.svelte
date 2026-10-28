@@ -1,19 +1,21 @@
 <script>
   import { GITHUB_URL } from './nav.js';
 
-  /** TODO: point these at the site's own pages once the docs and the collaboration lab are rendered. */
-  const DOCS = `${GITHUB_URL}/tree/main/docs`;
+  /** The test suite lives in the repo (`tests/unit`, `tests/e2e`): it is the one proof that is not a page of the site. */
+  const TESTS = `${GITHUB_URL}/tree/main/tests`;
 
   /**
    * The home page's proof strip. The performance claim is deliberately NOT a number: it is a promise measured in frames, and the lab
    * (/labs/performance) is where a visitor checks it on their own machine (the one measure: key to next paint, see measure.js).
    */
   const PROOFS = [
-    { big: 'Every keystroke on screen within one frame', text: 'even at 10,000 blocks', link: 'Run it yourself →', href: '/labs/performance', id: 'perf' },
-    // TODO: the collaboration lab ("Split the network") is not built yet: docs folder for now.
-    { big: '0 lost', text: 'edits across offline tabs', link: 'Read how it merges →', href: DOCS, id: 'merge' },
+    { big: 'A keystroke on screen within one frame', text: 'even at 10,000 blocks', link: 'Run it yourself →', href: '/labs/performance', id: 'perf' },
+    // Backed by the persistence guide and tests/e2e/persistence-audit.spec.ts (reload, tab close, two tabs merged). Modest on purpose:
+    // the guide says a crash is NOT covered, so nothing here says "never lose".
+    { big: 'Saved as you type', text: 'in IndexedDB, merged across tabs', link: 'Read how it saves →', href: '/docs/guides/persistence-and-sync', id: 'merge' },
     { big: '1', text: 'contenteditable, one model', link: 'Open the X-ray →', href: '#try', id: 'xray' },
-    { big: '3,400+', text: 'tests, IME and a11y included', link: 'Read the docs →', href: DOCS, id: 'tests' },
+    // 2,993 unit + 1,487 end-to-end at the 0.1.0 release, rounded down.
+    { big: '4,400+', text: 'tests, IME and a11y included', link: 'Browse the tests →', href: TESTS, id: 'tests' },
   ];
 </script>
 

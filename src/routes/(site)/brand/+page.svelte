@@ -41,7 +41,7 @@
 
   const VOICE = [
     ['We say “we”.', 'A project made by people, not a product talking about itself.'],
-    ['We show the numbers — the bad ones too.', '“88 ms at 10,000 blocks, we’re fixing it” beats “blazing fast”.'],
+    ['We show the numbers — the bad ones too.', '“88 ms at 10,000 blocks, and here is why” beats “blazing fast”.'],
     ['Every claim links to its proof.', 'A test, a lab, a line of code.'],
     ['Short sentences. No superlatives.', 'If it needs “revolutionary”, it isn’t.'],
     ['We tell the story of our mistakes.', 'We got regions wrong once. It’s a chapter.']

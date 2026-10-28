@@ -18,17 +18,8 @@
   /** @type {HTMLElement | undefined} */
   let scope = $state();
 
-  // Nabu draws every link with target="_blank" (RichText). A link to another page of the site, or to a heading of this one, should stay in
-  // the tab and go through the router: without the attribute SvelteKit takes the click (and Ctrl/middle click still opens a tab).
   $effect(() => {
     if (!scope) return;
-    for (const a of scope.querySelectorAll('a.nabu-link')) {
-      const href = a.getAttribute('href') ?? '';
-      if (href.startsWith('#') || (href.startsWith('/') && !href.startsWith('//'))) {
-        a.removeAttribute('target');
-        a.removeAttribute('rel');
-      }
-    }
     scope.setAttribute('data-hydrated', ''); // the page is interactive: the server markup was adopted, not replaced (the e2e specs wait for it)
   });
 </script>

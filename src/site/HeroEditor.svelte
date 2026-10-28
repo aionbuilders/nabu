@@ -105,14 +105,6 @@
     };
   });
 
-  // Name the editor. The component renders a bare contenteditable (no label prop on <NabuEditor>, no engine option), which browsers
-  // already expose as a multi-line textbox: only the accessible name is added. No `role` / `aria-multiline` override, it would
-  // flatten the headings and region seams inside for screen readers.
-  $effect(() => {
-    if (!engine || !scope) return;
-    scope.querySelector('[data-nabu-root]')?.setAttribute('aria-label', 'Try Nabu');
-  });
-
   // E2E builds only: the samples of the shared key-to-next-paint meter (measure.js) on `window.__keySamples`, for the numbers of the report.
   $effect(() => {
     if (import.meta.env.VITE_NABU_E2E !== '1' || !engine || !scope) return;
@@ -155,7 +147,7 @@
         <mods.ui.DragHandle {engine} />
         <mods.ui.CommandInvite {engine} />
         <mods.ui.CommandChooser {engine} />
-        <mods.lib.NabuEditor {engine} />
+        <mods.lib.NabuEditor {engine} label="Try Nabu" />
       {:else}
         <div class="skeleton" aria-hidden="true" data-testid="hero-editor-skeleton">
           <span class="bar" style="width: 52%"></span>

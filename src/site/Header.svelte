@@ -40,8 +40,6 @@
         </nav>
         <span class="spacer"></span>
         <div class="actions">
-          <!-- TODO: open the docs search palette (⌘K). No behaviour yet. -->
-          <button type="button" class="search">Search docs <kbd>⌘K</kbd></button>
           <a class="github" href={GITHUB_URL}><GitHubIcon />GitHub</a>
         </div>
       </div>
@@ -100,7 +98,6 @@
     font-size: var(--site-fs-small);
   }
   nav a,
-  .search,
   .github {
     white-space: nowrap;
   }
@@ -123,23 +120,6 @@
     display: flex;
     align-items: center;
     gap: 20px;
-  }
-  .search {
-    min-height: 38px;
-    padding: 0 12px;
-    border: 1px solid var(--site-border-strong);
-    border-radius: 9px;
-    background: var(--site-surface);
-    color: var(--site-text-muted);
-    font: 500 13px var(--site-font-body);
-    cursor: pointer;
-  }
-  .search:hover {
-    color: var(--site-text);
-  }
-  kbd {
-    font: 500 12px var(--site-font-mono);
-    color: var(--site-text);
   }
   .github {
     display: inline-flex;
@@ -177,9 +157,6 @@
     }
     .actions {
       gap: var(--site-space-3);
-    }
-    .search kbd {
-      display: none;
     }
   }
 
@@ -239,13 +216,6 @@
       gap: var(--site-space-2);
       padding-top: var(--site-space-3);
       border-top: 1px solid var(--site-border);
-    }
-    .search {
-      min-height: 44px;
-      text-align: left;
-    }
-    .search kbd {
-      display: none;
     }
     .github {
       display: flex;

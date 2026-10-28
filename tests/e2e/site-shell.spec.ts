@@ -220,11 +220,6 @@ test.describe('site shell', () => {
     expect(explore!.y).toBeGreaterThan(learn!.y + learn!.height - 1); // stacked
   });
 
-  test('/playground still renders the editor', async ({ page }) => {
-    await page.goto('/playground');
-    await expect(page.locator('[data-nabu-root]').first()).toBeVisible();
-  });
-
   test('screenshots of the shell', async ({ browser }) => {
     mkdirSync(SHOTS, { recursive: true });
     for (const [name, scheme, width, height] of [

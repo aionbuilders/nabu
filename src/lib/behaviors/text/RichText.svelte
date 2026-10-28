@@ -1,5 +1,6 @@
 <script>
     import { sanitizeUrl } from '../../utils/html.js';
+    import { linkAttributes } from '../../utils/links.js';
 
     /** @type {{ delta: import('loro-crdt').Delta<string>[] }} */
     let { delta } = $props();
@@ -14,6 +15,9 @@
             attrs.strikethrough && 'nabu-strikethrough',
         ].filter(Boolean).join(' ');
     }
+
+    // Only a link to ANOTHER site opens in a new tab; the origin is read once (not known while rendering on the server: see links.js).
+    const origin = typeof location === 'undefined' ? undefined : location.origin;
 
     const segments = $derived(delta.length ? delta : [{ insert: '\n' }]);
 
@@ -30,7 +34,8 @@
     {@const link = /** @type {any} */ (op.attributes)?.link}
     {@const href = link ? sanitizeUrl(link, { kind: 'link' }) : null}
     {#if href !== null}
-        <a {href} class="nabu-link {getClasses(op.attributes ?? {})}" target="_blank" rel="noopener noreferrer">{op.insert}</a>
+        {@const attrs = linkAttributes(href, origin)}
+        <a {href} class="nabu-link {getClasses(op.attributes ?? {})}" target={attrs.target} rel={attrs.rel}>{op.insert}</a>
     {:else if op.attributes && Object.values(op.attributes).some(Boolean)}
         <span class={getClasses(op.attributes)}>{op.insert}</span>
     {:else}

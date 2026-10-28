@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-
-# Replace with your final domain
-Sitemap: https://nabu.aion.builders/sitemap.xml
