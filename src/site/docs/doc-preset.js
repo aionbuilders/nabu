@@ -63,5 +63,6 @@ export const exportSnapshot = (engine) => toBase64(engine.doc.export({ mode: 'sh
  * The engine of a page, built SYNCHRONOUSLY from its snapshot: the server render and the hydration in the browser both call this, get the
  * same tree with the same block ids, and so draw the same markup (an engine filled asynchronously could not be hydrated).
  * @param {string} snapshot from `exportSnapshot`
+ * @param {string} [lang] the language of the text (`lang` of the editor element): 'en', 'fr' for the one page that has a French text
  */
-export const loadDocEngine = (snapshot) => createEditor({ preset: docPreset(), lang: 'en', readonly: true, snapshot: fromBase64(snapshot) });
+export const loadDocEngine = (snapshot, lang = 'en') => createEditor({ preset: docPreset(), lang, readonly: true, snapshot: fromBase64(snapshot) });

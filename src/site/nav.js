@@ -33,6 +33,7 @@ export const FOOTER_COLUMNS = [
     title: 'Project',
     links: [
       { href: '/changelog', label: 'Changelog' },
+      { href: '/architecture/how-it-is-made', label: "How it's made" },
       { href: '/brand', label: 'Brand' },
       { href: GITHUB_URL, label: 'GitHub' },
       { href: LICENSE_URL, label: 'License' }

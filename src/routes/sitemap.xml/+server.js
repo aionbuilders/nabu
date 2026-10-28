@@ -10,7 +10,7 @@ import { adrHref } from '../../site/architecture/adr.js';
 export const prerender = true;
 
 /** Pages that are neither generated nor listed in a model. */
-const STATIC_PAGES = ['/', '/docs', '/changelog', '/api', '/api/internals', '/labs', '/labs/performance', '/architecture', '/architecture/decisions', '/architecture/limits', '/architecture/others', '/brand'];
+const STATIC_PAGES = ['/', '/docs', '/changelog', '/api', '/api/internals', '/labs', '/labs/performance', '/architecture', '/architecture/decisions', '/architecture/limits', '/architecture/others', '/architecture/how-it-is-made', '/brand'];
 
 /** @param {string} path */
 const priority = (path) => {

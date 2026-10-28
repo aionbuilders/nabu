@@ -1,0 +1,137 @@
+{
+  "baseline": {
+    "id": "lxrwvwpx",
+    "commit": "0bc7921c",
+    "subject": "feat: beta milestone (0.1.0-beta.0)",
+    "date": "2026-06-11",
+    "committedOn": "2026-06-14",
+    "who": "C"
+  },
+  "boundary": "2026-10-01",
+  "total": 153,
+  "eras": {
+    "before": {
+      "total": 59,
+      "k": 50,
+      "c": 9,
+      "claudeAuthoredUnsigned": 8,
+      "from": "2026-02-18",
+      "to": "2026-06-11"
+    },
+    "since": {
+      "total": 94,
+      "k": 0,
+      "c": 94,
+      "claudeAuthoredUnsigned": 0,
+      "from": "2026-10-08",
+      "to": "2026-10-28"
+    }
+  },
+  "gap": {
+    "label": "July, August, September",
+    "commits": 0
+  },
+  "curated": [
+    {
+      "id": "vmuvmktn",
+      "date": "2026-02-18",
+      "who": "K",
+      "subject": "Init + Base Relation Blocks + Loro System"
+    },
+    {
+      "id": "lxxtlswo",
+      "date": "2026-02-19",
+      "who": "K",
+      "subject": "feat(engine): complete Phase 1 - Single CE, Selection Bridge & Structural Input"
+    },
+    {
+      "id": "swomkqqm",
+      "date": "2026-02-24",
+      "who": "K",
+      "subject": "fix(selection): solve cursor jumping by synchronizing SvelteSelection with DOM on mutation"
+    },
+    {
+      "id": "qutkzyky",
+      "date": "2026-02-25",
+      "who": "K",
+      "subject": "feat(list): implement nested lists with dynamic indentation and hoist/carry logic"
+    },
+    {
+      "id": "txunwtzy",
+      "date": "2026-03-07",
+      "who": "K",
+      "subject": "feat: implement Loro-backed undo/redo system"
+    },
+    {
+      "id": "lunuyntt",
+      "date": "2026-03-12",
+      "who": "K",
+      "subject": "prepare alpha publication + add presets system"
+    },
+    {
+      "id": "mumyuttw",
+      "date": "2026-03-18",
+      "who": "K",
+      "subject": "feat: implement HtmlPasteExtension with decentralized block architecture (3.5.7)"
+    },
+    {
+      "id": "lxrwvwpx",
+      "date": "2026-06-11",
+      "who": "C",
+      "subject": "feat: beta milestone (0.1.0-beta.0)"
+    },
+    {
+      "id": "zznluswv",
+      "date": "2026-10-18",
+      "who": "C",
+      "subject": "fix(security): escape clipboard HTML and sanitize URLs everywhere (P-42)"
+    },
+    {
+      "id": "ppknsxml",
+      "date": "2026-10-19",
+      "who": "C",
+      "subject": "feat(markdown): CommonMark/GFM inline parser for paste and import (P-48)"
+    },
+    {
+      "id": "oxrqtnku",
+      "date": "2026-10-23",
+      "who": "C",
+      "subject": "refactor!(regions): regions are containers in the Loro tree (ADR 018, lot A)"
+    },
+    {
+      "id": "prywxnst",
+      "date": "2026-10-26",
+      "who": "C",
+      "subject": "perf(core): batch tree events (one root refresh per batch), O(1) paragraph guard, scoped list normalizer (P-104..P-106)"
+    },
+    {
+      "id": "qoytxytv",
+      "date": "2026-10-27",
+      "who": "C",
+      "subject": "feat(site): website shell (direction B): tokens, self-hosted fonts, header, footer, theme toggle, mobile menu, stub pages; old home moved to /playground"
+    },
+    {
+      "id": "ytltxpwu",
+      "date": "2026-10-27",
+      "who": "C",
+      "subject": "fix(selection): several editors on one page no longer steal each other's selection"
+    }
+  ],
+  "shares": {
+    "files": {
+      "baseline": 108,
+      "today": 163,
+      "shared": 94
+    },
+    "lines": {
+      "baseline": 10014,
+      "today": 25409,
+      "kept": 6456
+    },
+    "layers": {
+      "before": 25,
+      "since": 75
+    },
+    "keptOfBaseline": 64
+  }
+}

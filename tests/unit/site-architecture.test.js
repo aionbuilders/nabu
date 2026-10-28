@@ -20,7 +20,7 @@ describe('the status of a decision record', () => {
   it('reads accepted, proposed and superseded from the Status text', () => {
     expect(parseStatus('Accepted')).toEqual({ status: 'accepted', supersededBy: null });
     expect(parseStatus('Accepted (2026-10-20, validated by the owner)').status).toBe('accepted');
-    expect(parseStatus('Proposed — **deferred** (after the beta critical path).')).toEqual({ status: 'proposed', supersededBy: null });
+    expect(parseStatus('Proposed: **deferred** (after the beta critical path).')).toEqual({ status: 'proposed', supersededBy: null });
     expect(parseStatus('Superseded by ADR 018')).toEqual({ status: 'superseded', supersededBy: 18 });
     expect(parseStatus('superseded by ADR 5')).toEqual({ status: 'superseded', supersededBy: 5 });
     expect(parseStatus('Rejected').status).toBe('unknown');
@@ -216,11 +216,11 @@ describe('the story', () => {
 });
 
 describe('the data of the landing', () => {
-  it('has the six answers, the seven chapters and the two cards', () => {
+  it('has the six answers, the seven chapters and the three cards', () => {
     expect(SWITCH.items.filter((i) => i.verdict === 'yes')).toHaveLength(3);
     expect(SWITCH.items.filter((i) => i.verdict === 'wait')).toHaveLength(3);
     expect(CHAPTERS_FALLBACK.map((c) => c.n)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(Object.values(ENTRY_CARDS).map((c) => c.href)).toEqual(['/architecture/limits', '/architecture/decisions']);
+    expect(Object.values(ENTRY_CARDS).map((c) => c.href)).toEqual(['/architecture/limits', '/architecture/decisions', '/architecture/how-it-is-made']);
     expect(STORY_LINKS.map((l) => l.href)).toEqual(['/architecture/limits', '/architecture/decisions']);
   });
   it('points the chapters at records that exist, and names the records for the timeline', () => {

@@ -7,7 +7,7 @@ import { REPO_URL } from '../docs/content.js';
 
 export const ARCH_TITLE = 'How Nabu works, and why it works that way.';
 export const ARCH_LEAD =
-  'Seven short chapters, written by the people who made the choices — including the ones we got wrong. Read them in order in about twenty minutes, or jump to what worries you.';
+  'Seven short chapters, written by the people who made the choices, including the ones we got wrong. Read them in order in about twenty minutes, or jump to what worries you.';
 export const ARCH_DESCRIPTION =
   'How Nabu works and why: seven short chapters on the single contenteditable, the Loro model, the life of a keystroke, the selection, commands, persistence and regions, with the limits and every decision record.';
 
@@ -52,6 +52,12 @@ export const ENTRY_CARDS = {
     title: 'Decision records',
     blurb: 'Every architectural decision, as it was taken: context, decision, consequences, status.',
     href: '/architecture/decisions',
+  },
+  made: {
+    eyebrow: 'The people',
+    title: 'How Nabu is made',
+    blurb: "One person and an AI: what each layer wrote, the real commit log, and Killian's own words about it.",
+    href: '/architecture/how-it-is-made',
   },
 };
 

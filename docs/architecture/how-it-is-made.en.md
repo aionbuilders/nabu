@@ -1,0 +1,13 @@
+These past few weeks, this whole project has made me think a lot. I started Nabu alone. I explored its architecture, then its engine, with my own head, my little brain. I wrote a lot of it by hand (with some help from Claude on a few features back in the spring, like bold and italic, or autosave). I chose object-oriented programming, I came up with the Block and MegaBlock system, I built the original event bus. I chose Loro CRDT and taught myself how to use it. I really enjoyed all of it! And I know that the shape Nabu has today was set by the choices I made back then. That wasn't the AI.
+
+Today, things are different. Without AI, without Claude, I would never have done all this in so little time. And at a time when my creativity is kind of dead, I probably wouldn't have such a nice website either, even if in places it feels a bit AI, haha!
+
+When I picked the beta back up, because I needed it to move forward for some personal projects, I told myself I'd just ask Claude to do the most tedious part: the test suites. If there was one job to give it, that was it! Little by little, so many problems got "batch-resolved" that I started throwing instructions at it, supervising, steering the changes. Claude had picked up the way I code, and it imitated it: that was the holy grail for moving insanely fast. So I kept going.
+
+Do I feel guilty for letting Claude code in my place like that? You have no idea! But guilty of what, exactly? I mean, the beta is out, it works, it's fast, I can keep moving quickly on it. Next stop: the RC! Isn't that the best of all worlds?
+
+I think what I feel guilty about is feeling like an impostor… Losing the feeling of having crafted all of this entirely by hand. Does that make me a worse developer? Lazy? Someone who doesn't belong in the amazing world of crafters and builders? These are the questions that keep nagging at me, and honestly, I don't have the answers.
+
+What I do know is that the day I need to add a feature by hand, or make new architecture decisions, I'll still know how. In fact, I did it during these weeks: when Claude went in the wrong direction on regions, I'm the one who stopped it and redrew the model. The day I decide I can improve the current site and strip out everything that makes it look generic-AI, I'll still know how, and I want to. For now, I just want to have fun, ship the tools I need, and someday, when my head is less full, go back to purely creative craft and love it from start to finish.
+
+Until then, one thing: Nabu's logo is me. Not Claude, haha! Okay, fine: it suggested a few fonts, I picked Syne, and it helped place the wordmark. But the logomark is my own design, made in Affinity, and I'm proud of it!

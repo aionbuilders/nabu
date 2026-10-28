@@ -12,6 +12,7 @@
 		"prepack": "bunx svelte-kit sync && bunx svelte-package && bunx publint",
 		"check": "npm run api:model:ensure && svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json --watch",
+		"history": "node scripts/history.js",
 		"test:unit": "vitest run",
 		"test:unit:watch": "vitest",
 		"build:e2e": "npm run api:model && VITE_NABU_E2E=1 vite build",

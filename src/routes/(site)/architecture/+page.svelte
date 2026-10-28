@@ -67,6 +67,11 @@
       <h2>{ENTRY_CARDS.records.title}</h2>
       <span class="blurb">{ENTRY_CARDS.records.blurb} {records}</span>
     </a>
+    <a class="card" href={ENTRY_CARDS.made.href}>
+      <span class="label eyebrow">{ENTRY_CARDS.made.eyebrow.toUpperCase()}</span>
+      <h2>{ENTRY_CARDS.made.title}</h2>
+      <span class="blurb">{ENTRY_CARDS.made.blurb}</span>
+    </a>
   </section>
 </div>
 
@@ -229,7 +234,7 @@
 
   .entries {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
     gap: 20px;
     padding-block: var(--site-space-12) var(--site-space-16);
   }

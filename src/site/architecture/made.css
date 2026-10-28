@@ -1,0 +1,58 @@
+/*
+ * "How Nabu is made" (/architecture/how-it-is-made): a typographic page. Hairline rules, a serif (Newsreader, from @fontsource like the other
+ * fonts) for the human words, mono for the commits, no cards. Only `--site-*` / `--arch-*` tokens; the two layers of the figure are the
+ * site's blue and coral mixed into the page colour, so they follow the dark / light choice.
+ *
+ *   --made-top     the layer written since October (blue)
+ *   --made-bottom  the layer that predates it (coral)
+ * The light values appear twice (explicit choice, and system preference when no choice is stored), like tokens.css: keep them identical.
+ */
+
+.site {
+  --made-serif: Newsreader, Georgia, 'Times New Roman', serif;
+  --made-top: color-mix(in srgb, var(--site-peer) 28%, var(--site-bg));
+  --made-bottom: color-mix(in srgb, var(--site-accent) 34%, var(--site-bg));
+  --made-rule: color-mix(in srgb, var(--site-text) 5%, transparent);
+  --made-rule-strong: color-mix(in srgb, var(--site-text) 9%, transparent);
+}
+:root[data-theme='light'] .site {
+  --made-top: color-mix(in srgb, var(--site-peer) 20%, var(--site-bg));
+  --made-bottom: color-mix(in srgb, var(--site-accent) 20%, var(--site-bg));
+  --made-rule: color-mix(in srgb, var(--site-text) 6%, transparent);
+  --made-rule-strong: color-mix(in srgb, var(--site-text) 11%, transparent);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .site {
+    --made-top: color-mix(in srgb, var(--site-peer) 20%, var(--site-bg));
+    --made-bottom: color-mix(in srgb, var(--site-accent) 20%, var(--site-bg));
+    --made-rule: color-mix(in srgb, var(--site-text) 6%, transparent);
+    --made-rule-strong: color-mix(in srgb, var(--site-text) 11%, transparent);
+  }
+}
+
+/* ── The essay, set as a letter: the Nabu document (read-only) in the serif ───────────────────────────────────────────────────── */
+
+.site .made-essay .doc-article.nb-theme-atelier {
+  --nb-font-text: var(--made-serif);
+  --atelier-font-size: 22px;
+}
+.site .made-essay .doc-article .nabu-editor[data-nabu-root] {
+  font-family: var(--made-serif);
+  font-size: 22px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+.site .made-essay .doc-article .nabu-editor [data-block-type='paragraph'] {
+  max-width: 640px;
+  margin: 0 0 1.1em;
+  color: var(--site-text);
+  font-family: var(--made-serif);
+  font-size: 22px;
+  line-height: 1.65;
+}
+.site .made-essay .doc-article .nabu-editor [data-block-type='paragraph']:last-child { margin-bottom: 0; }
+@media (max-width: 759.98px) {
+  .site .made-essay .doc-article.nb-theme-atelier { --atelier-font-size: 20px; }
+  .site .made-essay .doc-article .nabu-editor[data-nabu-root],
+  .site .made-essay .doc-article .nabu-editor [data-block-type='paragraph'] { font-size: 20px; line-height: 1.6; }
+}
