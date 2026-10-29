@@ -18,6 +18,7 @@ import { moveBlocks } from './move.js';
 import { closestWithin } from '../utils/dom-scope.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset, revealFocus } from './undo-selection.js';
 import { LARGE_DOC } from './chunks.js';
+import { markAtCaret } from '../behaviors/text/mark-edges.js';
 import { swapEmptyBlocks, restoreEmptyBlocks } from '../utils/composition.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
 
@@ -83,22 +84,14 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 */
 
 /**
- * Whether the character immediately before `pos` in a text behavior carries `name`.
- * Used to decide the toggle direction for stored marks.
+ * Whether typing at the collapsed caret `pos` of a text behavior would carry the mark `name`: the Nabu mark-edge rule (the character
+ * before AND the one after have it, with the same value), see mark-edges.js. Decides the direction of the stored-mark toggle
+ * (Ctrl+B at a caret): at the end of a bold word typing is plain, so Ctrl+B arms bold ON.
  * @param {any} behavior @param {number} pos @param {string} name
  * @returns {boolean}
  */
 function inheritedMarkAt(behavior, pos, name) {
-    if (pos <= 0) return false;
-    const delta = behavior.delta;
-    let offset = 0;
-    for (const op of delta) {
-        if (typeof op.insert !== 'string') continue;
-        const end = offset + op.insert.length;
-        if (pos <= end) return !!(op.attributes && op.attributes[name]);
-        offset = end;
-    }
-    return false;
+    return markAtCaret(behavior.delta, pos, name) !== undefined;
 }
 
 /**

@@ -360,6 +360,82 @@ test.describe('Text editing & marks', () => {
     expect(await textWith(page, 'bold')).toBe('');
   });
 
+  // Ctrl+B at a caret arms what typing there would NOT produce already: at the edge of a marked word the typed text is plain, so the
+  // first press arms the mark ON; inside the word the typed text keeps it, so the first press arms it OFF.
+  for (const [mark, press1] of [['bold', bold], ['italic', italic], ['code', code]] as const) {
+    test.describe(`stored ${mark}: Ctrl+B at a caret follows what typing would produce`, () => {
+      const caretAt = async (page: Page, n: number) => { await press(page, 'Home'); for (let i = 0; i < n; i++) await page.keyboard.press('ArrowRight'); };
+      /** 'ab cd ef' with "cd" marked, the caret at `n`, past the undo merge window so that the typing is a step of its own. */
+      const setup = async (page: Page, n: number, text = 'ab cd ef') => {
+        await typeText(page, text);
+        await selectRange(page, 3, 2);
+        await press1(page);
+        await caretAt(page, n);
+        await page.waitForTimeout(1100);
+      };
+
+      test('P0 · at the end of the word: ON, the typed text carries it, one undo removes it', async ({ page }) => {
+        await setup(page, 5);
+        await press1(page);
+        await typeText(page, 'X');
+        expect(await textWith(page, mark)).toBe('cdX');
+        await undo(page);
+        expect(await fullText(page)).toBe('ab cd ef');
+        expect(await textWith(page, mark)).toBe('cd');
+      });
+
+      test('P0 · at the start of the word: ON', async ({ page }) => {
+        await setup(page, 3);
+        await press1(page);
+        await typeText(page, 'X');
+        expect(await textWith(page, mark)).toBe('Xcd');
+        await undo(page);
+        expect(await fullText(page)).toBe('ab cd ef');
+        expect(await textWith(page, mark)).toBe('cd');
+      });
+
+      test('P0 · inside the word: OFF, the typed text is plain, one undo restores the word', async ({ page }) => {
+        await setup(page, 4);
+        await press1(page);
+        await typeText(page, 'X');
+        expect(await textWith(page, mark)).toBe('cd');
+        expect(await fullText(page)).toBe('ab cXd ef');
+        await undo(page);
+        expect(await fullText(page)).toBe('ab cd ef');
+        expect(await textWith(page, mark)).toBe('cd');
+      });
+
+      test('P0 · twice at the end of the word: plain again', async ({ page }) => {
+        await setup(page, 5);
+        await press1(page);
+        await press1(page);
+        await typeText(page, 'X');
+        expect(await textWith(page, mark)).toBe('cd');
+        expect(await fullText(page)).toBe('ab cdX ef');
+      });
+
+      test('P0 · at the end of the paragraph, right after marked text: ON', async ({ page }) => {
+        await typeText(page, 'ab cd');
+        await selectRange(page, 3, 2);
+        await press1(page);
+        await press(page, 'End');
+        await press1(page);
+        await typeText(page, 'X');
+        expect(await textWith(page, mark)).toBe('cdX');
+      });
+    });
+  }
+
+  test('P1 · a range selection is not concerned: Ctrl+B still toggles the range and arms nothing', async ({ page }) => {
+    await typeText(page, 'ab cd ef');
+    await selectRange(page, 3, 2);
+    await bold(page);
+    expect(await textWith(page, 'bold')).toBe('cd');
+    await bold(page);
+    expect(await textWith(page, 'bold')).toBe('');
+    expect(await page.evaluate(() => (window as any).nabu.storedMarks)).toBeNull();
+  });
+
   // ── C. Links ──────────────────────────────────────────────────────────────
 
   test('P0 · C1 · link:set links exactly the selected word and renders an <a>', async ({ page }) => {

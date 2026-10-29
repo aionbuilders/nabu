@@ -11,7 +11,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { LoroDoc } from 'loro-crdt';
 import { createFullEditor } from '#lib/index.js';
 import { readDelta } from '#lib/utils/delta.js';
+import { markAtCaret } from '#lib/behaviors/text/mark-edges.js';
 import { rng } from './helpers/rng.js';
+import { setCaret } from './helpers/typing.js';
 
 const STYLES = { bold: { expand: 'none' }, italic: { expand: 'none' }, underline: { expand: 'none' }, code: { expand: 'none' }, strikethrough: { expand: 'none' }, link: { expand: 'none' } };
 const flush = async () => { await Promise.resolve(); await new Promise((r) => setTimeout(r, 0)); };
@@ -259,4 +261,130 @@ describe('mark edges (fuzz)', () => {
     // the rule is Loro's own result for a mark-only document: nothing to correct there
     expect(differing, 'Loro itself disagrees with the rule on a mark-only document').toBe(0);
   }, 120000);
+});
+
+// ── Ctrl+B at a caret: "active" is what typing there would produce ──────────
+
+describe('stored marks: Ctrl+B at a collapsed caret reads the mark-edge rule', () => {
+  const NAMES = ['bold', 'italic', 'code', 'underline', 'strikethrough'];
+  // 'ab cd': the word "cd" is [3, 5)
+  const TEXT = 'ab cd';
+
+  async function arrange(name, text = TEXT, pos = 0) {
+    const ctx = await editorWith(text);
+    ctx.behavior.applyMark(name, true, sel(3, 5));
+    await ctx.engine.commit();
+    setCaret(ctx.engine, ctx.block, pos);
+    ctx.engine.undoManager.clear();
+    return ctx;
+  }
+  const marked = (behavior, name) => marksPerChar(readDelta(behavior.container)).map((m) => (m[name] ? 1 : 0)).join('');
+  const toggle = (engine, name, times = 1) => { for (let i = 0; i < times; i++) engine.toggleStoredMark(name); };
+
+  it('markAtCaret: the value typing would carry, from a delta', () => {
+    const delta = [{ insert: 'ab ' }, { insert: 'cd', attributes: { bold: true } }, { insert: ' ef' }];
+    const at = (pos) => markAtCaret(delta, pos, 'bold');
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map(at)).toEqual([undefined, undefined, undefined, undefined, true, undefined, undefined, undefined, undefined]);
+    // a link compares by value
+    const links = [{ insert: 'ab', attributes: { link: 'x' } }, { insert: 'cd', attributes: { link: 'y' } }, { insert: 'ef', attributes: { link: 'y' } }];
+    expect(markAtCaret(links, 2, 'link')).toBeUndefined();
+    expect(markAtCaret(links, 4, 'link')).toBe('y');
+    // the end of the text and an empty text
+    expect(markAtCaret([{ insert: 'ab', attributes: { bold: true } }], 2, 'bold')).toBeUndefined();
+    expect(markAtCaret([], 0, 'bold')).toBeUndefined();
+  });
+
+  for (const name of NAMES) {
+    describe(name, () => {
+      it('at the end of the word, Ctrl+B arms the mark ON: the typed text carries it; one undo removes it', async () => {
+        const { engine, behavior } = await arrange(name, 'ab cd ef', 5);
+        toggle(engine, name);
+        expect(engine.storedMarks).toEqual({ [name]: true });
+        type(behavior, 5);
+        await flush();
+        expect(marked(behavior, name)).toBe('000111000'); // "cdX" (the word is [3, 5) in 'ab cd ef')
+        engine.undo(); await engine.commit(); await flush();
+        expect(behavior.text).toBe('ab cd ef');
+        expect(marked(behavior, name)).toBe('00011000');
+      });
+
+      it('at the start of the word, Ctrl+B arms it ON too', async () => {
+        const { engine, behavior } = await arrange(name, 'ab cd ef', 3);
+        toggle(engine, name);
+        expect(engine.storedMarks).toEqual({ [name]: true });
+        type(behavior, 3);
+        await flush();
+        expect(marked(behavior, name)).toBe('000111000');
+        engine.undo(); await engine.commit(); await flush();
+        expect(behavior.text).toBe('ab cd ef');
+        expect(marked(behavior, name)).toBe('00011000');
+      });
+
+      it('inside the word, Ctrl+B arms it OFF: the typed text is plain; one undo restores the word', async () => {
+        const { engine, behavior } = await arrange(name, 'ab cd ef', 4);
+        toggle(engine, name);
+        expect(engine.storedMarks).toEqual({ [name]: false });
+        type(behavior, 4);
+        await flush();
+        expect(marked(behavior, name)).toBe('000101000');
+        engine.undo(); await engine.commit(); await flush();
+        expect(behavior.text).toBe('ab cd ef');
+        expect(marked(behavior, name)).toBe('00011000');
+      });
+
+      it('Ctrl+B twice at the end of the word: back to plain', async () => {
+        const { engine, behavior } = await arrange(name, 'ab cd ef', 5);
+        toggle(engine, name, 2);
+        expect(engine.storedMarks).toEqual({ [name]: false });
+        type(behavior, 5);
+        await flush();
+        expect(marked(behavior, name)).toBe('000110000');
+        engine.undo(); await engine.commit(); await flush();
+        expect(behavior.text).toBe('ab cd ef');
+      });
+
+      it('at the end of the paragraph after marked text, Ctrl+B arms it ON', async () => {
+        const { engine, behavior } = await arrange(name, 'ab cd', 5);
+        toggle(engine, name);
+        expect(engine.storedMarks).toEqual({ [name]: true });
+        type(behavior, 5);
+        await flush();
+        expect(marked(behavior, name)).toBe('000111');
+        engine.undo(); await engine.commit(); await flush();
+        expect(behavior.text).toBe('ab cd');
+        expect(marked(behavior, name)).toBe('00011');
+      });
+    });
+  }
+
+  it('an already armed mark flips as before, whatever is around the caret', async () => {
+    const { engine } = await arrange('bold', 'ab cd ef', 4);
+    engine.storedMarks = { bold: true };
+    toggle(engine, 'bold');
+    expect(engine.storedMarks).toEqual({ bold: false });
+    toggle(engine, 'bold');
+    expect(engine.storedMarks).toEqual({ bold: true });
+    // other names are read from the text, and the ones already armed are kept
+    toggle(engine, 'italic');
+    expect(engine.storedMarks).toEqual({ bold: true, italic: true });
+  });
+
+  it('the exec path (nabu.exec("bold") / "mark:bold") is the same toggle; a range selection is not concerned', async () => {
+    const { engine, behavior } = await arrange('bold', 'ab cd ef', 5);
+    await engine.exec('bold');
+    expect(engine.storedMarks).toEqual({ bold: true });
+    engine.storedMarks = null;
+    await engine.exec('mark:toggle', { mark: 'bold' });
+    expect(engine.storedMarks).toEqual({ bold: true });
+    // a range: the toggle applies / removes the mark on the range, nothing is armed
+    engine.storedMarks = null;
+    const range = { from: 0, to: 5, isCollapsed: false, direction: 'none' };
+    behavior.toggleMark('bold', true, range); // "ab cd" is not all bold: applies
+    await engine.commit();
+    expect(marked(behavior, 'bold')).toBe('11111000');
+    behavior.toggleMark('bold', true, range); // all bold: removes
+    await engine.commit();
+    expect(marked(behavior, 'bold')).toBe('00000000');
+    expect(engine.storedMarks).toBeNull();
+  });
 });
