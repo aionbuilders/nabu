@@ -135,6 +135,10 @@ Everything is on the website: **[nabu.aion.builders/docs](https://nabu.aion.buil
 
 In the repository: [architecture decisions](docs/adr), [design notes](docs/design), [tests](tests/README.md).
 
+## Contributing
+
+Bug reports, fixes, docs and tests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Questions go to `#help` on the [Discord](https://discord.gg/gKkyqRRuWe).
+
 ## License
 
 MIT, as declared in `package.json`.
