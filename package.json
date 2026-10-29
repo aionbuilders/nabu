@@ -1,6 +1,6 @@
 {
 	"name": "@aionbuilders/nabu",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"scripts": {
 		"dev": "vite dev",
 		"predev": "npm run api:model:ensure",

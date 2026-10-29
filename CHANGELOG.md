@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.1.2 (2026-10-29)
+
+Fixes from the first days of the beta: rich text that stayed split after removing a mark, mark edges, Ctrl+B at the edge of a word, and code block editing. No API change.
+
 ### Fixed
 - **A mark removed over exactly the range it was applied to left the text in two pieces.** Bolding `[18, 21)` then un-bolding `[18, 21)` gave `The ford is upstre` + `am.` in the JSON export, the HTML and the DOM (two text nodes: a spellcheck squiggle, a double-click or a word delete could stop at the seam). The cause is in Loro: `LoroText.toDelta()` keeps the split in that case (a wider unmark merges it), and it is stored in snapshots. Every read of a text delta now goes through one canonical form (`readDelta`: adjacent runs with the same marks are merged, an off mark is an absent mark), so documents saved with the split are read right too. Covered by `tests/unit/delta.test.js`, `tests/unit/marks-canonical.test.js` (seeded fuzz) and `tests/e2e/marks-canonical.spec.ts`.
 - **Code block editing.** The slash menu no longer opens inside a code block (`/` is text there, and Enter after it turned the block into a list). Tab and Shift+Tab indent and outdent every line of a multi-line selection and keep the selection; Shift+Tab also removes a tab character. Enter keeps the indentation of the line. A long line scrolls to keep the caret visible. Ctrl/Cmd+A selects the code first, the whole document on the second press. ArrowUp on the first line of a code block that starts the document creates a paragraph before it, as ArrowDown already did after it. Pasted `\r\n` and `\r` line endings become `\n`. Covered by `tests/e2e/code-editing.spec.ts` and `tests/unit/code-indent.test.js`.
