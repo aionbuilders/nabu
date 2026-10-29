@@ -7,6 +7,7 @@ import { tick } from "svelte";
 import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 import { escapeMarkdownText, escapeBlockStart } from "./markdown-syntax.js";
 import { countWords, wordDeleteRange } from "../../utils/words.js";
+import { readDelta } from "../../utils/delta.js";
 import { detectPlatform } from "../../utils/keys.js";
 
 /**
@@ -198,10 +199,10 @@ export class TextBehavior {
         /** @public */
         this.text = $state(this.container.toString());
         /** @public */
-        this.delta = $state(this.container.toDelta());
+        this.delta = $state(readDelta(this.container));
         this.container.subscribe(() => {
             this.text = this.container.toString();
-            this.delta = this.container.toDelta();
+            this.delta = readDelta(this.container);
             this.nabu.noteTextChange?.(this.block); // a selection end in this block must follow the edit (P-109)
         });
     }
@@ -666,7 +667,7 @@ export class TextBehavior {
      */
     #marksAt(index) {
         let offset = 0;
-        for (const op of this.container.toDelta()) {
+        for (const op of readDelta(this.container)) {
             if (typeof op.insert !== 'string') continue;
             const end = offset + op.insert.length;
             if (index >= offset && index < end) return op.attributes ? { ...op.attributes } : null;
@@ -888,7 +889,7 @@ export class TextBehavior {
      */
     isMarkActive(markName, sel) {
         if (!sel || sel.isCollapsed) return false;
-        const delta = this.container.toDelta();
+        const delta = readDelta(this.container);
         let offset = 0;
         for (const op of delta) {
             if (typeof op.insert !== 'string') continue;
@@ -963,7 +964,7 @@ export class TextBehavior {
         if (!otherBehavior || !(otherBehavior instanceof TextBehavior)) return false;
         this.applyDelta([
             { retain: this.container.length },
-            ...otherBehavior.container.toDelta()
+            ...readDelta(otherBehavior.container)
         ]);
         // other.destroy();
         return true;

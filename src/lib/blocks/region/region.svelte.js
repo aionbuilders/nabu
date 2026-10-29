@@ -6,6 +6,7 @@ import { resolveConfig, fieldSpec, validateField } from "./types.js";
 import { scanRegion, parseRegionComment, parseRegionHtml, sanitizeFieldDelta, levelOfType } from "./format.js";
 import { regionBlockToMarkdown, regionBlockToHtml, closingNeeded, followOf, regionTypeOf } from "./serialize.js";
 import { createMessages } from "./messages.js";
+import { readDelta } from "../../utils/delta.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -252,7 +253,7 @@ export class RegionBlock extends MegaBlock {
         for (const key of map.keys()) {
             if (key === 'title') continue;
             const v = map.get(key);
-            out[key] = isContainer(v) ? (v.kind() === 'Text' ? /** @type {any} */ (v).toDelta() : v.toJSON()) : v;
+            out[key] = isContainer(v) ? (v.kind() === 'Text' ? readDelta(/** @type {any} */ (v)) : v.toJSON()) : v;
         }
         return out;
     }
@@ -280,7 +281,7 @@ export class RegionBlock extends MegaBlock {
         if (text.length) text.delete(0, text.length);
         if (value) text.insert(0, oneLine(value));
         this.behavior.text = text.toString();
-        this.behavior.delta = text.toDelta();
+        this.behavior.delta = readDelta(text);
     }
 
     /**

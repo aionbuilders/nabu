@@ -3,6 +3,7 @@ import { TextBehavior } from "../../../behaviors/text";
 import { List } from "../list.svelte.js";
 import { ListItem } from "../list-item.svelte.js";
 import { stepBack } from "../step-back.js";
+import { readDelta } from "../../../utils/delta.js";
 
 /**
  * @import { Nabu, Block } from "../..";
@@ -77,7 +78,7 @@ export const onBeforeInput = (nabu, event, block) => {
         b.delete({ index: 0, length: prefixLength + 1 });
 
         // Capture remaining text delta (everything after the prefix)
-        const delta = b.container.toDelta();
+        const delta = readDelta(b.container);
 
         // Get current tree position from live Loro state (pre-commit)
         const parentNode = block.node.parent();

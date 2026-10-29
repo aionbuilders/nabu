@@ -17,6 +17,7 @@ import { tick } from "svelte";
 import { Regions } from "./regions.svelte.js";
 import { createRegion } from "./insert.js";
 import { hasText, isBodyTextBlock, mergePlan, neighbourOf, siblingsOf } from "./facts.js";
+import { readDelta } from "../../utils/delta.js";
 
 /** @typedef {{ block: Block, offset: number }} Caret */
 
@@ -248,7 +249,7 @@ export async function unwrapRegion(nabu, region, caret = null) {
     /** @type {NabuNode} */
     let anchor = node;
     if (region.block.title.length) {
-        const paragraph = createDefaultBlock(nabu, { delta: region.block.container.toDelta() }, parentIdOf(node), node.index() ?? 0);
+        const paragraph = createDefaultBlock(nabu, { delta: readDelta(region.block.container) }, parentIdOf(node), node.index() ?? 0);
         anchor = paragraph.node;
         if (caret && caret.block === region.block) landing = { block: paragraph, offset: caret.offset };
     }

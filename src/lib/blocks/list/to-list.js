@@ -10,6 +10,7 @@
 import { List } from "./list.svelte.js";
 import { ListItem } from "./list-item.svelte.js";
 import { convertItemToListType } from "./convert.js";
+import { readDelta } from "../../utils/delta.js";
 
 /**
  * @param {Nabu} nabu
@@ -30,7 +31,7 @@ export async function convertToList(nabu, listType) {
     }
 
     const beh = block.behaviors?.get("text");
-    const delta = beh ? beh.container.toDelta() : [];
+    const delta = beh ? readDelta(beh.container) : [];
     const parentNode = block.node.parent();
     const parentId = parentNode?.id.toString() ?? null;
     const index = block.node.index();
