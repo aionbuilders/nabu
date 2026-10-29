@@ -401,12 +401,16 @@ test.describe('the wall: filters and open cards', () => {
 
     // type at the end of the paragraph
     await page.keyboard.press('Control+End');
-    await page.keyboard.type(' Dusk fell.');
+    await page.keyboard.type(' Dusk fell');
+    await expect(stateText(page)).toContainText('Dusk fell'); // JSON tab
+    // The full stop on its own, once the view has caught up: two keys that land in one frame are one change for the view, and the
+    // lit stretch would then be "l." (a timing artefact, not a bug).
+    await page.keyboard.type('.');
     await expect(root).toContainText('The ferryman waited under the eaves. Dusk fell.');
-    await expect(stateText(page)).toContainText('Dusk fell.'); // JSON tab
+    await expect(stateText(page)).toContainText('Dusk fell.');
     await expect(stateText(page).locator('.hot').first()).toBeVisible(); // what was just written is lit
     // (the lit stretch is what the LAST change wrote: the last key, here the full stop)
-    expect(await stateText(page).locator('.hot').allInnerTexts().then((t) => t.join(''))).toBe('.');
+    await expect.poll(() => stateText(page).locator('.hot').allInnerTexts().then((t) => t.join(''))).toBe('.');
     await open.getByRole('tab', { name: 'Markdown' }).click();
     await expect(stateText(page)).toHaveText('The **ferryman** waited under the eaves. Dusk fell.');
     await open.getByRole('tab', { name: 'HTML' }).click();
