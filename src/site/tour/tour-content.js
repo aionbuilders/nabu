@@ -158,7 +158,7 @@ export const CARDS = [
       ],
     }],
     md: [{ label: '```js', has: '```js' }],
-    html: [{ label: '<pre><code>', has: '<pre><code>' }],
+    html: [{ label: '<pre><code>', has: '<pre><code' }],
     contains: 'Text, verbatim: no marks. One prop: `language`, a string or `null`.',
     keys: [
       { keys: ['Enter'], does: 'inserts a new line instead of a new block' },

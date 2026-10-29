@@ -32,6 +32,33 @@ describe('CodeBlock statics', () => {
         expect(CodeBlock.toHtml(pb)).toBe('<pre><code>x &lt; y</code></pre>');
     });
 
+    it('toHtml names the language in a language-xxx class (what fromHTML reads back), only when it is safe', async () => {
+        expect(CodeBlock.toHtml({ type: 'code', props: { language: 'js' }, delta: [{ insert: 'a' }] })).toBe('<pre><code class="language-js">a</code></pre>');
+        expect(CodeBlock.toHtml({ type: 'code', props: { language: 'c++' }, delta: [{ insert: 'a' }] })).toBe('<pre><code class="language-c++">a</code></pre>');
+        expect(CodeBlock.toHtml({ type: 'code', props: { language: 'x" onload="y' }, delta: [{ insert: 'a' }] })).toBe('<pre><code>a</code></pre>');
+    });
+
+    it('fromHTML reads the language from code, pre, data attributes and the GitHub wrapper', async () => {
+        const read = (html) => {
+            const root = document.createElement('div');
+            root.innerHTML = html;
+            return CodeBlock.fromHTML(root.querySelector('pre'));
+        };
+        expect(read('<pre><code class="hljs language-ts">x</code></pre>').props.language).toBe('ts');
+        expect(read('<pre class="lang-python"><code>x</code></pre>').props.language).toBe('python');
+        expect(read('<pre><code class="language-c++">x</code></pre>').props.language).toBe('c++');
+        expect(read('<pre data-language="rust">x</pre>').props.language).toBe('rust');
+        expect(read('<div class="highlight highlight-source-js"><pre>x</pre></div>').props.language).toBe('js');
+        expect(read('<div class="lang-selector"><pre>x</pre></div>').props.language).toBeNull();
+        expect(read('<pre><code>x</code></pre>').props.language).toBeNull();
+    });
+
+    it('fromHTML keeps the line breaks that are <br> (textContent alone would glue the lines)', async () => {
+        const root = document.createElement('div');
+        root.innerHTML = '<pre>a<br>b<br/>c</pre>';
+        expect(CodeBlock.fromHTML(root.querySelector('pre')).delta).toEqual([{ insert: 'a\nb\nc' }]);
+    });
+
     it('fromMarkdown parses language and body', async () => {
         const result = CodeBlock.fromMarkdown(['```js', 'a=1', '```']);
         expect(result).toEqual({

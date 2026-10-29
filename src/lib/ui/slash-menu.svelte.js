@@ -80,7 +80,8 @@ export class SlashMenuController {
     match = $derived.by(() => {
         const sel = this.#engine.selection;
         const block = sel?.anchorBlock;
-        if (!block) return null;
+        // A verbatim buffer (the code block) has no commands: `/` is text there, and Enter must stay a newline.
+        if (!block || block.pastesAsPlainText) return null;
         const beh = block.behaviors?.get('text');
         const bsel = beh?.selection;
         if (!beh || !bsel || !bsel.isCollapsed) return null;

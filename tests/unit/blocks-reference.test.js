@@ -453,7 +453,7 @@ describe('the HTML each block writes, as the page says', () => {
     { name: 'heading', pb: { type: 'heading', props: { level: 3 }, delta: d }, tags: ['h3'], spans: ['<h1>', '<h6>'] },
     { name: 'blockquote', pb: { type: 'blockquote', delta: d }, tags: ['blockquote'] },
     { name: 'divider', pb: { type: 'divider' }, tags: ['hr'] },
-    { name: 'code', pb: { type: 'code', props: { language: 'js' }, delta: d }, tags: ['pre><code'], spans: ['<pre><code>'] },
+    { name: 'code', pb: { type: 'code', props: { language: 'js' }, delta: d }, tags: ['pre><code'], spans: ['<pre><code class="language-js">'] },
     { name: 'callout', pb: { type: 'callout', props: { variant: 'warning' }, delta: d }, tags: ['aside class="callout callout-warning" data-callout="warning"'], spans: ['<aside class="callout callout-warning" data-callout="warning">'] },
     { name: 'toggle', pb: { type: 'toggle', props: { collapsed: true }, delta: d, children: [{ type: 'paragraph', delta: d }] }, tags: ['details><summary'], spans: ['<details>', '<summary>'] },
     { name: 'image', pb: { type: 'image', props: { ref: '/a.png', alt: 'x' } }, tags: ['img src="/a.png" alt="x"'], spans: ['<img src alt>'] },

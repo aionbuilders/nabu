@@ -220,7 +220,7 @@ test('GitHub README: code blocks, inline code and the task list', async ({ page 
     'code(const x = 1;\\nconst y = 2;\\n)',
     'todo[li[ ](write docs), li[x](write tests)]',
   ].join(' ; '));
-  expect(await page.evaluate(() => [...(window as any).nabu.tree.roots()].filter((r: any) => r.data.get('type') === 'code').map((r: any) => r.data.get('language') ?? null))).toEqual([null, 'js']);
+  expect(await page.evaluate(() => [...(window as any).nabu.tree.roots()].filter((r: any) => r.data.get('type') === 'code').map((r: any) => r.data.get('language') ?? null))).toEqual(['js', 'js']); // the first language comes from the GitHub wrapper (highlight-source-js)
   expect(await hasEmptyTextBlock(page)).toBe(false);
   await expectOneUndo(page, model);
 });

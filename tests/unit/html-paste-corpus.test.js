@@ -112,7 +112,8 @@ describe('corpus — GitHub README', () => {
     expect(outline(read('github-readme.html'))).toBe([
       'h1(demo)',
       'p(A tiny library. Install it with [c:npm install demo].)',
-      "code(import { run } from 'demo';\\nrun({ verbose: true });)",
+      // the language comes from the GitHub wrapper: <div class="highlight highlight-source-js"><pre>
+      "code:js(import { run } from 'demo';\\nrun({ verbose: true });)",
       'code:js(const x = 1;\\nconst y = 2;\\n)',
       'todo{li[ ](write docs) li[x](write tests)}',
     ].join(' ; '));

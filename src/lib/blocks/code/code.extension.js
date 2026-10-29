@@ -1,7 +1,7 @@
 import { tick } from "svelte";
 import { TextBehavior } from "../../behaviors/text";
 import { extension } from "../../utils/extensions";
-import { CodeBlock } from "./code.svelte.js";
+import { CodeBlock, LANGUAGE_CHARS } from "./code.svelte.js";
 import CodeComponent from "./Code.svelte";
 
 /**
@@ -52,7 +52,7 @@ const onBeforeInput = (nabu, event, block) => {
 
     // ``` + Enter in a non-code text block → transform to code
     if (event.inputType === 'insertParagraph') {
-        const m = behavior.text.match(/^```(\w*)$/);
+        const m = behavior.text.match(new RegExp('^```(' + LANGUAGE_CHARS + '*)$'));
         if (!m) return CONTINUE;
         const language = m[1] || null;
         behavior.delete({ index: 0, length: behavior.text.length });

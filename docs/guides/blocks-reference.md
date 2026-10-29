@@ -176,7 +176,7 @@ if (travellers.length > 0) lantern.lit = true;
 - **Contains.** Text, verbatim: no marks, no shortcuts, no typography. One prop: `language` (a string, or `null`).
 - **Keys.** `Enter` inserts a new line instead of a new block. `Tab` inserts two spaces, `Shift-Tab` removes up to two at the start of the line. `ArrowDown` on the last line, when nothing follows, creates a paragraph below. `Backspace` at the start of the block turns it into a paragraph (the language is dropped).
 - **From code.** `code:block`.
-- **Markdown and HTML.** A fence. The fence is made longer than any run of backticks in the code, so code that holds a fence round-trips. HTML is `<pre><code>`. Reading HTML, the language comes from a `language-xxx` class on the `<code>`; the HTML Nabu writes has no such class.
+- **Markdown and HTML.** A fence. The fence is made longer than any run of backticks in the code, so code that holds a fence round-trips. HTML is `<pre><code class="language-js">` (no class without a language). Reading HTML, the language comes from a `language-xxx` or `lang-xxx` class on the `<code>` or the `<pre>`, a `data-language` attribute, or the `highlight-source-xxx` wrapper GitHub puts around a `<pre>`.
 - **Good to know.** Pasting into a code block inserts the plain text as it comes: nothing is read as markdown or HTML. The topic `code` alone is not this block: it is the inline mark of [Rich text](#rich-text--rich-text).
 - **Presets.** Document, Full.
 - **API.** [`CodeExtension`](/api/root/CodeExtension).

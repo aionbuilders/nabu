@@ -136,7 +136,7 @@ test.describe('A · copy payloads', () => {
     expect(ev.html).toBe([
       '<h2>Title</h2>',
       '<blockquote>quote</blockquote>',
-      '<pre><code>a\nb</code></pre>',
+      '<pre><code class="language-js">a\nb</code></pre>', // the language travels as the language-xxx class (P-127)
       '<aside class="callout callout-tip" data-callout="tip">call</aside>',
       '<p>line one</p>', // CURRENT: Dialogue has no toHtml(), it falls back to a plain <p>
     ].join('\n'));
@@ -282,8 +282,8 @@ test.describe('A · copy payloads', () => {
     expect(ev.nabu!.blocks).toEqual([{ type: 'code', partial: 'both', props: { language: 'js' }, delta: [{ insert: picked }] }]);
     // DECIDED (P-46): inside ONE text block (code included) text/plain is the raw selected text, no ```js fence
     expect(ev.text).toBe(picked);
-    // html: <pre><code>, and the code's `<`, `>`, `&` are escaped
-    expect(ev.html).toBe('<pre><code>' + picked.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code></pre>');
+    // html: <pre><code class="language-js">, and the code's `<`, `>`, `&` are escaped
+    expect(ev.html).toBe('<pre><code class="language-js">' + picked.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</code></pre>');
     expect(await tree(page)).toBe(`code:js(${src.replace(/\n/g, '\\n')})`);
   });
 

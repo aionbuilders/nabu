@@ -2,6 +2,28 @@
     /** @type {{ block: import('./code.svelte.js').CodeBlock }} */
     let { block } = $props();
     const LANGS = ['plaintext', 'javascript', 'typescript', 'html', 'css', 'json', 'python', 'rust', 'bash', 'markdown', 'sql', 'go'];
+    // A language the list does not know (`ts`, `c++`, from a fence, a paste or the API) is listed too: the select shows what the block holds.
+    const langs = $derived(block.language && !LANGS.includes(block.language) ? [...LANGS, block.language] : LANGS);
+
+    // A long line scrolls sideways: the browser does not bring a caret the editor places itself (after typing, Enter, Tab…) into view.
+    $effect(() => {
+        const el = block.element;
+        if (!el) return;
+        const keepCaretVisible = () => {
+            const sel = getSelection();
+            if (!sel || !sel.isCollapsed || !sel.anchorNode || !el.contains(sel.anchorNode) || el.scrollWidth <= el.clientWidth) return;
+            const range = document.createRange();
+            range.setStart(sel.anchorNode, sel.anchorOffset);
+            const caret = range.getClientRects()[0];
+            if (!caret) return;
+            const box = el.getBoundingClientRect();
+            const margin = 24;
+            if (caret.right > box.right - margin) el.scrollLeft += caret.right - box.right + margin;
+            else if (caret.left < box.left + margin) el.scrollLeft -= box.left + margin - caret.left;
+        };
+        document.addEventListener('selectionchange', keepCaretVisible);
+        return () => document.removeEventListener('selectionchange', keepCaretVisible);
+    });
 </script>
 
 <div class="nabu-code-wrapper"><select
@@ -13,7 +35,7 @@
         aria-label="Code language"
         onchange={(e) => block.setLanguage(e.currentTarget.value === 'plaintext' ? null : e.currentTarget.value)}
     >
-        {#each LANGS as lang}<option value={lang}>{lang}</option>{/each}
+        {#each langs as lang}<option value={lang}>{lang}</option>{/each}
     </select><pre
         bind:this={block.element}
         data-block-id={block.id}
@@ -64,6 +86,9 @@
         line-height: 1.6;
         padding: 0.75em 1em;
         margin: 0;
+        /* The library's inline-code rule (`.nabu-code`, RichText) also matches this <pre>: its tint is not wanted here. */
+        background: none;
+        border-radius: 0;
         overflow-x: auto;
         color: var(--nb-text-primary, rgba(255, 255, 255, 0.85));
         outline: none;

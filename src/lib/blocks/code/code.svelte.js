@@ -3,6 +3,7 @@ import { LoroText } from "loro-crdt";
 import CodeComponent from "./Code.svelte";
 import { tick } from "svelte";
 import { escapeHtml } from "../../utils/html.js";
+import { INDENT, leadingIndent, indentLines, outdentLines, lineStart } from "./indent.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -19,6 +20,31 @@ import { escapeHtml } from "../../utils/html.js";
  */
 function pbText(pb) {
     return (pb.delta || []).map(op => typeof op.insert === 'string' ? op.insert : '').join('');
+}
+
+/** What a language name may hold: a word, plus what real ones use (`c++`, `c#`, `objective-c`, `vue.js`). */
+export const LANGUAGE_CHARS = '[\\w#+.-]';
+
+/**
+ * The language a `<pre>` (or its `<code>`, or the wrapper of a highlighter) declares: `language-js` / `lang-js` classes (Markdown
+ * renderers, Prism, highlight.js, Shiki), GitHub's `highlight-source-js` wrapper, a `data-language` / `data-lang` attribute.
+ * @param {Element} pre
+ * @returns {string | null}
+ */
+function languageOf(pre) {
+    const code = pre.querySelector('code');
+    const own = new RegExp('(?:^|\\s)(?:language|lang)-(' + LANGUAGE_CHARS + '+)');
+    for (const el of [code, pre]) {
+        const m = el && own.exec(el.getAttribute('class') || '');
+        if (m) return m[1];
+    }
+    for (const el of [code, pre]) {
+        const attr = el?.getAttribute('data-language') || el?.getAttribute('data-lang');
+        if (attr && new RegExp('^' + LANGUAGE_CHARS + '+$').test(attr)) return attr;
+    }
+    // The wrapper of a highlighter: only its explicit names (a `lang-selector` class there would not be a language).
+    const wrapper = new RegExp('(?:^|\\s)(?:language-(' + LANGUAGE_CHARS + '+)|highlight-source-([\\w-]+))').exec(pre.parentElement?.getAttribute('class') || '');
+    return wrapper ? (wrapper[1] || wrapper[2]) : null;
 }
 
 /** The opening fence of a code block: indent, fence characters, info string. */
@@ -100,7 +126,53 @@ export class CodeBlock extends TextBlock {
     }
 
     /**
-     * Handle special keydown events: Tab, Shift+Tab, ArrowDown.
+     * Put the selection back on model offsets once the edit is rendered (`backward`: the focus is the start).
+     * @param {number} from @param {number} to @param {boolean} [backward]
+     */
+    #select(from, to, backward = false) {
+        tick().then(() => {
+            if (from === to) return this.nabu.selection.setCursor(this, from);
+            const a = this.getDOMPoint(backward ? to : from);
+            const f = this.getDOMPoint(backward ? from : to);
+            if (a && f) this.nabu.selection.setBaseAndExtent(a.node, a.offset, f.node, f.offset);
+        });
+    }
+
+    /**
+     * Enter keeps the indentation of the line (auto-indent): the new line starts with the same spaces / tabs, up to the caret.
+     * Every other input is the text behavior's (Enter without indentation inserts a plain "\n").
+     * @param {InputEvent} event
+     */
+    beforeinput(event) {
+        if (event.inputType === 'insertParagraph' || event.inputType === 'insertLineBreak') {
+            const sel = this.behavior.selection;
+            const indent = sel ? leadingIndent(this.text, sel.from) : '';
+            if (sel && indent) {
+                if (!sel.isCollapsed) this.behavior.delete({ index: sel.from, length: sel.to - sel.from });
+                this.behavior.insert(sel.from, '\n' + indent);
+                this.commit();
+                this.#select(sel.from + 1 + indent.length, sel.from + 1 + indent.length);
+                return true;
+            }
+        }
+        return super.beforeinput(event);
+    }
+
+    /**
+     * Apply an indent plan (see indent.js) as one commit and keep the selection on the same characters.
+     * @param {import('./indent.js').IndentPlan} plan @param {boolean} backward
+     */
+    #apply(plan, backward) {
+        for (const { index, remove, insert } of plan.edits) {
+            if (remove) this.behavior.delete({ index, length: remove });
+            if (insert) this.behavior.insert(index, insert);
+        }
+        this.commit();
+        this.#select(plan.from, plan.to, backward);
+    }
+
+    /**
+     * Handle special keydown events: Tab, Shift+Tab, Ctrl+A, ArrowUp / ArrowDown at the edges of the block.
      * Returns true if handled (engine should preventDefault).
      * @param {KeyboardEvent} event
      * @returns {boolean}
@@ -108,35 +180,45 @@ export class CodeBlock extends TextBlock {
     keydown(event) {
         const sel = this.behavior.selection;
         if (!sel) return false;
+        const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+        const backward = sel.direction === 'backward';
 
-        // Tab without shift — insert 2 spaces
+        // Tab without shift: over several lines, indent every line; else insert 2 spaces (replacing a selection within one line)
         if (event.key === 'Tab' && !event.shiftKey) {
+            const plan = indentLines(this.text, sel.from, sel.to);
+            if (plan) { this.#apply(plan, backward); return true; }
             if (!sel.isCollapsed) this.behavior.delete({ index: sel.from, length: sel.to - sel.from });
-            this.behavior.insert(sel.from, '  ');
+            this.behavior.insert(sel.from, INDENT);
             this.commit();
-            tick().then(() => this.nabu.selection.setCursor(this, sel.from + 2));
+            this.#select(sel.from + INDENT.length, sel.from + INDENT.length);
             return true;
         }
 
-        // Shift+Tab — outdent (remove up to 2 leading spaces on current line)
+        // Shift+Tab: outdent every line the selection touches (the caret's own line when collapsed)
         if (event.key === 'Tab' && event.shiftKey) {
-            const ls = this.text.lastIndexOf('\n', sel.from - 1) + 1;
-            let n = 0;
-            while (n < 2 && this.text[ls + n] === ' ') n++;
-            if (n > 0) {
-                this.behavior.delete({ index: ls, length: n });
-                this.commit();
-                tick().then(() => this.nabu.selection.setCursor(this, Math.max(ls, sel.from - n)));
-            }
+            const plan = outdentLines(this.text, sel.from, sel.to);
+            if (plan) this.#apply(plan, backward);
             return true;
         }
 
-        // ArrowDown (no modifiers, collapsed) — escape code block by creating a paragraph after
-        if (event.key === 'ArrowDown' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && sel.isCollapsed) {
-            const onLastLine = this.text.indexOf('\n', sel.from) === -1;
-            const hasNextTextBlock = !!this.findForward(b => b.behaviors?.has('text'));
-            if (onLastLine && !hasNextTextBlock) {
-                const p = this.nabu.insert('paragraph', {}, this.node.parent()?.id.toString() || null, (this.node.index() ?? 0) + 1);
+        // Ctrl/Cmd+A: the code first, the whole document with the next press (the browser's own Select All)
+        if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && typeof event.key === 'string' && event.key.toLowerCase() === 'a') {
+            const length = this.text.length;
+            if (length && !(sel.from === 0 && sel.to === length)) {
+                this.nabu.selection.selectBlockText(this);
+                return true;
+            }
+            return false;
+        }
+
+        // ArrowDown from the last line / ArrowUp from the first one, with no text block beyond: a paragraph is created there, so
+        // that a code block at the end (start) of the document, or before a divider, can be left with the keyboard.
+        if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && plain && sel.isCollapsed) {
+            const down = event.key === 'ArrowDown';
+            const onEdge = down ? this.text.indexOf('\n', sel.from) === -1 : lineStart(this.text, sel.from) === 0;
+            const hasNeighbour = !!(down ? this.findForward(b => b.behaviors?.has('text')) : this.findBackward(b => b.behaviors?.has('text')));
+            if (onEdge && !hasNeighbour) {
+                const p = this.nabu.insert('paragraph', {}, this.node.parent()?.id.toString() || null, (this.node.index() ?? 0) + (down ? 1 : 0));
                 this.nabu.commit().then(() => {
                     const fresh = this.nabu.blocks.get(p.id);
                     if (fresh) this.nabu.selection.setCursor(fresh, 0);
@@ -158,7 +240,9 @@ export class CodeBlock extends TextBlock {
 
     /** @param {import('../../utils/extensions.js').PasteBlock} pb */
     static toHtml(pb) {
-        return `<pre><code>${escapeHtml(pbText(pb))}</code></pre>`;
+        const language = String(pb.props?.language || '');
+        const cls = new RegExp('^' + LANGUAGE_CHARS + '+$').test(language) ? ` class="language-${language}"` : '';
+        return `<pre><code${cls}>${escapeHtml(pbText(pb))}</code></pre>`;
     }
 
     /**
@@ -222,8 +306,11 @@ export class CodeBlock extends TextBlock {
      * @returns {import('../../utils/extensions.js').PasteBlock | null}
      */
     static fromHTML(el) {
-        const text = el.textContent || '';
-        const language = el.querySelector('code')?.className.match(/language-(\w+)/)?.[1] || null;
+        // A <br> in a <pre> is a line break (old sites, some editors); textContent alone would glue the lines.
+        const copy = /** @type {Element} */ (el.cloneNode(true));
+        for (const br of copy.querySelectorAll('br')) br.replaceWith('\n');
+        const text = copy.textContent || '';
+        const language = languageOf(el);
         return {
             type: 'code',
             props: { language },

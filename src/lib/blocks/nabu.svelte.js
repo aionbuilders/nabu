@@ -1890,6 +1890,9 @@ export class Nabu {
         const behavior = block.behaviors?.get('text');
         const sel = offset === undefined ? behavior?.selection : { from: offset, to: offset };
         if (!behavior || !sel) return;
+        // Line endings are "\n" in the model, whatever the source (Windows "\r\n", old Mac "\r"): a "\r" would be a character
+        // of the text that no line shows, and would leak into the exports.
+        text = text.replace(/\r\n?/g, '\n');
         const from = Math.min(sel.from, sel.to);
         const to = Math.max(sel.from, sel.to);
         if (to > from) behavior.delete({ index: from, length: to - from });

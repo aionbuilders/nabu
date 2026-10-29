@@ -461,7 +461,7 @@ describe('the state a card shows: JSON, Markdown, HTML', () => {
     const eng = createTourEngine();
     await fillEngine(eng, { md: STORY.md });
     const html = htmlOf(eng);
-    for (const tag of ['<section data-nabu-region="section-1"', '<h3>', '<blockquote>', '<aside class="callout callout-note"', '<details>', '<hr>', '<pre><code>', '<img src="/tour/quay-at-dusk.svg"', '<video src="/tour/river-at-dusk.mp4" controls>', '<a href="/tour/crossing-ledger.pdf" download="crossing-ledger.pdf">']) expect(html, tag).toContain(tag);
+    for (const tag of ['<section data-nabu-region="section-1"', '<h3>', '<blockquote>', '<aside class="callout callout-note"', '<details>', '<hr>', '<pre><code', '<img src="/tour/quay-at-dusk.svg"', '<video src="/tour/river-at-dusk.mp4" controls>', '<a href="/tour/crossing-ledger.pdf" download="crossing-ledger.pdf">']) expect(html, tag).toContain(tag);
   });
 
   it('the state follows the document: the text a card shows changes with what is typed', async () => {
