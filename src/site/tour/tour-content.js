@@ -156,6 +156,12 @@ export const CARDS = [
         { typed: '```', then: 'enter', makes: [{ type: 'code', props: { language: null } }] },
         { typed: '```js', then: 'enter', makes: [{ type: 'code', props: { language: 'js' } }] },
       ],
+    }, {
+      label: '```js ␣',
+      tries: [
+        { typed: '```', then: 'space', makes: [{ type: 'code', props: { language: null } }] },
+        { typed: '```js', then: 'space', makes: [{ type: 'code', props: { language: 'js' } }] },
+      ],
     }],
     md: [{ label: '```js', has: '```js' }],
     html: [{ label: '<pre><code>', has: '<pre><code' }],

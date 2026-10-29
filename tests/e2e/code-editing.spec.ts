@@ -403,7 +403,7 @@ test.describe('C · code block: long lines, language select, placeholder', () =>
     expect(parseFloat(bg.pad)).toBeGreaterThan(8);
   });
 
-  test('7 · the way in: ``` + Enter, ```ts + Enter, ```c++ + Enter and /code make a code block', async ({ page }) => {
+  test('7 · the way in: ``` + Enter or Space (with a language, c++...) and /code make a code block', async ({ page }) => {
     for (const [typed, expected] of [['```', 'code(∅)'], ['```ts', 'code:ts(∅)'], ['```c++', 'code:c++(∅)'], ['```objective-c', 'code:objective-c(∅)'], ['```c#', 'code:c#(∅)']] as const) {
       await buildTree(page, [Pp('')]);
       await focusEmpty(page);
@@ -413,11 +413,33 @@ test.describe('C · code block: long lines, language select, placeholder', () =>
       await page.keyboard.type('x');
       await expectCaret(page, 'x|');
     }
-    // "```" + Space is NOT a shortcut (DECIDED: Enter only, like Obsidian): the backticks stay text
+    // "```" + Space is a shortcut too, like `#`, `>` and `-`: same result as Enter, language included
+    for (const [typed, expected] of [['``` ', 'code(∅)'], ['```ts ', 'code:ts(∅)'], ['```c++ ', 'code:c++(∅)']] as const) {
+      await buildTree(page, [Pp('')]);
+      await focusEmpty(page);
+      await page.keyboard.type(typed);
+      await expectTree(page, expected);
+      await page.keyboard.type('x');
+      await expectCaret(page, 'x|');
+    }
+    // only with the caret at the end of the fence, and when the paragraph is the fence and nothing else
     await buildTree(page, [Pp('')]);
     await focusEmpty(page);
-    await page.keyboard.type('``` ');
-    await expectTree(page, 'p(``` )');
+    await page.keyboard.type('```');
+    await press(page, 'ArrowLeft');
+    await page.keyboard.type(' ');
+    await expectTree(page, 'p(`` `)'); // a space typed inside the fence is a space
+    await buildTree(page, [Pp('a ```')]);
+    await focusEnd(page, 'a ```');
+    await page.keyboard.type(' ');
+    await expectTree(page, 'p(a ``` )');
+    // one Ctrl+Z gives back what was typed, trigger included
+    await buildTree(page, [Pp('')]);
+    await focusEmpty(page);
+    await page.keyboard.type('```js ');
+    await expectTree(page, 'code:js(∅)');
+    await undo(page);
+    await expectTree(page, 'p(```js )');
     await buildTree(page, [Pp('')]);
     await focusEmpty(page);
     await page.keyboard.type('/code');

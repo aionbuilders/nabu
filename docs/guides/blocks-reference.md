@@ -171,7 +171,7 @@ if (travellers.length > 0) lantern.lit = true;
 ```
 `````
 
-- **Type.** Three backticks, an optional language glued to them (`` ```js ``), then Enter. A language picker sits on the block; the prop itself takes any string.
+- **Type.** Three backticks, an optional language glued to them (`` ```js ``), then Space or Enter. A language picker sits on the block; the prop itself takes any string.
 - **Slash menu.** Code (`/code`).
 - **Contains.** Text, verbatim: no marks, no shortcuts, no typography. One prop: `language` (a string, or `null`).
 - **Keys.** `Enter` inserts a new line instead of a new block. `Tab` inserts two spaces, `Shift-Tab` removes up to two at the start of the line. `ArrowDown` on the last line, when nothing follows, creates a paragraph below. `Backspace` at the start of the block turns it into a paragraph (the language is dropped).
@@ -604,7 +604,7 @@ The shortcuts of the blocks are different. Each belongs to its block, and works 
 | `#` to `######` | Space | `heading`, level 1 to 6 |
 | `>` | Space | `blockquote` |
 | `---` | Space | `divider` |
-| `` ``` `` or `` ```js `` | Enter | `code`, with its language |
+| `` ``` `` or `` ```js `` | Space or Enter | `code`, with its language |
 | `!` | Space | `callout` |
 | `-` | Space | `list`, bullets |
 | `1.` or `7.` | Space | `list`, numbered from that number |

@@ -55,7 +55,7 @@ const NABU_NOT_PROMISED = [
   'handleCopy', 'handleCut', 'handleDragEnd', 'handleDragLeave', 'handleDragOver',
   'handleDragStart', 'handleDrop', 'handleKeydown', 'handleMousedown', 'handlePaste', 'hookOwners',
   'hooks', 'init', 'inputRules', 'insertFragment', 'noteTextChange', 'rearmTab',
-  'sealUndoEnd', 'storedMarks', 'tabDescription', 'toggleStoredMark', 'undoManager', 'updateRoots',
+  'sealUndoEnd', 'storedMarks', 'tabDescription', 'tabWayOut', 'toggleStoredMark', 'undoManager', 'updateRoots',
 ];
 
 const INTERNALS = [

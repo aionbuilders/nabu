@@ -207,3 +207,53 @@ test.describe('Canonical runs after a mark is removed', () => {
     await expectOneRun(page, `${SENTENCE} Go`);
   });
 });
+
+test.describe('Mark edges do not depend on how the text got its marks', () => {
+  test.beforeEach(async ({ page }) => {
+    await gotoEditor(page);
+    await clearAndReset(page);
+    await focusEditor(page);
+    await typeText(page, SENTENCE);
+  });
+
+  test('P0 · a sentence in bold, a middle word unbolded: typing at the start of that word is not bold, and one undo removes it', async ({ page }) => {
+    await selectRange(page, 0, SENTENCE.length);
+    await bold(page); // the whole sentence
+    await selectRange(page, 4, 4); // "ford"
+    await bold(page); // unbolded: Loro keeps the outer bold with a hole in it
+    expect(await runs(page)).toEqual([{ text: 'The ', bold: true }, { text: 'ford' }, { text: ' is upstream.', bold: true }]);
+
+    await press(page, 'Home');
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight'); // right before "ford"
+    await page.waitForTimeout(1100); // past the undo merge window (1 s): the typing is a step of its own
+    await page.keyboard.type('X');
+    expect(await runs(page)).toEqual([{ text: 'The ', bold: true }, { text: 'Xford' }, { text: ' is upstream.', bold: true }]);
+    await expectCanonical(page);
+
+    await undo(page);
+    expect(await runs(page)).toEqual([{ text: 'The ', bold: true }, { text: 'ford' }, { text: ' is upstream.', bold: true }]);
+  });
+
+  test('P1 · typing inside the bold part stays bold; a mark armed with Ctrl+B still wins', async ({ page }) => {
+    await selectRange(page, 0, SENTENCE.length);
+    await bold(page);
+    await selectRange(page, 4, 4);
+    await bold(page);
+    await press(page, 'Home');
+    for (let i = 0; i < 2; i++) await page.keyboard.press('ArrowRight'); // inside "The "
+    await page.keyboard.type('Y');
+    expect((await runs(page))[0]).toEqual({ text: 'ThYe ', bold: true });
+
+    // armed on: inside the plain word, Ctrl+B then a letter is bold
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight'); // "fo|rd"
+    await bold(page);
+    await page.keyboard.type('Z');
+    expect(await runs(page)).toEqual([{ text: 'ThYe ', bold: true }, { text: 'fo' }, { text: 'Z', bold: true }, { text: 'rd' }, { text: ' is upstream.', bold: true }]);
+    // armed off: inside the bold tail, Ctrl+B then a letter is plain
+    await press(page, 'End');
+    await page.keyboard.press('ArrowLeft');
+    await bold(page);
+    await page.keyboard.type('W');
+    expect(await runs(page)).toEqual([{ text: 'ThYe ', bold: true }, { text: 'fo' }, { text: 'Z', bold: true }, { text: 'rd' }, { text: ' is upstream', bold: true }, { text: 'W' }, { text: '.', bold: true }]);
+  });
+});

@@ -172,7 +172,7 @@ export class CodeBlock extends TextBlock {
     }
 
     /**
-     * Handle special keydown events: Tab, Shift+Tab, Ctrl+A, ArrowUp / ArrowDown at the edges of the block.
+     * Handle special keydown events: Tab, Shift+Tab (except the one that follows an Escape), Ctrl+A, ArrowUp / ArrowDown at the edges of the block.
      * Returns true if handled (engine should preventDefault).
      * @param {KeyboardEvent} event
      * @returns {boolean}
@@ -182,6 +182,16 @@ export class CodeBlock extends TextBlock {
         if (!sel) return false;
         const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
         const backward = sel.direction === 'backward';
+
+        // The way out (WCAG 2.1.2): Tab / Shift+Tab right after an Escape nobody consumed is not the code's. Forward, the browser moves the
+        // focus out of the editor. Backward, it would go before the editor and never reach the language select, so the focus goes there.
+        if (event.key === 'Tab' && this.nabu.tabWayOut) {
+            if (!event.shiftKey) return false;
+            const select = /** @type {HTMLSelectElement | null | undefined} */ (this.element?.parentElement?.querySelector('select.nabu-code-lang'));
+            if (!select || select.disabled) return false;
+            select.focus();
+            return true;
+        }
 
         // Tab without shift: over several lines, indent every line; else insert 2 spaces (replacing a selection within one line)
         if (event.key === 'Tab' && !event.shiftKey) {

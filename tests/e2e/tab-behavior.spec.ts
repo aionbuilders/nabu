@@ -306,6 +306,124 @@ test.describe('structural Tab does not use the Escape way out', () => {
   });
 });
 
+// The one structural Tab that DOES give way: in a code block Tab indents, which made the block a keyboard trap (WCAG 2.1.2).
+// Escape then Tab (the CodeMirror / GitHub convention) leaves it, under every mode; the language select is reached with Escape then Shift+Tab.
+for (const mode of MODES) {
+  test.describe(`code block way out (tab: ${mode})`, () => {
+    const select = (page: Page) => page.locator('select.nabu-code-lang');
+
+    test('Escape then Tab moves the focus out of the editor and writes nothing', async ({ page }) => {
+      await open(page, mode);
+      await buildTree(page, [Code('ab')]);
+      await focusAt(page, 'ab', 1);
+      await press(page, 'Escape');
+      await press(page, 'Tab');
+      await expectActive(page, 'after');
+      await expectTree(page, 'code(ab)');
+    });
+
+    test('Escape then Shift+Tab reaches the language select, which works with the keyboard', async ({ page }) => {
+      await open(page, mode);
+      await buildTree(page, [Code('ab')]);
+      await focusAt(page, 'ab', 1);
+      await press(page, 'Escape');
+      await press(page, 'Shift+Tab');
+      await expect(select(page)).toBeFocused();
+      await expectTree(page, 'code(ab)');
+      await page.keyboard.type('py'); // a select picks the option that starts with the typed letters
+      await expectTree(page, 'code:python(ab)');
+      // and the focus can go on in both directions
+      await press(page, 'Tab');
+      await expectActive(page, 'after');
+    });
+
+    test('without an Escape, Tab and Shift+Tab keep their meaning (indent, outdent)', async ({ page }) => {
+      await open(page, mode);
+      await buildTree(page, [Code('ab')]);
+      await focusAt(page, 'ab', 1);
+      await press(page, 'Tab');
+      await expectTree(page, 'code(a  b)');
+      await press(page, 'Home');
+      await press(page, 'Tab');
+      await expectTree(page, 'code(  a  b)');
+      await press(page, 'Shift+Tab');
+      await expectTree(page, 'code(a  b)');
+      await expectActive(page, 'editor');
+    });
+
+    test('Escape, then another key, then Tab: the way out is closed again, Tab indents', async ({ page }) => {
+      await open(page, mode);
+      await buildTree(page, [Code('ab')]);
+      await focusAt(page, 'ab', 1);
+      await press(page, 'Escape');
+      await page.keyboard.type('x');
+      await press(page, 'Tab');
+      await expectTree(page, 'code(ax  b)');
+      await expectActive(page, 'editor');
+      // an arrow key closes it too
+      await press(page, 'Escape');
+      await press(page, 'ArrowLeft');
+      await press(page, 'Tab');
+      await expectTree(page, 'code(ax    b)'); // the caret was after the two spaces, one step left, and Tab added two more
+      await expectActive(page, 'editor');
+    });
+
+    test('the way out is used once: the next Tab indents again', async ({ page }) => {
+      await open(page, mode);
+      await buildTree(page, [Code('ab'), Pp('')]);
+      await focusAt(page, 'ab', 1);
+      await press(page, 'Escape');
+      await press(page, 'Shift+Tab'); // select
+      await refocus(page);
+      await focusAt(page, 'ab', 1);
+      await press(page, 'Tab');
+      await expectTree(page, 'code(a  b) ; p(∅)');
+    });
+
+    test('a click closes the way out', async ({ page }) => {
+      await open(page, mode);
+      await buildTree(page, [Code('ab')]);
+      await focusAt(page, 'ab', 1);
+      await press(page, 'Escape');
+      await page.locator('pre[data-block-type="code"]').click();
+      await press(page, 'Tab');
+      await expectActive(page, 'editor');
+      expect(await tree(page)).toContain('  ');
+    });
+
+    test('Escape alone in the code changes nothing (text, caret, focus)', async ({ page }) => {
+      await open(page, mode);
+      await buildTree(page, [Code('ab')]);
+      await focusAt(page, 'ab', 1);
+      await press(page, 'Escape');
+      await expectTree(page, 'code(ab)');
+      await expectActive(page, 'editor');
+      await page.keyboard.type('x');
+      await expectTree(page, 'code(axb)');
+    });
+
+    test('outside code nothing changed: Escape then Tab in a paragraph follows the mode', async ({ page }) => {
+      await open(page, mode);
+      await buildTree(page, [Pp('hello'), Code('ab')]);
+      await focusEnd(page, 'hello');
+      await press(page, 'Escape');
+      await expectTree(page, 'p(hello) ; code(ab)');
+      await press(page, 'Tab');
+      // 'indent' and 'stay' leave with Escape then Tab, 'focus' leaves with any Tab: always out
+      await expectActive(page, 'after');
+      await expectTree(page, 'p(hello) ; code(ab)');
+    });
+
+    test('a plain Tab in a paragraph before a code block does not land on the select', async ({ page }) => {
+      await open(page, 'focus');
+      await buildTree(page, [Pp('hello'), Code('ab')]);
+      await focusEnd(page, 'hello');
+      await press(page, 'Tab');
+      await expectActive(page, 'after');
+    });
+  });
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Paragraph indent: --nb-paragraph-indent
 // ════════════════════════════════════════════════════════════════════════════

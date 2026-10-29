@@ -1,3 +1,5 @@
+// Workaround for a Loro quirk (the raw delta keeps a split after an exact unmark). https://github.com/loro-dev/loro/issues/1241
+// Canary: tests/unit/loro-quirks.test.js.
 /**
  * The canonical form of a rich-text delta.
  *
@@ -38,7 +40,7 @@ function isDirty(attrs) {
  * @param {Record<string, any> | undefined} attrs
  * @returns {Record<string, any> | undefined}
  */
-function effective(attrs) {
+export function effective(attrs) {
     if (!attrs) return undefined;
     /** @type {Record<string, any> | undefined} */
     let out;
@@ -50,7 +52,7 @@ function effective(attrs) {
  * Whether two mark values are the same (links compare by href; an object value by its content).
  * @param {any} a @param {any} b
  */
-function sameValue(a, b) {
+export function sameValue(a, b) {
     if (a === b) return true;
     if (a && b && typeof a === 'object' && typeof b === 'object') return JSON.stringify(a) === JSON.stringify(b);
     return false;

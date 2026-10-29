@@ -633,6 +633,14 @@ export class Nabu {
     /** An Escape nobody consumed was the previous key: the next Tab / Shift+Tab leaves the editor (see `utils/tab.js`). */
     #tabEscaped = false;
 
+    /**
+     * True while a keydown is being handled and it is the Tab / Shift+Tab that follows an Escape nobody consumed: the way out is open
+     * for it. A block that gives Tab a meaning of its own (the code block's indentation) lets this one go to the browser (WCAG 2.1.2).
+     * Plain property, not state: only meaningful during `handleKeydown`.
+     * @type {boolean}
+     */
+    tabWayOut = false;
+
     /** Close the Escape-then-Tab way out (any other key, a click, the focus leaving). */
     rearmTab() { this.#tabEscaped = false; }
 
@@ -1505,11 +1513,14 @@ export class Nabu {
     handleKeydown(e) {
         // Read-only: no command, hook or block sees the key. The browser keeps its own keys (selection, copy, scrolling).
         if (this.#readonly) return;
+        // Tab on a control of the editor's own UI (the language select of a code block…) is the browser's: it moves the focus on.
+        if (e.key === 'Tab' && e.target instanceof Element && e.target.closest('[data-nabu-ui]')) return;
         this.selection.sync(); // no-op when the document capture listener already synced
         this.selection.normalize();
         // The Escape-then-Tab way out of the `tab` option (utils/tab.js): any key but a lone modifier closes it, whoever handles the key.
         const escaped = this.#tabEscaped;
         if (!isModifierKey(e)) this.#tabEscaped = false;
+        this.tabWayOut = escaped && e.key === 'Tab';
         // Commands first (ADR 017): undo / redo and every declared shortcut. What no command handles falls through to the
         // legacy `onKeyDown` hooks and the block's own keydown, then to the native behavior.
         if (this.commands.handleKeydown(e)) return;

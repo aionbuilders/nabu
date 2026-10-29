@@ -229,6 +229,8 @@ describe('the typed shortcuts the page claims make the block it says', () => {
     { typed: '---', spans: ['---'], then: 'space', blocks: [{ type: 'divider' }, { type: 'paragraph' }] },
     { typed: '```', spans: ['```'], then: 'enter', blocks: [{ type: 'code', props: { language: null } }] },
     { typed: '```js', spans: ['```js'], then: 'enter', blocks: [{ type: 'code', props: { language: 'js' } }] },
+    { typed: '```', then: 'space', blocks: [{ type: 'code', props: { language: null } }] },
+    { typed: '```js', then: 'space', blocks: [{ type: 'code', props: { language: 'js' } }] },
     { typed: '!', spans: ['!'], then: 'space', blocks: [{ type: 'callout', props: { variant: 'note' } }] },
     { typed: '-', spans: ['-'], then: 'space', blocks: [{ type: 'list', props: { listType: 'bullet' }, children: [{ type: 'list-item' }] }] },
     { typed: '1.', spans: ['1.'], then: 'space', blocks: [{ type: 'list', props: { listType: 'ordered' }, children: [{ type: 'list-item' }] }] },

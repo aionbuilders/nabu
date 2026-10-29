@@ -183,11 +183,25 @@ test.describe('Markdown shortcuts & slash menu', () => {
       expect(await tree(page)).toEqual([{ type: 'code', props: { language: 'js' }, text: 'hello' }]);
     });
 
-    test('P1 · A7c · "``` " (space instead of Enter) does not transform: the fence needs Enter', async ({ page }) => {
+    test('P1 · A7c · "``` " (Space instead of Enter) becomes a code block too, with or without a language', async ({ page }) => {
       await page.keyboard.type('``` ');
       await page.keyboard.type('x');
 
-      expect(await tree(page)).toEqual([{ type: 'paragraph', text: '``` x' }]);
+      expect(await tree(page)).toEqual([{ type: 'code', props: { language: null }, text: 'x' }]);
+    });
+
+    test('P1 · A7d · "```js " (Space) becomes a code block with language js', async ({ page }) => {
+      await page.keyboard.type('```js ');
+      await page.keyboard.type('x');
+
+      expect(await tree(page)).toEqual([{ type: 'code', props: { language: 'js' }, text: 'x' }]);
+    });
+
+    test('P1 · A7e · a Space after other text stays a space (the fence must be the whole paragraph)', async ({ page }) => {
+      await page.keyboard.type('a ``` ');
+      await page.keyboard.type('x');
+
+      expect(await tree(page)).toEqual([{ type: 'paragraph', text: 'a ``` x' }]);
     });
 
     test('P0 · A8 · "! " becomes a callout (variant note)', async ({ page }) => {

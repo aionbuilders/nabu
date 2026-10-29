@@ -112,6 +112,7 @@ function indentWithTab(nabu, outdent) {
             else behavior.removeMark(name, span);
         }
     }
+    behavior.settleMarkEdges?.(from, 1, stored);
     block.commit();
     tick().then(() => nabu.selection.setCursor(block, from + 1));
 }

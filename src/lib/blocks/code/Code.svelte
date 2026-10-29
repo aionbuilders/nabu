@@ -24,12 +24,15 @@
         document.addEventListener('selectionchange', keepCaretVisible);
         return () => document.removeEventListener('selectionchange', keepCaretVisible);
     });
+    // The select is out of the Tab order (tabindex -1): inside the editor it would catch the Tab of every block above it.
+    // Escape then Shift+Tab, in the code, focuses it (CodeBlock#keydown).
 </script>
 
 <div class="nabu-code-wrapper"><select
         class="nabu-code-lang"
         data-nabu-ui
         contenteditable="false"
+        tabindex="-1"
         value={block.language ?? 'plaintext'}
         disabled={block.nabu.readonly}
         aria-label="Code language"

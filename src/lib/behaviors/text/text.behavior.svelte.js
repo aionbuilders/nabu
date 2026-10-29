@@ -8,6 +8,7 @@ import { escapeHtml, escapeAttr, sanitizeUrl } from "../../utils/html.js";
 import { escapeMarkdownText, escapeBlockStart } from "./markdown-syntax.js";
 import { countWords, wordDeleteRange } from "../../utils/words.js";
 import { readDelta } from "../../utils/delta.js";
+import { markEdgeFixes } from "./mark-edges.js";
 import { detectPlatform } from "../../utils/keys.js";
 
 /**
@@ -458,8 +459,29 @@ export class TextBehavior {
                 else this.removeMark(name, range);
             }
         }
+        this.settleMarkEdges(selection.from, textToInsert.length, stored);
         this.block.commit();
         tick().then(() => this.nabu.selection.setCursor(this.block, selection.from + textToInsert.length));
+    }
+
+    /**
+     * Make the run just typed at `[from, from + length)` follow Nabu's rule for mark edges (see mark-edges.js): it keeps a mark only
+     * when the character before and the one after both carry it. The corrections are made now, so they belong to the same commit
+     * (one undo step) as the insertion. Marks in `armed` (stored marks) are the user's explicit choice and stay as they are.
+     * Costs one small slice of the text; nothing is written unless a correction is needed.
+     * @param {number} from @param {number} length @param {Record<string, boolean> | null} [armed]
+     */
+    settleMarkEdges(from, length, armed = null) {
+        if (length <= 0 || this.block.marksEnabled === false) return;
+        const total = this.container.length;
+        const lo = Math.max(0, from - 1);
+        const ops = this.container.sliceDelta(lo, Math.min(total, from + length + 1));
+        // Loro: the anchors of a mark decide where text typed at its edge lands, not what the text looks like.
+        // https://github.com/loro-dev/loro/issues/1240 (canary: tests/unit/loro-quirks.test.js)
+        for (const { start, end, name, value } of markEdgeFixes(ops, lo, from, from + length, total, armed)) {
+            if (value === null) this.container.unmark({ start, end }, name);
+            else this.container.mark({ start, end }, name, value);
+        }
     }
     
     /** @param {InputEvent} event @param {ReturnType<TextBehavior["getSelection"]>} [sel] */
