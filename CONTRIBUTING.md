@@ -31,7 +31,7 @@ You need [Bun](https://bun.sh).
 git clone https://github.com/aionbuilders/nabu
 cd nabu
 bun install
-bunx playwright install chromium
+bunx playwright install chromium firefox
 bun run dev
 ```
 

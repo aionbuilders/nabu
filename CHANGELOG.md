@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-Nothing yet.
+### Fixed
+- **Firefox: the text froze after an IME composition in an empty block.** Firefox puts the composed text in a new text node, and Svelte went on updating the old one: what was typed next reached the model but not the screen, and the caret jumped to the start. The block's render now goes back as Svelte left it when a composition ends, and the model shows the composed text through it. This covers every browser and every text block, including code blocks.
+- **Composed text ignored the bold you had switched on, and could show twice.** A composition now gets the same marks as typed text: the marks you switched on, and the rule for mark edges. At the end of a bold run, the composed text showed both in the run and after it.
+
+### Tests
+- A `firefox` Playwright project (`tests/e2e/firefox`) drives compositions on the real browser. Run `bunx playwright install firefox` once. `core` still runs on Chromium only.
 
 ## 0.1.5 (2026-11-04)
 

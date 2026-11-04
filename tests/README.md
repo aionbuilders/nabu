@@ -27,7 +27,8 @@ Playwright projects (see `playwright.config.js`):
 
 | Project | Directory | Notes |
 |---|---|---|
-| `core` | `tests/e2e` | everything except `flaky/` and `perf/`; `bun run test:e2e` runs `core` and `flaky` |
+| `core` | `tests/e2e` | everything except `flaky/`, `perf/` and `firefox/`; `bun run test:e2e` runs `core`, `firefox` and `flaky` |
+| `firefox` | `tests/e2e/firefox` | what only Firefox shows: `keyboard.insertText` is a real composition there. `bunx playwright install firefox` once |
 | `flaky` | `tests/e2e/flaky` | `retries: 2`, `timeout: 15000` (clipboard APIs, CRDT undo timing, IndexedDB debounce, cross-block selection) |
 | `perf` | `tests/e2e/perf` | only exists when asked for: `bunx playwright test --project=perf` (or `NABU_PERF=1`). Large documents (1 000 to 10 000 blocks), prints a table and writes `test-results/perf.json`. One worker; can take 30 to 60 minutes. Knobs (`NABU_PERF_SIZES`, `NABU_PERF_CAP_MS`...) are documented at the top of `large-docs.perf.ts` |
 

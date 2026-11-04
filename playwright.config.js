@@ -47,10 +47,19 @@ export default defineConfig({
       name: 'core',
       testDir: 'tests/e2e',
       // `perf/` holds the large-document measurements (`*.perf.ts`, run on demand: `bunx playwright test --project=perf`).
-      testIgnore: ['**/flaky/**', '**/perf/**'],
+      testIgnore: ['**/flaky/**', '**/perf/**', '**/firefox/**'],
       use: {
         ...devices['Desktop Chrome'],
         permissions: ['clipboard-read', 'clipboard-write'],
+      },
+    },
+    {
+      // What only Firefox shows (tests/e2e/firefox). `bunx playwright install firefox` once. It knows no clipboard permission.
+      name: 'firefox',
+      testDir: 'tests/e2e/firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        permissions: [],
       },
     },
     {

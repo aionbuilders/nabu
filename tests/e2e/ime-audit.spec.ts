@@ -243,6 +243,31 @@ test.describe('3 · composition positions', () => {
     expect(r.filter((x) => !x.bold).map((x) => x.text).join('')).toBe('hello ');
   });
 
+  test('3b′ · at the END of a bold run: not bold, as if typed, and shown once', async ({ page }) => {
+    await buildBlocks(page, [Para('abc')]);
+    await selectRange(page, 'abc', 0, 'abc', 3);
+    await bold(page);
+    await focusEnd(page, 'abc');
+    const id = await idOf(page, 'abc');
+    await ime('か');
+    await commit('か');
+    await expectCommitted(page, 'p(abcか)', 'abcか|', id, 'abcか');
+    expect(await runs(page)).toEqual([{ text: 'abc', bold: true }, { text: 'か' }]);
+  });
+
+  test('3b″ · with bold switched on in an empty paragraph, the committed text is bold, as if typed', async ({ page }) => {
+    await focusEmpty(page);
+    await bold(page);
+    await ime('か');
+    await commit('か');
+    await expect.poll(() => flat(page)).toBe('p(か)');
+    expect(await runs(page)).toEqual([{ text: 'か', bold: true }]);
+    await page.keyboard.type('x');
+    await expect.poll(() => flat(page)).toBe('p(かx)');
+    expect(await runs(page)).toEqual([{ text: 'かx', bold: true }]);
+    expect(await page.locator('[data-block-type="paragraph"]').first().textContent()).toBe('かx');
+  });
+
   test('3c · inside a LINK the committed text is part of the link', async ({ page }) => {
     await buildBlocks(page, [Para('see example now')]);
     await selectRange(page, 'see example now', 4, 'see example now', 11);

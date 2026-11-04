@@ -1480,11 +1480,10 @@ export class Nabu {
         if (this.#readonly && !this.#composing) return;
         this.#composing = false;
         const composedIn = this.#compositionStartBlock?.behaviors?.get('text');
-        const composedBlock = this.#compositionStartBlock;
         this.#composingBlock = null;
         restoreEmptyBlocks(this.#swappedEmpties);
         this.#swappedEmpties = [];
-        /** @type {any} */ (composedIn)?.restoreAfterComposition?.(e.data || ''); // before the model catches up: no duplicate of the composed text
+        /** @type {any} */ (composedIn)?.restoreAfterComposition?.(); // before the model catches up: no duplicate of the composed text
         try {
             this.#syncComposition(e);
         } finally {
@@ -1492,11 +1491,6 @@ export class Nabu {
         }
         this.selection.normalize(); // a dead caret must not survive the composition
         this.#revealSoon();
-        // A canceled composition in an EMPTY block: its render is back (restoreAfterComposition), so is the caret.
-        if (!(e.data || '') && composedBlock && composedBlock.element?.isConnected && !composedIn?.text) {
-            this.selection.setCursor(composedBlock, 0);
-            tick().then(() => { if (!this.#composing && composedBlock.element?.isConnected && !composedIn?.text) this.selection.setCursor(composedBlock, 0); });
-        }
     }
 
     /** @param {CompositionEvent} e */
@@ -1519,10 +1513,6 @@ export class Nabu {
         const behavior = block.behaviors?.get('text');
         if (!behavior) return;
 
-        // Canceled composition (Escape) fires compositionend with e.data === ''.
-        const composedText = e.data || '';
-        if (!composedText) return;
-
         // Where the composition began NOW: the Loro cursors followed every edit of this text made meanwhile (P-101).
         if (anchor) {
             const moved = resolveOffset(this.doc, anchor, behavior.container.length);
@@ -1530,7 +1520,20 @@ export class Nabu {
         }
         startOffset = Math.max(0, Math.min(startOffset, behavior.container.length));
 
+        // Canceled composition (Escape) fires compositionend with e.data === ''. The render is back (restoreAfterComposition), and the
+        // caret with it, unless the user went to another block.
+        const composedText = e.data || '';
+        if (!composedText) {
+            const at = startOffset;
+            this.selection.sync();
+            if (this.selection.anchorBlock !== block) return;
+            this.selection.setCursor(block, at);
+            tick().then(() => { if (!this.#composing && block.element?.isConnected && this.selection.anchorBlock === block) this.selection.setCursor(block, at); });
+            return;
+        }
+
         behavior.insert(startOffset, composedText);
+        behavior.markTypedRun?.(startOffset, composedText.length); // the same marks as if it had been typed
         block.commit();
         const caret = startOffset + composedText.length;
         tick().then(() => {

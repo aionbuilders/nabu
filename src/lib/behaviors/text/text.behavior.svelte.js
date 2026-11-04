@@ -154,65 +154,48 @@ export class TextBehavior {
         return this.nabu.composing ? at : Math.min(at, this.text.length);
     }
 
-    /** The render of an EMPTY block when an IME composition started (Svelte's own child nodes and their text), to put back if it is canceled. @type {{ nodes: Node[], data: string[] } | null} */
-    #emptySnapshot = null;
-
-    /** Svelte's own nodes around a trailing render filler when an IME composition started: its text nodes and the filler with its place. @type {{ texts: Set<Node>, filler: Element, parent: Node, next: Node | null } | null} */
+    /** The render of the block when an IME composition started: its elements with their children, its text nodes with their text, and the model text it shows. @type {{ text: string, children: Map<Node, Node[]>, data: Map<Text, string> } | null} */
     #compositionSnapshot = null;
 
     /**
-     * IME composition starts. With a trailing render filler (`<br data-nabu-filler>`, the empty last line after a "\n")
-     * the browser puts the composed text in a NEW text node before the filler (and may swap the filler for a `<br>` of
-     * its own) — nodes Svelte does not know, which would stay next to the ones it updates once the model catches up
-     * (text shown twice). Remember Svelte's nodes so {@link TextBehavior#restoreAfterComposition} can undo the browser's
-     * additions at the end. No filler: nothing to do.
+     * IME composition starts. The browser owns the DOM until it ends, and what it does there is not known to Svelte: it may put the
+     * composed text in a NEW text node (Firefox, in an empty block), swap a node for a `<br>`, or write it into a run the model
+     * will not give it to (the end of a bold run). Remember the render so {@link TextBehavior#restoreAfterComposition} can put it back.
+     * Nested blocks and UI are not this block's render: the walk stops at them.
      */
     snapshotForComposition() {
         const element = this.block.element;
         this.#compositionSnapshot = null;
-        this.#emptySnapshot = null;
-        // An EMPTY block renders a lone "\n" text node: a canceled composition makes the browser swap it for a <br> (caret lost).
-        if (element && !this.text) {
-            const nodes = [...element.childNodes];
-            this.#emptySnapshot = { nodes, data: nodes.map((n) => n.nodeType === Node.TEXT_NODE ? /** @type {Text} */ (n).data : '') };
-            return;
+        if (!element) return;
+        /** @type {Map<Node, Node[]>} */
+        const children = new Map([[element, [...element.childNodes]]]);
+        /** @type {Map<Text, string>} */
+        const data = new Map();
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+            acceptNode: (n) => n.nodeType === Node.ELEMENT_NODE && (/** @type {Element} */ (n).hasAttribute('data-block-id') || /** @type {Element} */ (n).hasAttribute('data-nabu-ui')) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+        });
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (n.nodeType === Node.TEXT_NODE) data.set(/** @type {Text} */ (n), /** @type {Text} */ (n).data);
+            else children.set(n, [...n.childNodes]);
         }
-        const filler = element?.querySelector('[data-nabu-filler]');
-        if (!element || !filler?.parentNode) return;
-        const texts = new Set();
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-        for (let n = walker.nextNode(); n; n = walker.nextNode()) texts.add(n);
-        this.#compositionSnapshot = { texts, filler, parent: filler.parentNode, next: filler.nextSibling };
+        this.#compositionSnapshot = { text: this.text, children, data };
     }
 
     /**
-     * End of a composition begun next to a filler, BEFORE the composed text reaches the model: remove the text nodes and
-     * `<br>` the browser created meanwhile (the composed text is committed to the model, which the next render shows
-     * through Svelte's own nodes); a canceled composition (`composedText` empty) gets its filler back.
-     * @param {string} composedText
+     * End of a composition, BEFORE the composed text reaches the model: the render goes back as Svelte left it, and the model shows
+     * the composed text through it on the next render, in the run it really belongs to. Without this Svelte updates nodes that are
+     * no longer in the page (the DOM freezes while the model moves on), or the text shows twice.
+     * If the model changed meanwhile (a programmatic edit), Svelte has already rendered over the snapshot: it stays as it is.
      */
-    restoreAfterComposition(composedText) {
+    restoreAfterComposition() {
         const snap = this.#compositionSnapshot;
         this.#compositionSnapshot = null;
-        const element = this.block.element;
-        const empty = this.#emptySnapshot;
-        this.#emptySnapshot = null;
-        if (empty && element && !composedText) {
-            // Canceled in an empty block: the render text node (not a browser <br>) with its text, as Svelte left it.
-            element.replaceChildren(...empty.nodes);
-            empty.nodes.forEach((n, i) => { if (n.nodeType === Node.TEXT_NODE && /** @type {Text} */ (n).data !== empty.data[i]) /** @type {Text} */ (n).data = empty.data[i]; });
-            return;
+        if (!snap || this.text !== snap.text) return;
+        for (const [parent, nodes] of snap.children) {
+            const now = parent.childNodes;
+            if (now.length !== nodes.length || nodes.some((n, i) => n !== now[i])) /** @type {Element} */ (parent).replaceChildren(...nodes);
         }
-        if (!snap || !element) return;
-        /** @type {Node[]} */
-        const stray = [];
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-        for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!snap.texts.has(n)) stray.push(n);
-        for (const br of element.querySelectorAll('br')) if (br !== snap.filler) stray.push(br);
-        for (const n of stray) n.parentNode?.removeChild(n);
-        if (!composedText && !snap.filler.isConnected) {
-            snap.parent.insertBefore(snap.filler, snap.next?.parentNode === snap.parent ? snap.next : null);
-        }
+        for (const [node, data] of snap.data) if (node.data !== data) node.data = data;
     }
 
     /**
@@ -323,18 +306,26 @@ export class TextBehavior {
 
         if (!selection.isCollapsed) this.delete({index: selection.from, length: selection.to - selection.from}, selection);
         this.insert(selection.from, textToInsert);
-        // Apply the cursor's pending stored marks to the inserted text.
+        this.markTypedRun(selection.from, textToInsert.length);
+        this.block.commit();
+        tick().then(() => this.nabu.selection.setCursor(this.block, selection.from + textToInsert.length));
+    }
+
+    /**
+     * The marks of a run the user just typed or composed at `[from, from + length)`: the cursor's pending stored marks, then the rule
+     * for mark edges.
+     * @param {number} from @param {number} length
+     */
+    markTypedRun(from, length) {
         const stored = this.nabu.storedMarks;
-        if (stored && textToInsert) {
-            const range = { from: selection.from, to: selection.from + textToInsert.length, isCollapsed: false };
+        if (stored && length) {
+            const range = { from, to: from + length, isCollapsed: false };
             for (const [name, on] of Object.entries(stored)) {
                 if (on) this.applyMark(name, true, range);
                 else this.removeMark(name, range);
             }
         }
-        this.settleMarkEdges(selection.from, textToInsert.length, stored);
-        this.block.commit();
-        tick().then(() => this.nabu.selection.setCursor(this.block, selection.from + textToInsert.length));
+        this.settleMarkEdges(from, length, stored);
     }
 
     /**
