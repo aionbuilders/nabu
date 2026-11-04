@@ -118,6 +118,8 @@ The paragraph indent follows the typographic rule: it applies to every paragraph
 }
 ```
 
+The editor keeps the caret visible while the user edits: after a keystroke, a paste or an undo it scrolls the nearest scrollable ancestors, then the window (the visual viewport, when a virtual keyboard shrinks it), by the least amount that shows the caret. Nothing moves when the caret is already visible, and an edit made by your code (`insert`, `importRemote`) never scrolls. To keep the caret clear of your own sticky header or toolbar, set `scroll-padding` (for example `scroll-padding-bottom: 64px`) on the scroll container, or on `html` for the window.
+
 The dash can also be chosen in code, `createDialogueExtension({ dash: '—' })`: see [Language and dialogue](./ime-and-languages.md#the-dialogue-dash).
 
 ### Reference of the variables

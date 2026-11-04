@@ -18,6 +18,7 @@ import { moveBlocks } from './move.js';
 import { closestWithin } from '../utils/dom-scope.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset, revealFocus } from './undo-selection.js';
 import { LARGE_DOC } from './chunks.js';
+import { revealCaret } from '../utils/reveal-caret.js';
 import { markAtCaret } from '../behaviors/text/mark-edges.js';
 import { swapEmptyBlocks, restoreEmptyBlocks } from '../utils/composition.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
@@ -230,6 +231,16 @@ export class Nabu {
     #undoneEnd = /** @type {number | null} */ (null);
     /** Selection where each recent action ended, by the counter end of its undo step. @type {Map<number, import('./undo-selection.js').UndoSelection>} */
     #actionEnds = new Map();
+
+    // ── Keeping the caret visible ────────────────────────────────────────────
+    // Native edits are cancelled and the DOM is rendered from the model, so the browser no longer scrolls to the caret after an
+    // edit: the editor does (utils/reveal-caret.js), in the next frame, once per burst, and only for an edit the user made.
+    /** The pending animation frame of {@link Nabu#revealSoon}, 0 when none. */
+    #revealFrame = 0;
+    /** An edit asked for the reveal outright (an input, a paste…), not only "if something changed". */
+    #revealForced = false;
+    /** The oldest key that asks "if something changed since": the document and selection counters at its keydown. @type {{ ops: number, placed: number } | null} */
+    #revealSince = null;
 
     /** @param {NabuInit} init */
     constructor(init = {}) {
@@ -1330,9 +1341,39 @@ export class Nabu {
         }
     }
     
+    /**
+     * Bring the caret into view in the next frame (utils/reveal-caret.js), after an edit the user made: native editing scrolls to
+     * the caret, and Nabu's does not happen natively. A frame, not the keystroke itself: the layout has to happen then anyway, so
+     * nothing is forced and the key-to-DOM latency stays as it was. Requests of one burst share the frame.
+     * With `since` (a key the editor handled), the reveal only happens if the document or the selection changed meanwhile: a key
+     * that did nothing (Ctrl+C, a modifier…) must not throw the user back to the caret they scrolled away from.
+     * Programmatic edits (`insert`, `exec`, `importRemote`, a collaborator) never come through here.
+     * @param {{ ops: number, placed: number }} [since]
+     */
+    #revealSoon(since) {
+        if (typeof requestAnimationFrame === 'undefined') return;
+        if (since) this.#revealSince ??= since;
+        else this.#revealForced = true;
+        if (this.#revealFrame) return;
+        this.#revealFrame = requestAnimationFrame(() => {
+            this.#revealFrame = 0;
+            const forced = this.#revealForced;
+            const asked = this.#revealSince;
+            this.#revealForced = false;
+            this.#revealSince = null;
+            if (!forced && asked && this.doc.opCount() === asked.ops && this.selection.placements === asked.placed) return;
+            const root = this.selection.root; // null once the editor is unmounted
+            if (!root || !root.isConnected || this.#readonly || this.#composing) return;
+            const active = /** @type {Document | ShadowRoot} */ (root.getRootNode()).activeElement ?? document.activeElement;
+            if (!active || !root.contains(active) || this.selection.scope() !== 'mine') return;
+            revealCaret(root);
+        });
+    }
+
     /** @param {InputEvent} e */
     handleBeforeinput(e) {
         if (this.#readonly) { e.preventDefault(); return; } // nothing is typed, deleted, pasted or dropped in a read-only editor
+        this.#revealSoon();
         this.selection.sync(); // selectionchange is async: don't act on a stale caret
         // Ne pas interférer avec la composition IME en cours : le navigateur
         // doit pouvoir muter librement le text node (insertCompositionText
@@ -1442,6 +1483,7 @@ export class Nabu {
             this.#endCompositionGroup();
         }
         this.selection.normalize(); // a dead caret must not survive the composition
+        this.#revealSoon();
         // A canceled composition in an EMPTY block: its render is back (restoreAfterComposition), so is the caret.
         if (!(e.data || '') && composedBlock && composedBlock.element?.isConnected && !composedIn?.text) {
             this.selection.setCursor(composedBlock, 0);
@@ -1492,6 +1534,16 @@ export class Nabu {
     handleKeydown(e) {
         // Read-only: no command, hook or block sees the key. The browser keeps its own keys (selection, copy, scrolling).
         if (this.#readonly) return;
+        const since = { ops: this.doc.opCount(), placed: this.selection.placements };
+        this.#keydown(e);
+        // A key the editor took (Enter, Backspace, undo, a structural shortcut…) scrolls to the caret if it changed anything. The native
+        // caret moves (arrows…) are not prevented: the browser scrolls for them. Select all leaves the caret where the user looks.
+        const selectAll = (e.ctrlKey || e.metaKey) && typeof e.key === 'string' && e.key.toLowerCase() === 'a';
+        if (e.defaultPrevented && !selectAll) this.#revealSoon(since);
+    }
+
+    /** @param {KeyboardEvent} e */
+    #keydown(e) {
         // Tab on a control of the editor's own UI (the language select of a code block…) is the browser's: it moves the focus on.
         if (e.key === 'Tab' && e.target instanceof Element && e.target.closest('[data-nabu-ui]')) return;
         this.selection.sync(); // no-op when the document capture listener already synced
@@ -1741,6 +1793,8 @@ export class Nabu {
         e.preventDefault();
         if (this.#readonly) { this.handleCopy(e); return; } // cutting a read-only text copies it and removes nothing
 
+        this.#revealSoon();
+
         // 1. Copy selection to clipboard
         this.handleCopy(e);
 
@@ -1758,6 +1812,7 @@ export class Nabu {
     handlePaste(e) {
         e.preventDefault();
         if (this.#readonly) return;
+        this.#revealSoon();
         this.selection.sync();
         const clipboard = e.clipboardData;
         if (!clipboard) return;
@@ -2026,6 +2081,7 @@ export class Nabu {
         if (!position) return;
         // The editor takes the focus (undo, typing…) even when the drop leaves no text caret to put in it (a dropped image).
         if (document.activeElement !== root) root.focus({ preventScroll: true });
+        this.#revealSoon();
         const own = !!source && dt.getData(DRAG_MARKER) === source.token;
         this.dropAt(dt, position, { source: own && !wantsCopy(e) ? source : null });
     }
@@ -2633,6 +2689,8 @@ export class Nabu {
      * @public
      */
     destroy() {
+        if (this.#revealFrame) cancelAnimationFrame(this.#revealFrame);
+        this.#revealFrame = 0;
         for (const stop of this.#tracked) stop();
         this.#tracked.clear();
         for (const system of this.systems.values()) system.stop?.();
