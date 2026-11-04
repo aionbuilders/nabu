@@ -4,6 +4,20 @@
 
 Nothing yet.
 
+## 0.1.3 (2026-11-04)
+
+Fixes found by testing the published package in a real SvelteKit app: the first thing a consumer's build, a Firefox user and a page that mounts editors on demand would hit. The API only gains two methods.
+
+### Added
+- **`engine.destroy()`** releases an engine for good, memory included: it unsubscribes the engine and its blocks from the document, stops the subsystems, closes the persistence and the upload retries, and the engine can then be garbage collected. Idempotent. The document stays readable (`serialize()`), the engine no longer follows changes, and it must not be mounted again. Changes that are not saved yet are dropped: await `saveNow()` first when they matter.
+- **`engine.track(unsubscribe)`** hands a Loro subscription or any cleanup over to `destroy()`. A custom block should pass its own, `nabu.track(node.data.subscribe(...))`: Loro keeps the callback until it is unsubscribed, so an untracked one keeps the engine in memory.
+
+### Fixed
+- **`vite build` failed on a server-rendered page that imports Nabu**, with `Cannot find module './snippets/loro-wasm-…/inline0.js'`. The `nabu()` helper now keeps `loro-crdt` out of the SSR bundle (`ssr.external`). With pnpm, whose strict `node_modules` hides it from your app, also run `pnpm add loro-crdt`.
+- **Firefox lost everything typed after Tab or `element.focus()`.** Firefox leaves the caret on the editor root, and the correction looked for text before the start of the document, found none and gave up. Such a caret now lands on the nearest text in either direction. Covered by `tests/e2e/dead-root-caret.spec.ts`, and checked on real Firefox, WebKit and Chromium through a packed build.
+- **Every unmounted editor left 5 listeners on `document`.** They now exist only while an editor is mounted: unmounting is enough to release the page, and the same engine can be mounted again. Covered by `tests/e2e/lifecycle.spec.ts`, which counts the listeners and checks through the garbage collector that a destroyed engine is really gone.
+- **A flaky documentation test.** The walkthrough of `docs/recipes/autosave-to-your-server.md` raced its own 10 ms timer under load.
+
 ## 0.1.2 (2026-10-29)
 
 Fixes from the first days of the beta: rich text that stayed split after removing a mark, mark edges, Ctrl+B at the edge of a word, and code block editing. No API change.
