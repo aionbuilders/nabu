@@ -72,13 +72,14 @@ const server = {
   }
 };
 
+// This walkthrough flushes by hand: `wait` is long so that no timer can flush behind its back.
 // Loro delivers events asynchronously.
 const settled = () => new Promise((resolve) => setTimeout(resolve));
 
 // 1. A new document: the first flush sends a snapshot.
 const a = createDocumentEditor();
 await a.importMarkdown('Hello');
-const save = autosave(a, (batch) => server.save(batch), { snapshot: true, wait: 10 });
+const save = autosave(a, (batch) => server.save(batch), { snapshot: true, wait: 60_000 });
 await save.flush();
 expect(server.chunks).toHaveLength(1);
 
@@ -106,7 +107,7 @@ const b = open(server.chunks);
 expect(b.serialize('markdown')).toBe('Hello\n\nSecond paragraph\n\nWritten offline');
 
 // ...edits it, and saves (it already has everything up to here, so no snapshot).
-const saveB = autosave(b, (batch) => server.save(batch), { wait: 10 });
+const saveB = autosave(b, (batch) => server.save(batch), { wait: 60_000 });
 b.insert('paragraph', { text: 'Added by b' });
 await b.commit();
 await settled();
