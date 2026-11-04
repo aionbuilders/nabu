@@ -595,7 +595,8 @@ test.describe('responsive and themes', () => {
     expect(await paragraph.evaluate((el) => getComputedStyle(el).color)).toBe('rgb(20, 20, 22)');
     await page.getByRole('navigation', { name: 'Documentation' }).getByRole('link', { name: 'Regions', exact: true }).click();
     await hydrated(page);
-    expect(await page.locator(`${ROOT} [data-block-type="paragraph"]`).first().evaluate((el) => getComputedStyle(el).color)).toBe('rgb(20, 20, 22)');
+    // a poll: `hydrated` can still match the article of the page being left, whose paragraph (no computed colour once detached) is on its way out
+    await expect.poll(() => page.locator(`${ROOT} [data-block-type="paragraph"]`).first().evaluate((el) => getComputedStyle(el).color)).toBe('rgb(20, 20, 22)');
     // switching with the toggle repaints the document with no reload
     await page.getByTestId('theme-toggle').click(); // light -> system(dark here)
     await expect.poll(() => page.locator(`${ROOT} [data-block-type="paragraph"]`).first().evaluate((el) => getComputedStyle(el).color)).toBe('rgb(237, 237, 237)');
@@ -604,6 +605,7 @@ test.describe('responsive and themes', () => {
 });
 
 test('screenshots of the documentation', async ({ browser }) => {
+  test.setTimeout(180_000); // many pages, widths and schemes: over the default 20 s on a loaded machine
   mkdirSync(SHOTS, { recursive: true });
   const pages = [
     ['index', '/docs'],

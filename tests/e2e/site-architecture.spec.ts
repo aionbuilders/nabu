@@ -736,6 +736,7 @@ test.describe('responsive and themes', () => {
 // ── screenshots ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 test('screenshots of the section', async ({ browser }) => {
+  test.setTimeout(180_000); // many pages, widths and schemes: over the default 20 s on a loaded machine
   mkdirSync(SHOTS, { recursive: true });
   const pages = [
     ['landing', '/architecture'],
