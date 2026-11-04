@@ -4,6 +4,13 @@
 
 Nothing yet.
 
+## 0.1.4 (2026-11-04)
+
+The caret stays on screen. No API change.
+
+### Fixed
+- **The caret could leave the visible area while typing.** Nabu cancels the native edits and renders from the model, so the browser no longer scrolled to the caret: after 20 Enter in a 220 px scroller it was 565 px below the visible area, on the plainest setup. Every scrollable ancestor and the window now follow it after an edit the user made, by the least amount, within the visual viewport when there is one. A host keeps it clear of its own sticky UI with `scroll-padding`. Nothing scrolls for a key that changed nothing (Ctrl+C, a modifier, Escape) or for a programmatic or remote change. Covered by `tests/e2e/caret-reveal.spec.ts`, and checked on Firefox, WebKit, Chromium and emulated phones through a packed build. A real virtual keyboard is not verified yet.
+
 ## 0.1.3 (2026-11-04)
 
 Fixes found by testing the published package in a real SvelteKit app: the first thing a consumer's build, a Firefox user and a page that mounts editors on demand would hit. The API only gains two methods.
