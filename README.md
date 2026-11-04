@@ -26,7 +26,7 @@ bun add @aionbuilders/nabu
 ### Requirements
 
 - **Svelte 5.20 or newer**.
-- A Vite setup (SvelteKit, or Svelte + Vite) that can load WebAssembly. Loro ships as a WebAssembly module loaded with top-level `await`, so the build needs `vite-plugin-wasm` and `build.target: 'esnext'`. The bundled helper does both:
+- A Vite setup (SvelteKit, or Svelte + Vite) that can load WebAssembly. Loro ships as a WebAssembly module loaded with top-level `await`, so the build needs `vite-plugin-wasm` and `build.target: 'esnext'` (and, for server rendering, `loro-crdt` kept out of the SSR bundle). The bundled helper does all three:
 
 ```js
 // vite.config.js
