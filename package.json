@@ -1,6 +1,6 @@
 {
 	"name": "@aionbuilders/nabu",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"scripts": {
 		"dev": "vite dev",
 		"predev": "npm run api:model:ensure",
@@ -44,6 +44,10 @@
 		"./extend": {
 			"types": "./dist/extend.d.ts",
 			"svelte": "./dist/extend.js"
+		},
+		"./format": {
+			"types": "./dist/format.d.ts",
+			"default": "./dist/format.js"
 		},
 		"./vite": {
 			"types": "./dist/vite.d.ts",

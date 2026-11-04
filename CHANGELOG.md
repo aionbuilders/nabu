@@ -4,6 +4,21 @@
 
 Nothing yet.
 
+## 0.1.5 (2026-11-04)
+
+Plain text, a way to render a document without the editor, and two fixes for small editors.
+
+### Added
+- **`serialize('text')`** gives the text as it was typed: no escaping, no markup. Blocks are separated by a blank line, list items by a single line break, and blocks with no text add nothing. `jsonToText(json)` does the same from a JSON export, so the browser and a server get the identical string.
+- **`@aionbuilders/nabu/format`**, a new entry that loads neither Loro nor Svelte and works in plain Node and Bun: `deltaToHtml`, `deltaToMarkdown`, `jsonToText`, `sanitizeUrl`, `escapeHtml`, `JSON_FORMAT_VERSION`, `isSupportedJsonVersion`. A test walks its import graph.
+- **`<NabuEditor>` passes other attributes to its root** (`id`, `class`, `style`, `aria-describedby`, `inputmode`, `enterkeyhint`, `autocapitalize`, `data-*`). `class` is added to `nabu-editor`. The editor's own attributes and handlers always win.
+
+### Fixed
+- **An editor without marks accepted them.** `MinimalPreset` kept bold, italic, code and links from pasted HTML, with no way to see them as a feature or remove them. A mark now exists only if an extension declares it in `loroTextStyles`: any other mark in pasted or imported content is dropped, and the text stays. So `importJSON` or `importMarkdown` into a narrower preset drops marks too, and a custom mark must be declared to survive a paste, as the docs already asked. Remote updates and snapshots are not affected.
+- **HTML copied in Chromium kept non-breaking spaces.** Chromium's copy writes a space at the edge of an inline element as `<span>&nbsp;</span>`, so pasted text like `Bold and link` no longer wrapped at those places and differed from what Firefox gave. Such a span is now a plain space. A real non-breaking space (`10&nbsp;km`) stays.
+- **The read-only viewer recipe claimed to avoid WebAssembly**, while importing `deltaToHtml` from the main entry loaded it. It now imports from `/format`. The main entry still exports these helpers.
+- **Three site tests depended on the load of the machine**: a race on a client-side navigation, and screenshot loops over the default timeout.
+
 ## 0.1.4 (2026-11-04)
 
 The caret stays on screen. No API change.
