@@ -133,6 +133,19 @@ describe('rule 3 — empty / whitespace-only text blocks are dropped', () => {
 describe('rule 4 — whitespace and NBSP (P-57)', () => {
   const NB = ' ';
 
+  it("a span holding only an NBSP is a plain space: Chromium's copy of a space at the edge of an inline element", () => {
+    // exactly what Chromium put on the clipboard for `<b>Gras</b> et <a>lien</a> <code>c</code>` (styles removed)
+    expect(text('<b>Gras</b><span><span>&nbsp;</span>et<span>&nbsp;</span></span><a href="https://e.com/">lien</a><span><span>&nbsp;</span></span><code>c</code>')).toBe('Gras et lien c');
+    // with a real NBSP in the same copy: that one stays
+    expect(text('<span>Un mot<span>&nbsp;</span></span><b>gras</b><span><span>&nbsp;</span>ici et 10&nbsp;km plus</span>')).toBe(`Un mot gras ici et 10${NB}km plus`);
+  });
+
+  it('an NBSP that is not alone in its own span stays', () => {
+    expect(text('<p><b>a</b>&nbsp;<i>b</i></p>')).toBe(`a${NB}b`);
+    expect(text('<p>a<span>&nbsp;b</span></p>')).toBe(`a${NB}b`);
+    expect(text('<p>a<span>&nbsp;<b>b</b></span></p>')).toBe(`a${NB}b`);
+  });
+
   it('an NBSP between two visible characters is kept ("10 km", "Bonjour :", « guillemets »)', () => {
     expect(text(`<p>10${NB}km</p>`)).toBe(`10${NB}km`);
     expect(text(`<p>Bonjour${NB}: monde</p>`)).toBe(`Bonjour${NB}: monde`);

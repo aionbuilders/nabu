@@ -204,7 +204,9 @@ export function resolveLinkHref(href) {
 function collect(el, marks, preserve, verbatim, out) {
     for (const child of el.childNodes) {
         if (child.nodeType === Node.TEXT_NODE) {
-            const s = child.textContent;
+            // Chromium writes every space at the edge of an inline element as `<span>&nbsp;</span>` on copy: not a typographic choice.
+            const converted = !verbatim && child.textContent === '\u00a0' && /** @type {Element} */ (el).tagName === 'SPAN' && el.childNodes.length === 1;
+            const s = converted ? ' ' : child.textContent;
             if (s) out.push({ s, marks, preserve, verbatim });
         } else if (child.nodeType === Node.ELEMENT_NODE) {
             const el2 = /** @type {Element} */ (child);
@@ -252,6 +254,7 @@ const HTML_WS = /^[ \t\n\r\f]$/;
  *    `white-space: pre | pre-wrap | break-spaces` where it is kept; `<br>` is a line break;
  *  - U+00A0 between two visible characters is KEPT ("10 km", "Bonjour :"); next to another space or at the edge of a
  *    line / block it is a regular space (then collapsed like any space);
+ *  - a `<span>` holding nothing but one U+00A0 is a regular space: what Chromium's copy makes of a plain space (see `collect`);
  *  - every other character (U+202F, U+2007, U+2060, U+00AD, ZWJ, ZWNJ…) is left untouched.
  * @param {Token[]} tokens
  * @param {{ keepEdges?: boolean }} [options]  `keepEdges`: keep one collapsed space at the edges (a fragment of a line)
