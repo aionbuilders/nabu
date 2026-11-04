@@ -15,6 +15,7 @@ export default defineConfig({
       { find: /^@aionbuilders\/nabu$/, replacement: lib('index.js') },
       { find: /^@aionbuilders\/nabu\/ui$/, replacement: lib('ui/index.js') },
       { find: /^@aionbuilders\/nabu\/extend$/, replacement: lib('extend.js') },
+      { find: /^@aionbuilders\/nabu\/format$/, replacement: lib('format.js') },
       { find: /^@aionbuilders\/nabu\/vite$/, replacement: lib('vite.js') },
     ],
   },

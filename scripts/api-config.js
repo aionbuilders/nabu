@@ -22,6 +22,13 @@ export const ENTRIES = [
     file: 'src/lib/extend.js',
     summary: 'The extension() factory, the block base classes, the text behavior and the stable contract of a third-party block.',
   },
+  {
+    id: 'format',
+    specifier: '@aionbuilders/nabu/format',
+    title: 'Reading a document without the editor',
+    file: 'src/lib/format.js',
+    summary: 'Pure helpers for read-only pages and servers: the JSON export as text, a delta as HTML or markdown. No WebAssembly.',
+  },
 ];
 
 /** Classes of the stable `@public` contract that are not exported by name: documented under `extend`. */
@@ -96,6 +103,7 @@ export const RELATED_GUIDE = {
   formatChord: ['Commands and keymap', G + 'commands-and-keymap'],
   deltaToMarkdown: ['Clipboard and Markdown', G + 'clipboard-and-markdown'],
   deltaToHtml: ['Clipboard and Markdown', G + 'clipboard-and-markdown'],
+  jsonToText: ['A read-only viewer', '/docs/recipes/read-only-viewer'],
   MarkdownPasteExtension: ['Clipboard and Markdown', G + 'clipboard-and-markdown'],
   HtmlPasteExtension: ['Clipboard and Markdown', G + 'clipboard-and-markdown'],
   NabuPasteExtension: ['Clipboard and Markdown', G + 'clipboard-and-markdown'],

@@ -1,10 +1,11 @@
 /**
- * The public API is three entry points (audit C-01). Each pins the EXACT sorted list of its runtime exports: adding or removing
+ * The public API is four entry points (audit C-01). Each pins the EXACT sorted list of its runtime exports: adding or removing
  * a name is a conscious, breaking-or-additive API decision, and must be made here (and in CHANGELOG.md) on purpose.
  *
  *   @aionbuilders/nabu          src/lib/index.js     using the editor
  *   @aionbuilders/nabu/ui       src/lib/ui/index.js  the optional UI components
  *   @aionbuilders/nabu/extend   src/lib/extend.js    writing blocks and extensions
+ *   @aionbuilders/nabu/format   src/lib/format.js    reading a document without the editor (pure, no WebAssembly)
  */
 import { describe, it, expect } from 'vitest';
 
@@ -97,6 +98,17 @@ const EXTEND = [
   'parseChord',
 ];
 
+// The light door to helpers that the other entries export too (same functions, so a page that only reads loads no WebAssembly).
+const FORMAT = [
+  'JSON_FORMAT_VERSION',
+  'deltaToHtml',
+  'deltaToMarkdown',
+  'escapeHtml',
+  'isSupportedJsonVersion',
+  'jsonToText',
+  'sanitizeUrl',
+];
+
 // Importing a Svelte-heavy entry is slow the first time (compilation).
 const TIMEOUT = 60000;
 
@@ -116,13 +128,29 @@ describe('public API', () => {
     expect(Object.keys(mod).sort()).toEqual(EXTEND);
   }, TIMEOUT);
 
-  it('no name is exported by two entries (each name has one home)', () => {
+  it('@aionbuilders/nabu/format exports exactly the pinned names', async () => {
+    const mod = await import('#lib/format.js');
+    expect(Object.keys(mod).sort()).toEqual(FORMAT);
+  }, TIMEOUT);
+
+  it('no name is exported by two entries (each name has one home), but for the light /format door', () => {
     const all = [...ROOT, ...UI, ...EXTEND];
     expect(new Set(all).size).toBe(all.length);
   });
 
+  it('what /format shares with another entry is the very same value', async () => {
+    const format = await import('#lib/format.js');
+    const root = await import('#lib/index.js');
+    const extend = await import('#lib/extend.js');
+    for (const name of FORMAT) {
+      const home = /** @type {Record<string, unknown>} */ (name in root ? root : extend);
+      if (name in home) expect(format[/** @type {keyof typeof format} */ (name)], name).toBe(home[name]);
+      else expect(name).toBe('jsonToText'); // the one name that only /format has
+    }
+  }, TIMEOUT);
+
   it('every export is defined', async () => {
-    for (const path of ['#lib/index.js', '#lib/ui/index.js', '#lib/extend.js']) {
+    for (const path of ['#lib/index.js', '#lib/ui/index.js', '#lib/extend.js', '#lib/format.js']) {
       const mod = await import(/* @vite-ignore */ path);
       for (const [name, value] of Object.entries(mod)) expect(value, `${path} → ${name}`).not.toBeUndefined();
     }

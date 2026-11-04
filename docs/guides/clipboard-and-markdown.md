@@ -53,7 +53,7 @@ The first interpreter whose format is on the clipboard **and** that accepts it m
 Two consequences worth knowing:
 
 - **Plain text is read as markdown** whenever `MarkdownPasteExtension` is in the preset (`TextPreset`, `DocumentPreset`, `FullPreset`; `MinimalPreset` has only the plain-text fallback). Pasting `# Title` into an empty paragraph gives a heading. In a paste, **one line is one block**; `importMarkdown` uses CommonMark's rules instead, where consecutive lines join into one paragraph.
-- **A fragment is adapted to the editor.** The pasted types are limited to the blocks the editor registers: a heading pasted into a `MinimalPreset` editor becomes a paragraph with its text, and the children of a toggle it does not have follow as ordinary blocks. Nothing is dropped. A fragment of a format version the editor does not know is declined (not mis-read) and the paste falls to the next format.
+- **A fragment is adapted to the editor.** The pasted types are limited to the blocks the editor registers: a heading pasted into a `MinimalPreset` editor becomes a paragraph with its text, and the children of a toggle it does not have follow as ordinary blocks. Nothing is dropped, except marks the editor does not declare (`loroTextStyles`, see [Extensions](./extensions.md)): a `MinimalPreset` editor keeps the text of a pasted `<b>` or `<a>` and loses the bold and the link. A fragment of a format version the editor does not know is declined (not mis-read) and the paste falls to the next format.
 
 A whole block pasted into an empty block takes the place of that block and adopts its type (`# Title` pasted into an empty paragraph gives a heading). Each paste is a single undo step.
 

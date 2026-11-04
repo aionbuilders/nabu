@@ -68,19 +68,20 @@ A custom block component that changes the document on a click should check `bloc
 
 For a page that only displays a document (a published article, a preview, an email), you do not need an editor. Render the **JSON export** yourself. This is lighter than an editor: no WebAssembly and no Loro on the page, only the JSON you stored.
 
-The pieces are public:
+The pieces are public, and they come from `@aionbuilders/nabu/format`, a plain JavaScript entry: it imports no Loro, no Svelte and no DOM, so the page loads **no WebAssembly**, and Node and Bun can import it too. Importing the same names from the main entry `@aionbuilders/nabu` works, but it loads the whole editor, WebAssembly included.
 
 - `engine.serialize('json')` (or the JSON you saved) is a plain tree: `{ type, props, content, children }` with the text as runs `{ text, bold, italic, underline, strikethrough, code, link }`. See [Your first editor](../getting-started/first-editor.md#read-the-content).
 - `deltaToHtml` turns inline runs into HTML: escaped text, the marks as `<strong>`, `<em>`, `<u>`, `<s>`, `<code>`, and a link only if its URL is safe.
 - `sanitizeUrl` and `escapeHtml` cover the rest.
+- `jsonToText` turns the export into plain text, for a search index or a preview. See [Plain text](#plain-text).
 
 ## A renderer
 
 The function below handles the built-in blocks of `FullPreset`. Add the types of your own extensions the same way; an unknown type falls back to a paragraph with its text, the way an editor without that block would show it.
 
 ```js test
-import { createFullEditor, deltaToHtml, sanitizeUrl } from '@aionbuilders/nabu';
-import { escapeHtml } from '@aionbuilders/nabu/extend';
+import { createFullEditor } from '@aionbuilders/nabu'; // only to make the stored document below: the viewer does not need it
+import { deltaToHtml, sanitizeUrl, escapeHtml } from '@aionbuilders/nabu/format'; // all the viewer imports
 
 /** JSON runs `{ text, ...marks }` to the delta that `deltaToHtml` reads. */
 const inline = (runs = []) =>
@@ -167,6 +168,32 @@ const hostile = renderHtml({
 });
 expect(hostile).toBe('<p>click &lt;script&gt;x&lt;/script&gt;</p>\n');
 ```
+
+## Plain text
+
+`jsonToText(json)` gives the text a person typed, from a `serialize('json')` export or its `blocks` array. `engine.serialize('text')` is the same function over the same JSON, so the browser and a server compute the identical string. Unlike `serialize('markdown')`, it escapes nothing: `5 * 3` stays `5 * 3`.
+
+The rule is exact:
+
+- A block's text is its characters as typed: no escaping, no markup, marks and links ignored, a line break inside the block kept as `\n`. Nothing is trimmed.
+- Blocks are separated by a blank line (`\n\n`). The items of a list and their nested items are separated by a single `\n`, with no bullet or number.
+- A block without text (divider, image, video, file) and an empty paragraph contribute nothing, so no blank lines pile up.
+- A container (toggle, callout, region...) gives its own text (a region: its title), then its children's, in order.
+- Any block with a `content` is read, so a block from an extension needs no registration.
+
+```js test
+import { createFullEditor } from '@aionbuilders/nabu';
+import { jsonToText } from '@aionbuilders/nabu/format';
+
+const engine = createFullEditor();
+await engine.importMarkdown('## Prices\n\nA **bold** 5 * 3.\n\n- one\n  - nested\n- two\n\n---');
+
+expect(engine.serialize('text')).toBe('Prices\n\nA bold 5 * 3.\n\none\nnested\ntwo');
+// A server that only holds the stored JSON computes the same string.
+expect(jsonToText(JSON.parse(JSON.stringify(engine.serialize('json'))))).toBe(engine.serialize('text'));
+```
+
+To keep proof of what a person wrote, store the string you received. Do not recompute it later with a newer version of the library: the rule may be refined between versions.
 
 ## In a Svelte page
 

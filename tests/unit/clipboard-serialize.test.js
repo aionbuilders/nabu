@@ -15,9 +15,10 @@ import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
 import { PlainTextPasteExtension } from '#lib/paste/plain-text.paste.js';
 import { HtmlPasteExtension } from '#lib/paste/html.paste.js';
 import { NabuPasteExtension } from '#lib/paste/nabu.paste.js';
+import { RichTextExtension } from '#lib/behaviors/text/rich-text.extension.js';
 
 const EXTENSIONS = [
-  ParagraphExtension, HeadingExtension, CodeExtension, ToggleExtension, ListExtension, ListItemExtension,
+  ParagraphExtension, RichTextExtension, HeadingExtension, CodeExtension, ToggleExtension, ListExtension, ListItemExtension,
   MarkdownPasteExtension, HtmlPasteExtension, NabuPasteExtension, PlainTextPasteExtension,
 ];
 

@@ -4,8 +4,9 @@ import { Block } from './block.svelte.js';
 import { MegaBlock } from './megablock.svelte.js';
 import { NabuSelection } from './selection.svelte.js';
 import { handleContainerBeforeInput, wrapOrphan, deleteSelectionContent, deleteRange, selectionRange, findDirectChildOf, findLCA, textBlocksInOrder } from './container.utils.js';
-import { jsonToPasteBlocks, degradeUnknownBlocks, CLIPBOARD_FORMAT_VERSION, JSON_FORMAT_VERSION, isSupportedJsonVersion } from '../utils/extensions.js';
+import { jsonToPasteBlocks, degradeUnknownBlocks, dropUndeclaredMarks, CLIPBOARD_FORMAT_VERSION, JSON_FORMAT_VERSION, isSupportedJsonVersion } from '../utils/extensions.js';
 import { escapeHtml, sanitizePasteBlocks } from '../utils/html.js';
+import { jsonToText } from '../format.js';
 import { tick, flushSync } from 'svelte';
 import { Files } from '../files/files.svelte.js';
 import { Pulse } from '@aionbuilders/pulse';
@@ -163,6 +164,8 @@ export class Nabu {
     #pulse = new Pulse();
     /** @type {import('../utils/extensions.js').PasteInterpreter[]} */
     #pasteInterpreters = [];
+    /** The marks of this editor: those its extensions declare in `loroTextStyles`. Any other attribute of a pasted / imported text is dropped. @type {Set<string>} */
+    #declaredMarks = new Set();
     /** @type {import('../utils/extensions.js').PasteFileHandler[]} sorted by priority, highest first */
     #pasteFileHandlers = [];
 
@@ -362,6 +365,7 @@ export class Nabu {
 
                 if (ext.loroTextStyles && Object.keys(ext.loroTextStyles).length) {
                     this.doc.configTextStyle(ext.loroTextStyles);
+                    for (const mark of Object.keys(ext.loroTextStyles)) this.#declaredMarks.add(mark);
                 }
 
             }
@@ -664,7 +668,10 @@ export class Nabu {
             // The bytes of the `nabu-asset:` media travel with the document (same `assets` map as the clipboard format).
             const assets = Files.get(nabu).embedAssets(blocks);
             return { version: JSON_FORMAT_VERSION, blocks, ...(assets ? { assets } : {}) };
-        }]
+        }],
+        // The text as typed (see `jsonToText`), computed from the same blocks as 'json' but without the embedded assets:
+        // the bytes of a file are of no use to a text. A server that holds the JSON export gets the identical string.
+        ['text', (nabu) => jsonToText(nabu.children.map(b => b.serialize('json')).filter(Boolean))]
     ]));
 
     /**
@@ -689,8 +696,9 @@ export class Nabu {
     }
 
     /**
-     * Serialize the document with the root serializer registered for `format` (`'markdown'`, `'json'`, or one an extension
-     * adds with `serializers`); `null` (and a warning) for an unknown format.
+     * Serialize the document with the root serializer registered for `format` (`'markdown'`, `'json'`, `'text'`, or one an extension
+     * adds with `serializers`); `null` (and a warning) for an unknown format. `'text'` is the plain text a person typed: no
+     * escaping, no markup (see `jsonToText` in `@aionbuilders/nabu/format` for the exact rule).
      * @param {string} format
      * @returns {any}
      * @public
@@ -2204,7 +2212,7 @@ export class Nabu {
         this.selection.sync(); // public entry point: may be called outside an input event
         // Every fragment (HTML / markdown / nabu JSON / API) goes through here: unsafe link & media URLs are dropped.
         const files = Files.get(this);
-        let adopted = files.adoptAssets(sanitizePasteBlocks(fragment.blocks), fragment.assets);
+        let adopted = files.adoptAssets(sanitizePasteBlocks(dropUndeclaredMarks(fragment.blocks, this.#declaredMarks)), fragment.assets);
         // Content from outside (a web page): remote images are fetched and stored, when the host asked for it (`files.importRemote`).
         if (fragment.external) adopted = files.importRemote(adopted);
         const blocks = this.#degradeUnknown(adopted);
@@ -2461,7 +2469,7 @@ export class Nabu {
      * @public
      */
     async importFragment(fragment) {
-        const blocks = this.#degradeUnknown(Files.get(this).adoptAssets(sanitizePasteBlocks(fragment.blocks), fragment.assets));
+        const blocks = this.#degradeUnknown(Files.get(this).adoptAssets(sanitizePasteBlocks(dropUndeclaredMarks(fragment.blocks, this.#declaredMarks)), fragment.assets));
         if (!blocks?.length) return;
 
         [...this.tree.roots()].forEach(root => this.tree.delete(root.id));

@@ -10,9 +10,14 @@
      *   assistive technology when both are set. No `role` is ever set on an editable root: it would flatten the headings inside.
      * - `readonly`: show the document without letting anyone edit it. Reactive (toggle it live). When omitted, the editor follows
      *   `engine.readonly` (the `readonly` option of the engine); when given, it sets `engine.readonly`.
-     * @type {{ engine: Nabu, label?: string, labelledby?: string, readonly?: boolean }}
+     * - Any other attribute (`id`, `class`, `style`, `aria-describedby`, `inputmode`, `enterkeyhint`, `autocapitalize`, `data-*`...) goes
+     *   to the root element, and `class` is added to `nabu-editor`. The editor's own attributes and handlers come after them and always
+     *   win: `contenteditable`, `role`, `spellcheck`, `lang`, `translate`, `aria-label`, `aria-labelledby`, `data-nabu-*` and every `on*`
+     *   handler cannot be overridden (use `label` / `labelledby`, `readonly`, and the engine options). Events bubble: listen to them on a
+     *   parent element of the editor.
+     * @type {{ engine: Nabu, label?: string, labelledby?: string, readonly?: boolean } & import('svelte/elements').HTMLAttributes<HTMLDivElement>}
      */
-    let { engine = new Nabu(), label = undefined, labelledby = undefined, readonly = undefined } = $props();
+    let { engine = new Nabu(), label = undefined, labelledby = undefined, readonly = undefined, class: className = undefined, ...rest } = $props();
 
     // The prop drives the engine (set now, so that the first render and the server render already agree, then kept in sync live):
     // the engine is where every guard reads it. `isReadonly` is what this component draws.
@@ -58,8 +63,9 @@
 <!-- With spellcheck off, the data-gramm* attributes are the documented opt-out hints of the Grammarly extension (it would
      otherwise inject its own DOM into the editor, which Nabu does not support). Code blocks set spellcheck="false" themselves. -->
 <div
+    {...rest}
     contenteditable={isReadonly ? 'false' : 'true'}
-    class="nabu-editor"
+    class={['nabu-editor', className]}
     aria-label={label}
     aria-labelledby={labelledby}
     role={isReadonly ? 'document' : undefined}

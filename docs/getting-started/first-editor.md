@@ -116,6 +116,9 @@ await engine.importMarkdown('# Hello\n\nSome **bold** text.');
 // Markdown, as a string.
 expect(engine.serialize('markdown')).toBe('# Hello\n\nSome **bold** text.');
 
+// Plain text, as a string: what was typed, nothing escaped.
+expect(engine.serialize('text')).toBe('Hello\n\nSome bold text.');
+
 // JSON: a plain object, safe to JSON.stringify and store.
 const json = engine.serialize('json');
 expect(json.version).toBe('1');
@@ -128,7 +131,7 @@ expect(json.blocks[1].content).toEqual([
 ]);
 ```
 
-Two formats exist: `'markdown'` and `'json'`. The JSON export is the exact document tree: it round-trips everything, including blocks that markdown cannot express. Markdown is exact for text, lists, toggles, code and the like, but it is a lossy format by nature. Use JSON to store a document, markdown to exchange it.
+Three formats exist: `'markdown'`, `'json'` and `'text'`. The JSON export is the exact document tree: it round-trips everything, including blocks that markdown cannot express. Markdown is exact for text, lists, toggles, code and the like, but it is a lossy format by nature. Use JSON to store a document, markdown to exchange it. The text is for search, previews and counting: the characters a person typed, with no markup and no escaping (`5 * 3` stays `5 * 3`), blocks separated by a blank line. Its exact rule, and a version that runs on a server without the editor (`jsonToText`), are in [A read-only viewer](../recipes/read-only-viewer.md#plain-text).
 
 An unknown format returns `null`.
 

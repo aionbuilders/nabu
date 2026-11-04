@@ -37,6 +37,10 @@ describe('export names per entry point', () => {
     expect(runtimeNames('extend')).toEqual(Object.keys(await import('#lib/extend.js')).sort());
   }, TIMEOUT);
 
+  it('@aionbuilders/nabu/format', async () => {
+    expect(runtimeNames('format')).toEqual(Object.keys(await import('#lib/format.js')).sort());
+  }, TIMEOUT);
+
   it('lists the types too, each with a stable id', () => {
     const types = Object.values(model.items).filter((/** @type {any} */ i) => i.kind === 'type');
     expect(types.length).toBeGreaterThan(40);

@@ -9,11 +9,11 @@ const horizontalOverflow = (page: import('@playwright/test').Page) =>
 test.describe('API reference', () => {
   test.use({ colorScheme: 'dark' });
 
-  test('/api lists the three entry points, each with its exports grouped by kind', async ({ page }) => {
+  test('/api lists the four entry points, each with its exports grouped by kind', async ({ page }) => {
     await page.goto('/api');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('API reference');
     await expect(page).toHaveTitle('API reference · Nabu');
-    for (const spec of ['@aionbuilders/nabu', '@aionbuilders/nabu/ui', '@aionbuilders/nabu/extend']) {
+    for (const spec of ['@aionbuilders/nabu', '@aionbuilders/nabu/ui', '@aionbuilders/nabu/extend', '@aionbuilders/nabu/format']) {
       await expect(page.getByRole('heading', { level: 2, name: spec, exact: true })).toBeVisible();
     }
     const root = page.locator('section[aria-labelledby="entry-root"]');
@@ -26,6 +26,7 @@ test.describe('API reference', () => {
     await expect(root.getByRole('link', { name: 'createEditor', exact: true })).toHaveAttribute('href', '/api/root/createEditor');
     await expect(page.locator('section[aria-labelledby="entry-ui"]').getByRole('link', { name: 'FloatingToolbar', exact: true })).toBeVisible();
     await expect(page.locator('section[aria-labelledby="entry-extend"]').getByRole('link', { name: 'TextBlock', exact: true })).toBeVisible();
+    await expect(page.locator('section[aria-labelledby="entry-format"]').getByRole('link', { name: 'jsonToText', exact: true })).toHaveAttribute('href', '/api/format/jsonToText');
     // the unstable door has its own entry
     await expect(page.getByRole('link', { name: /Read the warning/ })).toHaveAttribute('href', '/api/internals');
   });

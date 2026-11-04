@@ -6,7 +6,7 @@
   <span class="crumb">Reference</span>
   <h1>API reference</h1>
   <p class="lead">
-    Everything the package exports, generated from the source's JSDoc at build time. Three entry points, each with its own
+    Everything the package exports, generated from the source's JSDoc at build time. Four entry points, each with its own
     import path. This is version <code class="doc-code">{data.version}</code>.
   </p>
 </header>

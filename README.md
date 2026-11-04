@@ -107,6 +107,7 @@ The public API is these entry points; everything else is internal and may change
 | `@aionbuilders/nabu` | Using the editor: `NabuEditor`, the factories and presets, the built-in extensions, `createPersistedEditor`, `Files`, `Regions`, `Todos`, `deltaToMarkdown`... |
 | `@aionbuilders/nabu/ui` | The optional UI: `FloatingToolbar`, `SlashMenu`, `DragHandle`, `CommandInvite`, `CommandChooser` |
 | `@aionbuilders/nabu/extend` | Writing your own blocks and extensions: `extension`, `Block`, `TextBlock`, `MegaBlock`, `TextBehavior`, `RichText`, key-chord helpers |
+| `@aionbuilders/nabu/format` | Reading a document without the editor (no WebAssembly, works in Node and Bun): `jsonToText`, `deltaToHtml`, `deltaToMarkdown`, `sanitizeUrl` |
 | `@aionbuilders/nabu/vite` | The Vite helper `nabu()` shown above |
 
 ## Presets

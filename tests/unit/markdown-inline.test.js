@@ -421,8 +421,9 @@ import { ListExtension, ListItemExtension } from '#lib/blocks/list/index.js';
 import { ImageExtension } from '#lib/blocks/image/index.js';
 import { MarkdownPasteExtension } from '#lib/paste/markdown.paste.js';
 import { PlainTextPasteExtension } from '#lib/paste/plain-text.paste.js';
+import { RichTextExtension } from '#lib/behaviors/text/rich-text.extension.js';
 
-const EXTENSIONS = [ParagraphExtension, HeadingExtension, ListExtension, ListItemExtension, ImageExtension, MarkdownPasteExtension, PlainTextPasteExtension];
+const EXTENSIONS = [ParagraphExtension, RichTextExtension, HeadingExtension, ListExtension, ListItemExtension, ImageExtension, MarkdownPasteExtension, PlainTextPasteExtension];
 
 async function makeEditor() {
     const engine = new Nabu({ extensions: EXTENSIONS });

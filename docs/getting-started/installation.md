@@ -111,16 +111,17 @@ The package exposes its entry points under the `svelte` export condition. A Svel
 **A runtime error mentioning `$props.id`.**
 Your Svelte is older than 5.20. Upgrade `svelte`.
 
-## The three entry points
+## The entry points
 
-Everything public comes from three imports. Anything not exported from them is internal and may change without notice.
+Everything public comes from these imports. Anything not exported from them is internal and may change without notice.
 
 | Import | What it is for |
 |---|---|
 | `@aionbuilders/nabu` | Using the editor: the `NabuEditor` component, the editor factories and presets, the built-in extensions, and a few subsystems |
 | `@aionbuilders/nabu/ui` | The optional UI components: `FloatingToolbar`, `SlashMenu`, `DragHandle`, `CommandInvite`, `CommandChooser` |
 | `@aionbuilders/nabu/extend` | Writing your own blocks and extensions |
+| `@aionbuilders/nabu/format` | Reading a document without the editor: `jsonToText`, `deltaToHtml`, `deltaToMarkdown`, `sanitizeUrl`. Plain JavaScript, no WebAssembly, importable in Node and Bun. See [A read-only viewer](../recipes/read-only-viewer.md) |
 
-A fourth import, `@aionbuilders/nabu/vite`, is the build helper described above.
+One more import, `@aionbuilders/nabu/vite`, is the build helper described above.
 
 Next: [Your first editor](./first-editor.md).

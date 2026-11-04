@@ -12,6 +12,7 @@ import { VideoExtension } from '#lib/blocks/video/index.js';
 import { FileExtension } from '#lib/blocks/file/index.js';
 import { DividerExtension } from '#lib/blocks/divider/index.js';
 import { CodeExtension } from '#lib/blocks/code/index.js';
+import { RichTextExtension } from '#lib/behaviors/text/rich-text.extension.js';
 import { NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension } from '#lib/paste/index.js';
 import {
   transferKind, pickDropEffect, pointerHalf, nearestRect, sameTarget, wantsCopy, compareBlocks, positionInRange, positionAfterRemoval,
@@ -24,7 +25,7 @@ vi.mock('#lib/utils/drop.js', async (importOriginal) => {
 });
 import { resolveDropPosition } from '#lib/utils/drop.js';
 
-const EXTENSIONS = [ParagraphExtension, ImageExtension, VideoExtension, FileExtension, DividerExtension, CodeExtension, NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension];
+const EXTENSIONS = [ParagraphExtension, RichTextExtension, ImageExtension, VideoExtension, FileExtension, DividerExtension, CodeExtension, NabuPasteExtension, PlainTextPasteExtension, HtmlPasteExtension];
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
 const flush = async () => { for (let i = 0; i < 15; i++) await new Promise((r) => setTimeout(r, 0)); };
 

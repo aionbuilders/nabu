@@ -24,7 +24,7 @@ An extension is a plain object made by the `extension(name, init)` function (or 
 | `serializers` | Document serializers by format (`nabu.serialize(format)`) |
 | `pasteInterpreters`, `pasteFileHandlers` | What a paste makes of text, HTML and files |
 | `commandContext` | Facts added to the context of `when` / `run` of commands |
-| `loroTextStyles` | How a text attribute grows when typing at its edge |
+| `loroTextStyles` | The marks the extension declares, and how each grows when typing at its edge. A mark exists in an editor only if an extension declares it here: any other attribute of pasted or imported text is dropped (the text stays) |
 
 This guide covers the first half of the list. Paste handlers are covered with the clipboard. What your block and extension code can rely on, and what it cannot, is in [Stability](#stability).
 

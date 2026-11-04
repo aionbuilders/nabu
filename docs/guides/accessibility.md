@@ -31,6 +31,8 @@ This page lists what is in place, what you have to do on your side, and what is 
 
 Both props are reactive. There is deliberately **no `role` or `aria-multiline`** on the editable element: it would make screen readers flatten the headings, lists and region seams inside it. The name alone is enough. (The website's editor is named this way, and a browser test checks that it is named in the accessibility tree, is exposed as an editable rich-text region, and that its headings are still headings.)
 
+Any other attribute of `<NabuEditor>` goes to the editable element, so `aria-describedby`, `id`, `class`, `style`, `inputmode`, `enterkeyhint`, `autocapitalize` and `data-*` work as on a `<div>` (`class` is added to the editor's own). The attributes the editor owns (`contenteditable`, `role`, `spellcheck`, `lang`, `translate`, `aria-label`, `aria-labelledby`, `data-nabu-*`) and its event handlers cannot be overridden: use `label`, `labelledby`, `readonly` and the engine options instead. Events bubble, so listen to them on a parent element.
+
 ## Keyboard
 
 Everything can be done from the keyboard, because every action is a command with a shortcut and the pointer UI is an addition:

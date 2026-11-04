@@ -229,3 +229,13 @@ The importer keeps the fence verbatim as part of the item text (blank lines, mar
 writes a well-formed fence (an opener at the start of a line of the text, not the first, and its closer) back as an indented fence.
 Text a fence cannot carry exactly (unclosed fence, fence on the first line, blank line next to it) is exported as ordinary escaped text,
 which also round-trips. Lossy: marks inside the fence are not exported (the fence is verbatim text).
+
+## 3. Plain text
+
+`serialize('text')` is `jsonToText` (`src/lib/format.js`, exported by `@aionbuilders/nabu/format`) over the `serialize('json')` blocks, without
+the embedded assets. The characters as typed: no escaping, no markup, marks ignored, a line break inside a block kept as `\n`; blocks
+separated by a blank line, list items (nested ones too) by a single `\n` with no bullet; blocks without text and empty paragraphs
+contribute nothing; a container gives its own text (a region: its title), then its children's. The walker reads any block's `content`,
+so it needs no registration for an extension's block. `format.js` has no Loro, Svelte or DOM import (pinned by `tests/unit/format.test.js`),
+so a server computes the same string from the stored JSON. Store the string you received as proof of what was written: do not recompute
+it later with another version.

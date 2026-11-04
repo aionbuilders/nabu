@@ -524,14 +524,14 @@ export async function buildModel() {
   const byId = indexById(json);
   const modules = new Map();
   for (const mod of json.children) {
-    const key = /contract/.test(mod.name) ? 'contract' : /(^|\/)ui$|ui\/index$/.test(mod.name) ? 'ui' : /extend$/.test(mod.name) ? 'extend' : 'root';
+    const key = /contract/.test(mod.name) ? 'contract' : /(^|\/)ui$|ui\/index$/.test(mod.name) ? 'ui' : /extend$/.test(mod.name) ? 'extend' : /(^|\/)format$/.test(mod.name) ? 'format' : 'root';
     modules.set(key, mod);
   }
 
   const idToItem = new Map(); // reflection id -> item id (+ member anchors)
   const byName = new Map(); // export name -> item id (root wins)
   const pending = []; // [entry, refl, extra]
-  const order = ['root', 'ui', 'extend'];
+  const order = ['root', 'ui', 'extend', 'format'];
 
   const comps = {};
   for (const e of ENTRIES) comps[e.id] = componentsOf(e);

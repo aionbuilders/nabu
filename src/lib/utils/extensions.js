@@ -196,6 +196,8 @@
  *   Loro text style configuration required by this extension.
  *   Passed to `LoroDoc.configTextStyle()` during Nabu initialization so that
  *   `applyDelta` with these attributes works correctly.
+ *   These are the marks of the editor: a mark exists only if an extension declares it here, and any other attribute of a pasted or
+ *   imported text is dropped (the text stays).
  */
 
 /**
@@ -311,6 +313,40 @@ export function degradeUnknownBlocks(blocks, isKnown, fallbackType) {
         return kids ? [own, ...kids] : [own];
     });
     return walk(blocks);
+}
+
+/**
+ * Drops from the text of the blocks (and of their children, at any depth) every attribute that is not a mark the receiving editor
+ * declares (`loroTextStyles` of its extensions): the text stays, only the formatting goes. A fragment that comes in (paste, import)
+ * carries the marks of where it was written; an editor without the matching extension has no way to show or remove them.
+ * Pure: returns new objects where something changed, never mutates the input.
+ * @param {PasteBlock[]} blocks
+ * @param {ReadonlySet<string>} declared  the mark names of the editor
+ * @returns {PasteBlock[]}
+ */
+export function dropUndeclaredMarks(blocks, declared) {
+    if (!Array.isArray(blocks)) return blocks;
+    return blocks.map((pb) => {
+        if (!pb || typeof pb !== 'object') return pb;
+        let out = pb;
+        if (Array.isArray(pb.delta)) {
+            let changed = false;
+            const delta = pb.delta.map((op) => {
+                if (!op?.attributes || typeof op.attributes !== 'object') return op;
+                const kept = Object.entries(op.attributes).filter(([name]) => declared.has(name));
+                if (kept.length === Object.keys(op.attributes).length) return op;
+                changed = true;
+                const { attributes: _drop, ...rest } = op;
+                return kept.length ? { ...rest, attributes: Object.fromEntries(kept) } : rest;
+            });
+            if (changed) out = { ...out, delta };
+        }
+        if (Array.isArray(pb.children) && pb.children.length) {
+            const children = dropUndeclaredMarks(pb.children, declared);
+            if (children.some((c, i) => c !== pb.children?.[i])) out = { ...out, children };
+        }
+        return out;
+    });
 }
 
 /** Version written by `serialize('json')` (document export). `importJSON` reads this one (a missing version is read as it). */
