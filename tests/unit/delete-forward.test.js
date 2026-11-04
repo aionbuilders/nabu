@@ -26,7 +26,7 @@ function makeBehavior(text = '', { next = null } = {}) {
   const container = makeContainer(text);
   const block = {
     nabu: {
-      hooks: new Map(), warn: vi.fn(), selection: { setCursor: vi.fn() },
+      hooks: new Map(), warn: vi.fn(), track: vi.fn(), selection: { setCursor: vi.fn() },
       BREAK: Symbol('break'), inputRules: [{ pattern: /./, handler: vi.fn(() => true) }],
     },
     node: { data: { get: (k) => k === 'text' ? container : null, setContainer: () => container } },

@@ -373,6 +373,8 @@ A member of the editor or of a block that is in neither list (you can see it in 
 | `selection` | The selection, in terms of blocks: see below |
 | `lang`, `spellcheck`, `tab`, `tabHint`, `placeholders`, `readonly` | The resolved options (reactive; assign to change them). `readonly` closes the user's channels (input, paste, drop, keys, commands) and leaves the host's own calls alone: see [Read-only mode](./accessibility.md#read-only-mode) |
 | `composing`, `composingBlock` | An IME composition is running, and in which block |
+| `destroy` | `destroy()`: release the engine for good, memory included (idempotent; the document stays readable, the engine no longer follows changes): see [Your first editor](../getting-started/first-editor.md#release-an-editor) |
+| `track` | `track(unsubscribe)`: hand over a cleanup that lives as long as the engine, `destroy()` calls it once. Pass your own Loro subscriptions, `nabu.track(node.data.subscribe(...))`: one that is not tracked keeps the engine in memory after `destroy()` |
 | `debugging` | When true, `warn` logs to the console |
 | `warn` | `warn(...args)`: a diagnostic, silent unless `debugging` |
 | `internals` | The door to the unstable machinery: see below |

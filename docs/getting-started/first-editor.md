@@ -233,6 +233,23 @@ const engine = await createPersistedEditor({ docId: 'my-document' });
 
 Options, multi-tab behaviour, history and recovery are covered in [Persistence and sync](../guides/persistence-and-sync.md).
 
+## Release an editor
+
+Unmounting `<NabuEditor>` releases the page listeners but not the memory: the engine stays subscribed to its document, and you can mount it again later. `engine.destroy()` releases the memory, for a host that is done with the engine for good: the engine can then be garbage collected. It also closes the persistence (the changes that are not saved yet are dropped, so await `engine.saveNow()` first when they matter). Call it after the unmount, or in the cleanup of the component that created the engine.
+
+It does nothing the second time. After it the document stays readable as it was (`serialize()` still works), but the engine no longer follows changes: no more edits. A destroyed engine must not be mounted again.
+
+```js test
+import { createTextEditor } from '@aionbuilders/nabu';
+
+const engine = createTextEditor();
+await engine.importMarkdown('Kept');
+
+engine.destroy();
+engine.destroy();
+expect(engine.serialize('markdown')).toBe('Kept');
+```
+
 ## Next
 
 - [Presets](./presets.md): choose and customise what the editor can do.

@@ -116,7 +116,7 @@ describe('the stable contract: every @public member appears', () => {
     });
   }
 
-  it('documents as many members as there are @public tags (195 today: Nabu counts BREAK and CONTINUE once each, static and instance)', () => {
+  it('documents as many members as there are @public tags (197 today: Nabu counts BREAK and CONTINUE once each, static and instance)', () => {
     const total = CONTRACT_CLASSES.reduce((sum, name) => {
       const item = /** @type {any} */ (Object.values(model.items)).find((/** @type {any} */ i) => i.name === name && i.kind === 'class');
       // instance + static, the same member counted once per side as extend-contract.test.js counts it

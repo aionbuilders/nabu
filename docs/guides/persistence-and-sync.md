@@ -120,6 +120,8 @@ Call `dispose()` when the editor is destroyed, for instance in the cleanup of th
 {/if}
 ```
 
+When the host is done with the engine for good, `engine.destroy()` does this too (`onDestroy(() => engine?.destroy())`) and releases the rest of the engine; like `dispose()`, it drops the changes that are not saved yet, so await `saveNow()` first when they matter.
+
 Persistence warnings (`console.warn`, prefixed `[Nabu]`) are always written, even when `nabu.debugging` is off: the user may be losing work.
 
 ### `nabu.saveNow()`

@@ -46,7 +46,7 @@ function makeContainer(delta = []) {
 function makeBehavior(delta = []) {
   const container = makeContainer(delta);
   const block = {
-    nabu: { hooks: new Map(), warn: vi.fn(), selection: null, BREAK: Symbol('break') },
+    nabu: { hooks: new Map(), warn: vi.fn(), track: vi.fn(), selection: null, BREAK: Symbol('break') },
     node: { data: { get: (k) => k === 'text' ? container : null, setContainer: () => container } },
     element: null,
     behaviors: new Map(),

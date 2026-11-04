@@ -60,9 +60,9 @@ export class ListItem extends MegaBlock {
         // Initialize checked from Loro metadata
         this.checked = !!node.data.get('checked');
         // Subscribe to data changes to keep checked in sync
-        this.node.data.subscribe(() => {
+        this.nabu.track(this.node.data.subscribe(() => {
             this.checked = !!this.node.data.get('checked');
-        });
+        }));
 
         // One item (and its sublists), indented under the items that hold it. A whole list is rendered by the List.
         this.serializers.set('markdown', () => {

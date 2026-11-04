@@ -109,7 +109,7 @@ export class RegionBlock extends MegaBlock {
 
         this.#read();
         // Local commits, imports and remote peers all end up here (the `fields` map is a child container of `data`).
-        node.data.subscribe(() => this.#read());
+        nabu.track(node.data.subscribe(() => this.#read()));
 
         // Document export: exact round trip (`importJSON` reads `props` and `content` back, see RegionBlock.create).
         this.serializers.set('json', () => ({

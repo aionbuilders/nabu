@@ -130,7 +130,7 @@ export class Files {
             forgetMissing: () => { for (const [key, value] of this.#urls) if (value === null) this.#urls.delete(key); },
             track: (promise) => this.#track(promise),
         });
-        nabu.doc.subscribe((event) => this.#uploads.onDocEvent(event));
+        nabu.track(nabu.doc.subscribe((event) => this.#uploads.onDocEvent(event)));
         if (this.assets.size > 0) this.#track(this.#migrate());
         this.#preload();
     }

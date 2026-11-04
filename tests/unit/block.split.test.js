@@ -12,7 +12,7 @@ import { TextBehavior } from '#lib/behaviors/text/text.behavior.svelte.js';
 
 describe('Block.split (base class)', () => {
   it('logs a warning and returns null', () => {
-    const nabu = { warn: vi.fn(), hooks: new Map() };
+    const nabu = { warn: vi.fn(), track: vi.fn(), hooks: new Map() };
     const block = Object.create(Block.prototype);
     block.id = 'test';
     block.nabu = nabu;
@@ -42,7 +42,7 @@ describe('TextBehavior.split', () => {
     };
     const ascend = vi.fn().mockReturnValue({ block: 'newBlock' });
     const block = {
-      nabu: { hooks: new Map(), warn: vi.fn(), selection: null, BREAK: Symbol('break') },
+      nabu: { hooks: new Map(), warn: vi.fn(), track: vi.fn(), selection: null, BREAK: Symbol('break') },
       node: { data: { get: (k) => k === 'text' ? container : null, setContainer: () => container } },
       element: null,
       behaviors: new Map(),

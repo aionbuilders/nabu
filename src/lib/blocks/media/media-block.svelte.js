@@ -29,7 +29,7 @@ export class MediaBlock extends Block {
         this.status = data.get('status') || 'ready';
         this.#reason = normalizeReason(data.get('reason'));
         this.name = data.get('name') || '';
-        data.subscribe(() => {
+        this.nabu.track(data.subscribe(() => {
             this.ref = data.get('ref') || '';
             this.alt = data.get('alt') || '';
             this.status = data.get('status') || 'ready';
@@ -41,7 +41,7 @@ export class MediaBlock extends Block {
                 if (this.previewUrl.startsWith('blob:')) URL.revokeObjectURL(this.previewUrl);
                 this.previewUrl = null;
             }
-        });
+        }));
     }
 
     /** @type {string} */ ref = $state('');

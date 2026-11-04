@@ -25,7 +25,7 @@ function makeBehavior(element) {
     length: 0,
   };
   const block = {
-    nabu: { hooks: new Map(), warn: vi.fn(), selection: null, BREAK: Symbol('break') },
+    nabu: { hooks: new Map(), warn: vi.fn(), track: vi.fn(), selection: null, BREAK: Symbol('break') },
     node: { data: { get: (k) => k === 'text' ? container : null, setContainer: () => container } },
     element,
     behaviors: new Map(),

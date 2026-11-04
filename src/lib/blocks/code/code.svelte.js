@@ -93,9 +93,9 @@ export class CodeBlock extends TextBlock {
         );
 
         // Sync language from Loro data changes (mirrors Heading's level sync)
-        this.node.data.subscribe(() => {
+        this.nabu.track(this.node.data.subscribe(() => {
             this.language = this.node.data.get('language') || null;
-        });
+        }));
     }
 
     // ── Capability flags ─────────────────────────────────────────────────────

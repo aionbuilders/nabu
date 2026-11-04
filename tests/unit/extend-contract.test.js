@@ -26,12 +26,12 @@ const NABU = {
   instance: [
     'BREAK', 'CONTINUE', 'blocks', 'blocksByType', 'cancelPendingCommand', 'children',
     'commandAnnouncement', 'commands', 'commit', 'components', 'composing', 'composingBlock',
-    'createPasteBlock', 'debugging', 'defaultBlockType', 'delete', 'doc', 'exec', 'extensions',
+    'createPasteBlock', 'debugging', 'defaultBlockType', 'delete', 'destroy', 'doc', 'exec', 'extensions',
     'focus', 'importFragment', 'importJSON', 'importMarkdown', 'importRemote', 'insert',
     'insertPasteBlock', 'internals', 'isEmpty', 'isMarkActive', 'isolateUndoStep', 'lang', 'lastVisibleBlock',
     'openTrailingCaret', 'pendingCommand', 'pendingCommandOn', 'placeholders', 'positions', 'readonly', 'redo',
     'registry', 'resolveDocumentOffset', 'selection', 'serialize', 'serializers', 'shortcut',
-    'slashCommands', 'spellcheck', 'systems', 'tab', 'tabHint', 'transact', 'tree', 'trigger',
+    'slashCommands', 'spellcheck', 'systems', 'tab', 'tabHint', 'track', 'transact', 'tree', 'trigger',
     'undo', 'warn',
   ],
   static: [
@@ -41,10 +41,10 @@ const NABU = {
 
 /** @type {string[]} */
 const NABU_METHODS = [
-  'cancelPendingCommand', 'commit', 'createPasteBlock', 'delete', 'exec', 'focus',
+  'cancelPendingCommand', 'commit', 'createPasteBlock', 'delete', 'destroy', 'exec', 'focus',
   'importFragment', 'importJSON', 'importMarkdown', 'importRemote', 'insert', 'insertPasteBlock',
   'isMarkActive', 'isolateUndoStep', 'openTrailingCaret', 'pendingCommandOn', 'redo',
-  'resolveDocumentOffset', 'serialize', 'shortcut', 'transact', 'trigger', 'undo', 'warn',
+  'resolveDocumentOffset', 'serialize', 'shortcut', 'track', 'transact', 'trigger', 'undo', 'warn',
 ];
 
 /** Members of a `Nabu` instance that are NOT part of the stable contract (reachable, but no promise; most are in `internals`). */

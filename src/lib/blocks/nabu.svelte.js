@@ -251,30 +251,16 @@ export class Nabu {
         this.tree = /** @type {LoroTree<NabuNodeData>} */ (this.doc.getTree("blocks"));
         this.content = this.doc.getMap("content");
 
-        // Initialize Undo/Redo Manager
+        // Initialize Undo/Redo Manager. Loro keeps the two callbacks for as long as the manager lives and has no way to drop
+        // them: they reach the engine through `holder`, which `destroy()` clears (else the engine could never be collected).
+        const holder = { owner: /** @type {Nabu | null} */ (this) };
+        this.track(() => { holder.owner = null; });
         this.undoManager = new UndoManager(this.doc, {
             maxUndoSteps: 100,
             // Background completions (e.g. a pasted file finishing its upload) are not undo steps of their own.
             excludeOriginPrefixes: ['nabu:silent'],
             mergeInterval: this.#mergeInterval,
-            onPush: (isUndo, range) => {
-                if (this.#isolatedSteps > 0) this.#isolatedSteps--;
-                // The selection to give back when this step is popped. An undo step: the selection right BEFORE the change
-                // (it is pushed after the commit, but the captured selection predates the change). The redo step pushed by
-                // an undo: where the undone action ENDED. A caret decided by the caller (block shortcut) wins.
-                const explicit = this.#undoCursor;
-                this.#undoCursor = null;
-                const ended = !isUndo && this.#undoneEnd !== null ? this.#actionEnds.get(this.#undoneEnd) : undefined;
-                const stored = (explicit ? explicitSelection(explicit.block, explicit.offset) : ended ?? this.#undoSel) ?? legacySelection(this);
-                this.#endKey = isUndo ? range?.end ?? null : null;
-                return { value: /** @type {any} */ (stored), cursors: [] };
-            },
-            onPop: (isUndo, storedValue, range) => {
-                this.#undoneEnd = isUndo ? range?.end ?? null : null;
-                this.#endKey = null;
-                const value = /** @type {any} */ (storedValue?.value);
-                if (value && typeof value === 'object' && 'anchor' in value) restoreSelection(this, value);
-            }
+            ...Nabu.#undoCallbacks(holder),
         });
 
         /**
@@ -394,7 +380,7 @@ export class Nabu {
         // One event batch = one refresh. The affected containers are COLLECTED while the batch is read, then each is refreshed
         // once (the root list at most once, every parent at most once): refreshing per action made an import / a mass undo / a
         // big paste quadratic (P-104). The doc already holds the final state of the batch, so the order of the actions is moot.
-        this.tree.subscribe((event) => {
+        this.track(this.tree.subscribe((event) => {
             let rootsDirty = false;
             /** @type {Set<string>} */
             const parents = new Set();
@@ -440,7 +426,7 @@ export class Nabu {
                 // A block retyped into a leaf (no children) in the same transaction has no updateChildren().
                 /** @type {{ updateChildren?: (retyped?: Set<string>) => void } | undefined} */ (this.blocks.get(parentId))?.updateChildren?.(retyped);
             }
-        });
+        }));
         
         this.init();
     }
@@ -2578,6 +2564,81 @@ export class Nabu {
                 get root() { return selection.root; },
             }),
         });
+    }
+
+    /**
+     * The `onPush` / `onPop` of the undo manager. Built HERE, out of the constructor, so that they close over `holder` and nothing
+     * else: a closure made in the constructor would keep the constructor's scope, and `this` with it, alive.
+     * @param {{ owner: Nabu | null }} holder
+     */
+    static #undoCallbacks(holder) {
+        return {
+            /** @param {boolean} isUndo @param {{ end?: any } | undefined} range */
+            onPush: (isUndo, range) => {
+                const self = holder.owner;
+                if (!self) return { value: null, cursors: [] };
+                if (self.#isolatedSteps > 0) self.#isolatedSteps--;
+                // The selection to give back when this step is popped. An undo step: the selection right BEFORE the change
+                // (it is pushed after the commit, but the captured selection predates the change). The redo step pushed by
+                // an undo: where the undone action ENDED. A caret decided by the caller (block shortcut) wins.
+                const explicit = self.#undoCursor;
+                self.#undoCursor = null;
+                const ended = !isUndo && self.#undoneEnd !== null ? self.#actionEnds.get(self.#undoneEnd) : undefined;
+                const stored = (explicit ? explicitSelection(explicit.block, explicit.offset) : ended ?? self.#undoSel) ?? legacySelection(self);
+                self.#endKey = isUndo ? range?.end ?? null : null;
+                return { value: /** @type {any} */ (stored), cursors: [] };
+            },
+            /** @param {boolean} isUndo @param {any} storedValue @param {{ end?: any } | undefined} range */
+            onPop: (isUndo, storedValue, range) => {
+                const self = holder.owner;
+                if (!self) return;
+                self.#undoneEnd = isUndo ? range?.end ?? null : null;
+                self.#endKey = null;
+                const value = /** @type {any} */ (storedValue?.value);
+                if (value && typeof value === 'object' && 'anchor' in value) restoreSelection(self, value);
+            },
+        };
+    }
+
+    /** What `destroy()` calls: the unsubscribe functions given to {@link Nabu#track}. @type {Set<() => void>} */
+    #tracked = new Set();
+
+    /**
+     * Hand over a Loro subscription (or any cleanup) that lives as long as the engine: `destroy()` calls it, once. A block or an
+     * extension passes its own, `nabu.track(node.data.subscribe(...))`: Loro keeps the callback (and what it closes over, the engine
+     * with it) until it is unsubscribed, so one that is not tracked keeps the engine in memory after `destroy()`.
+     * @template {() => void} T
+     * @param {T} unsubscribe
+     * @returns {T} what it was given
+     * @public
+     */
+    track(unsubscribe) {
+        this.#tracked.add(unsubscribe);
+        return unsubscribe;
+    }
+
+    /**
+     * Release the engine for good, for a host that is done with it: the memory, not only the page. Unmounting `<NabuEditor>`
+     * releases the page listeners but not the memory (the engine can be mounted again); `destroy()` releases the memory: it
+     * unsubscribes the engine and its blocks from the document (see {@link Nabu#track}), stops the subsystems, closes `persistence`
+     * if the engine is persisted, releases the files (upload retries) and stops the selection tracking, so that the engine can be
+     * garbage collected. Idempotent. Call it after `unmount()` or instead of it (e.g. `onDestroy(() => engine.destroy())`).
+     *
+     * Changes that are not saved yet are DROPPED, not written: `persistence.dispose()` cancels the pending autosave and removes the
+     * `pagehide` flush. Await `saveNow()` first when they matter.
+     *
+     * The document stays in memory and readable as it was (`serialize()`, `doc`), but the engine no longer follows changes: no more
+     * edits. A destroyed engine must not be mounted again.
+     * @returns {void}
+     * @public
+     */
+    destroy() {
+        for (const stop of this.#tracked) stop();
+        this.#tracked.clear();
+        for (const system of this.systems.values()) system.stop?.();
+        /** @type {any} */ (this).persistence?.dispose?.();
+        /** @type {any} */ (this.systems.get('files'))?.dispose?.();
+        this.selection.destroy();
     }
 
     /**

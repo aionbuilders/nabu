@@ -90,6 +90,7 @@ export async function seedSnapshot(page: Page, docId: string, json: string) {
       const tmp = Object.create(n);
       tmp.doc = B;
       tmp.tree = B.getTree('blocks');
+      tmp.track = (unsubscribe: () => void) => unsubscribe; // `Nabu#track` reads a private field, which `Object.create` does not have; this doc goes away with the seed
       tmp.content = B.getMap('content');
       const conv = (bs: any[]): any[] =>
         bs.map((b) => {

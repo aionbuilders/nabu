@@ -201,11 +201,11 @@ export class TextBehavior {
         this.text = $state(this.container.toString());
         /** @public */
         this.delta = $state(readDelta(this.container));
-        this.container.subscribe(() => {
+        this.nabu.track(this.container.subscribe(() => {
             this.text = this.container.toString();
             this.delta = readDelta(this.container);
             this.nabu.noteTextChange?.(this.block); // a selection end in this block must follow the edit (P-109)
-        });
+        }));
     }
     
     /** @public */

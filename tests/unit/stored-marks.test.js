@@ -35,6 +35,7 @@ function makeBehavior(delta = [], { inputRules = [], nabuOverrides = {} } = {}) 
     const nabu = {
         hooks: new Map(),
         warn: vi.fn(),
+        track: vi.fn(),
         selection: { setCursor: vi.fn() },
         BREAK: Symbol('break'),
         inputRules,

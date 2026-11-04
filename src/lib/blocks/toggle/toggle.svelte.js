@@ -29,10 +29,10 @@ export class ToggleBlock extends MegaBlock {
         // Initialize collapsed from Loro metadata
         this.collapsed = !!data.get('collapsed');
         // Subscribe to data changes to keep collapsed in sync (a change of the document wins over the read-only view state)
-        this.node.data.subscribe(() => {
+        this.nabu.track(this.node.data.subscribe(() => {
             this.#viewState = null;
             this.collapsed = !!this.node.data.get('collapsed');
-        });
+        }));
 
         this.serializers.set('markdown', () => toggleMarkdown(this.#stored, this.behavior.toMarkdown(), /** @type {any} */ (this.children.map(c => c.serialize('markdown')))));
         this.serializers.set('json', () => ({

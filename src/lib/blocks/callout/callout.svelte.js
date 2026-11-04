@@ -40,9 +40,9 @@ export class CalloutBlock extends TextBlock {
         );
 
         // Sync variant from Loro data changes (mirrors Heading's level sync)
-        this.node.data.subscribe(() => {
+        this.nabu.track(this.node.data.subscribe(() => {
             this.variant = this.node.data.get('variant') || 'note';
-        });
+        }));
     }
 
     // ── Capability flags ─────────────────────────────────────────────────────

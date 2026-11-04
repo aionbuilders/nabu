@@ -49,9 +49,9 @@ export class Heading extends TextBlock {
         this.serializers.set('application/x-nabu+json', (ctx) => this.behavior.toClipboardBlock({ ...ctx, props: { level: this.level } }));
 
         // Synchronisation du niveau
-        this.node.data.subscribe(() => {
+        this.nabu.track(this.node.data.subscribe(() => {
             this.level = this.node.data.get("level") || 1;
-        });
+        }));
     }
 
     /** @type {number} */

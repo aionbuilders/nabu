@@ -36,13 +36,15 @@ export class NabuSelection extends SvelteSelection {
 
     /**
      * Declare the element that renders this engine (the `[data-nabu-root]` div). Returns the function that detaches it (only
-     * clears the reference when it is still this element: a remount may already have set the next one).
+     * clears the reference when it is still this element: a remount may already have set the next one). The page listeners
+     * (`connected`) exist only while a root is attached: an engine with no editor mounted holds nothing on the document.
      * @param {HTMLElement} el
      * @returns {() => void}
      */
     attachRoot(el) {
         this.root = el;
-        return () => { if (this.root === el) this.root = null; };
+        this.connected = true;
+        return () => { if (this.root === el) { this.root = null; this.connected = false; } };
     }
 
     /**
@@ -102,6 +104,7 @@ export class NabuSelection extends SvelteSelection {
     constructor(nabu) {
         super();
         this.nabu = nabu;
+        this.connected = false; // no root yet: `attachRoot` turns the page listeners on
 
         // Every caret the editor itself places (after an action, an undo…) is remembered for undo / redo (ADR 015): it is
         // where that action ended. `setBaseAndExtent` is an own-property arrow function of the base class: wrap it.
@@ -114,7 +117,7 @@ export class NabuSelection extends SvelteSelection {
             return done;
         };
 
-        $effect.root(() => {
+        this.#stop = $effect.root(() => {
             $effect(() => {
                 if (this.blocks) {
                     this.previous.forEach(block => block.clearSelection());
@@ -134,6 +137,7 @@ export class NabuSelection extends SvelteSelection {
             // This is the only reliable source of direction — DOM position comparisons
             // break when anchorNode is an ancestor of the previous position.
             $effect(() => {
+                if (!this.connected) return;
                 /** @param {KeyboardEvent} e */
                 const onKeydown = (e) => {
                     // Capture phase on document = runs before every other keydown handler
@@ -233,7 +237,21 @@ export class NabuSelection extends SvelteSelection {
                 });
             });
         });
+
+        // Stop for good (`Nabu#destroy`): both effect roots (this one and the base class's), and the pending repair.
+        const stopBase = this.destroy;
+        this.destroy = () => {
+            this.#stop?.();
+            this.#stop = null;
+            if (this.#repairTimer !== null) clearTimeout(this.#repairTimer);
+            this.#repairTimer = null;
+            this.root = null;
+            stopBase();
+        };
     }
+
+    /** Stops this class's effect root (see `destroy`). @type {(() => void) | null} */
+    #stop = null;
 
     /**
      * Move a caret / focus that sits on a NON-TEXT position to the nearest valid text position, in the
@@ -327,8 +345,14 @@ export class NabuSelection extends SvelteSelection {
         }
 
         if (anchorInvalid) {
-            const dir = explicit ?? offsetHeuristic(anchor, anchorOffset);
-            const target = findNearestTextNode(anchor, anchorOffset, dir, filter, this.root);
+            let dir = explicit ?? offsetHeuristic(anchor, anchorOffset);
+            let target = findNearestTextNode(anchor, anchorOffset, dir, filter, this.root);
+            // No arrow key, a collapsed caret, and nothing in the guessed direction: Firefox puts the caret on (root, 0) after a Tab
+            // or `root.focus()`, a caret past the last child is the mirror case. Typing there is lost, so land on the other side.
+            if (!target && !explicit && live.isCollapsed) {
+                dir = dir === 'forward' ? 'backward' : 'forward';
+                target = findNearestTextNode(anchor, anchorOffset, dir, filter, this.root);
+            }
             if (!target) {
                 // Leaving the document by keyboard with nothing to land on: the document must offer a caret there.
                 if (explicit === 'forward') this.nabu.openTrailingCaret();

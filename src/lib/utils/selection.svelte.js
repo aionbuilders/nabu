@@ -33,13 +33,19 @@ export class SvelteSelection {
                 if (typeof window === 'undefined' || !window.getSelection) {
                     return;
                 }
-                
+
+                // Disconnected: no listener on the page, and nothing mirrored (the wrapper would keep removed DOM nodes alive).
+                if (!this.connected) {
+                    this.#sel = null;
+                    this.#ranges = [];
+                    return;
+                }
+
                 document.addEventListener('selectionchange', this.#updateSelection);
                 this.#updateSelection();
                 
                 return () => {
                     document.removeEventListener('selectionchange', this.#updateSelection);
-                    this.#cleanup?.();
                 };
             });
         });
@@ -47,6 +53,12 @@ export class SvelteSelection {
     
     /** @type {Function?} */
     #cleanup = null;
+
+    /**
+     * Whether the wrapper listens to the page (`selectionchange` on the document). On by default; a subclass tied to a part of the
+     * page turns it off while it has none, so that an unmounted owner leaves nothing behind. Reactive.
+     */
+    connected = $state(true);
     
     /** @type {Selection?} */
     raw = null;
@@ -649,6 +661,7 @@ export class SvelteSelection {
     destroy = () => {
         this.unobserveAll();
         this.#cleanup?.();
+        this.#cleanup = null;
         this.raw = null;
         this.#sel = null;
         this.#ranges = [];
