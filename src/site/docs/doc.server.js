@@ -3,7 +3,9 @@
  * browser rebuilds the same engine from, plus what the redrawn blocks need (heading anchors, Shiki tokens of the code blocks) and the
  * table of contents. The engine runs in Node (Loro's WebAssembly loads there too), no DOM is involved.
  */
+import { render } from 'svelte/server';
 import { createDocEngine, exportSnapshot } from './doc-preset.js';
+import DocEditor from './DocEditor.svelte';
 import { prepareMarkdown, createSlugger } from './content.js';
 import { getHighlighter } from './highlight.server.js';
 
@@ -82,4 +84,16 @@ export async function buildDoc(markdown, { dir, tocLevels = [2, 3], peer = 1 }) 
 
   const doc = { snapshot: exportSnapshot(engine), ids, code, title, toc: headings.map(({ id, label, level }) => ({ id, label, level })), headings };
     return doc;
+}
+
+/**
+ * The markup of a built document, as a string: what the server renders for `DocEditor` (the read-only Nabu editor), without the
+ * hydration markers (nothing hydrates it). For a page that ships plain HTML (StaticArticle) instead of the snapshot.
+ * @param {{ snapshot: string, ids: Record<string, string>, code: Record<string, Array<[string, string?]>> }} doc
+ * @param {string} label the accessible name of the document
+ * @param {string} [lang]
+ */
+export function renderDocHtml(doc, label, lang = 'en') {
+  const { body } = render(DocEditor, { props: { doc, label, lang } });
+  return body.replace(/<!--[\s\S]*?-->/g, '');
 }

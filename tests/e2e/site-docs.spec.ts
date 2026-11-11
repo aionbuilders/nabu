@@ -164,6 +164,27 @@ test.describe('the documentation pages', () => {
     expect(errors).toEqual([]);
   });
 
+  test('/changelog is plain HTML in the browser: no engine to rebuild, yet the anchors and the links work', async ({ page }) => {
+    // ~550 blocks rebuilt as a live engine cost seconds of main thread on a phone: the page ships its markup, not the Loro snapshot (StaticArticle.svelte)
+    const errors = watchErrors(page);
+    await page.goto('/changelog');
+    await hydrated(page);
+    await page.evaluate(() => document.fonts.ready);
+    // (the data inlined in the page is the markup, `doc:{html:`, not `doc:{snapshot:`)
+    const source = await (await page.request.get('/changelog')).text();
+    expect(source).toContain('doc:{html:');
+    expect(source).not.toContain('doc:{snapshot:');
+    expect(await page.evaluate(() => document.documentElement.outerHTML.length)).toBeGreaterThan(300_000); // the whole text is there
+    // every heading has its anchor, and each entry of "On this page" and of the releases column points at one
+    const ids = await page.locator(`${ROOT} :is(h1, h2, h3)[id]`).evaluateAll((els) => els.map((e) => e.id));
+    expect(ids.length).toBeGreaterThan(20);
+    for (const nav of ['On this page', 'Releases']) {
+      const hrefs = await page.getByRole('navigation', { name: nav }).getByRole('link').evaluateAll((els) => els.map((e) => e.getAttribute('href')!));
+      for (const href of hrefs.filter((h) => h.startsWith('#'))) expect(ids, `${nav}: ${href}`).toContain(href.slice(1));
+    }
+    expect(errors).toEqual([]);
+  });
+
   test('the text is in the HTML sent by the server (search engines, no JavaScript): headings, tables, code', async ({ request, browser }) => {
     const d = DOCS.find((x) => x.slug === 'installation')!;
     const html = await (await request.get(d.path)).text();
