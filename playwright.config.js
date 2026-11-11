@@ -12,7 +12,7 @@ const RESULTS = SLOT ? `test-results-${SLOT}` : 'test-results';
 // The `perf` project (large-document measurements, tests/e2e/perf/*.perf.ts) only exists when it is asked for:
 // `bunx playwright test --project=perf` (or NABU_PERF=1), so that a plain `bunx playwright test` never runs it. The
 // flag is written back to the environment so that the worker processes (which re-read this file) see the same projects.
-if (process.argv.some((a, i, all) => a === '--project=perf' || (a === '--project' && all[i + 1] === 'perf'))) process.env.NABU_PERF = '1';
+if (process.argv.some((a, i, all) => /^--project=perf(-webkit)?$/.test(a) || (a === '--project' && /^perf(-webkit)?$/.test(all[i + 1] ?? '')))) process.env.NABU_PERF = '1';
 const PERF = process.env.NABU_PERF === '1';
 
 export default defineConfig({
@@ -72,6 +72,18 @@ export default defineConfig({
         permissions: ['clipboard-read', 'clipboard-write'],
       },
     },
+    // The whole `core` suite on the other engines, on demand while it is being made green: `NABU_BROWSERS=1 bunx playwright test --project=core-firefox`.
+    ...(process.env.NABU_BROWSERS === '1'
+      ? (['firefox', 'webkit']).map((engine) => ({
+          name: `core-${engine}`,
+          testDir: 'tests/e2e',
+          testIgnore: ['**/flaky/**', '**/perf/**', '**/firefox/**'],
+          use: {
+            ...devices[engine === 'firefox' ? 'Desktop Firefox' : 'Desktop Safari'],
+            permissions: [],
+          },
+        }))
+      : []),
     ...(PERF
       ? [
           {
@@ -80,11 +92,29 @@ export default defineConfig({
             name: 'perf',
             testDir: 'tests/e2e/perf',
             testMatch: /\.perf\.ts$/,
+            testIgnore: /novel-typing\.perf\.ts$/, // WebKit only: see `perf-webkit`
             timeout: 900000,
             retries: 0,
             use: {
               ...devices['Desktop Chrome'],
               permissions: ['clipboard-read', 'clipboard-write'],
+            },
+          },
+          {
+            // Typing in the middle of a 90,000-word novel of nested regions on WebKit (tests/e2e/perf/novel-typing.perf.ts): the case that
+            // made WebKit take ~380 ms per key when nested `content-visibility: auto` boxes were stacked (see region/Region.svelte).
+            // `bunx playwright install webkit` once. EXECUTABLE OVERRIDE: `NABU_WEBKIT_EXE=<path to the browser launcher>` runs another
+            // WebKit build than the one Playwright pins, e.g. `NABU_WEBKIT_EXE=~/.cache/ms-playwright/webkit-2370/pw_run.sh`.
+            name: 'perf-webkit',
+            testDir: 'tests/e2e/perf',
+            testMatch: /novel-typing\.perf\.ts$/,
+            timeout: 900000,
+            retries: 0,
+            use: {
+              ...devices['Desktop Safari'],
+              viewport: { width: 1440, height: 1000 },
+              permissions: [],
+              launchOptions: process.env.NABU_WEBKIT_EXE ? { executablePath: process.env.NABU_WEBKIT_EXE.replace(/^~(?=\/)/, process.env.HOME ?? '~') } : {},
             },
           },
         ]

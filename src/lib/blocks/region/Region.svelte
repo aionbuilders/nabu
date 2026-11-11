@@ -11,6 +11,10 @@
 
     // A large document (Nabu.svelte sets `data-nabu-large` on the root): the body is skipped by the browser while off screen, see the style below.
     const large = $derived(block.nabu.blocks.size >= LARGE_DOC);
+    // A LEAF body (no region among its direct children) is the only one the browser may skip, see the style below. Reactive: a region
+    // dropped into the body, or the last one taken out, flips it. A body rendered in chunks (reported by its BlockList) leaves it to them.
+    const leaf = $derived(!block.children.some((child) => child.type === 'region'));
+    let chunked = $state(false);
     const region = $derived(Regions.get(block.nabu).of(block));
     const level = $derived(Math.min(6, Math.max(1, region?.level ?? 1)));
     // The label template applied with an EMPTY title ("1.", "1.1", "Chapter 2"): the editable title follows it.
@@ -83,22 +87,27 @@
             data-block-type="region"
             data-nabu-isolated
             data-placeholder={block.placeholder}
-        ><RichText delta={block.delta} /></div><span class="nabu-region-rule" data-nabu-ui contenteditable="false" aria-hidden="true">{#if pending}<span class="nabu-region-drain"></span>{/if}</span></div><div class="nabu-region-body" style:--nb-region-blocks={large ? block.weight : undefined}><BlockList blocks={block.children} /></div>{#if endText}<!-- Never a caret stop (not editable, not selectable) and not read as text: a separator named by the same sentence. --><div class="nabu-region-end" data-region-end data-nabu-ui contenteditable="false" role="separator" aria-label={endText}><span class="nabu-region-end-rule" aria-hidden="true"></span><span class="nabu-region-end-text" aria-hidden="true">{endText}</span></div>{/if}</div>
+        ><RichText delta={block.delta} /></div><span class="nabu-region-rule" data-nabu-ui contenteditable="false" aria-hidden="true">{#if pending}<span class="nabu-region-drain"></span>{/if}</span></div><div class="nabu-region-body" data-region-leaf={leaf && !chunked ? '' : undefined} style:--nb-region-blocks={large ? block.weight : undefined}><BlockList blocks={block.children} bind:chunked /></div>{#if endText}<!-- Never a caret stop (not editable, not selectable) and not read as text: a separator named by the same sentence. --><div class="nabu-region-end" data-region-end data-nabu-ui contenteditable="false" role="separator" aria-label={endText}><span class="nabu-region-end-rule" aria-hidden="true"></span><span class="nabu-region-end-text" aria-hidden="true">{endText}</span></div>{/if}</div>
 
 <style>
     /* ── Large documents ── In a large document (`data-nabu-large`, 800 blocks) the body of a region is skipped by the browser while it is off screen
        (`content-visibility: auto`): its layout, paint and selection bookkeeping no longer grow with the size of the document, which is
        what keeps a keystroke within a frame at 10,000 blocks. Until it has been shown once its height is an estimate (its number of
-       blocks times --nb-block-estimate, 72px); `auto` then remembers the real one. A small document is left exactly as it was. */
-    :global(.nabu-editor[data-nabu-large]) .nabu-region-body {
-        content-visibility: auto;
-        contain-intrinsic-block-size: auto calc(var(--nb-region-blocks, 16) * var(--nb-block-estimate, 72px));
-        /* ...and what it contains may hang out of its box (the margin rail of a sub-region): paint containment would clip it. */
-        overflow-clip-margin: var(--nb-clip-margin, 3rem);
-    }
+       blocks times --nb-block-estimate, 72px); `auto` then remembers the real one. A small document is left exactly as it was.
 
-    @media print {
-        :global(.nabu-editor[data-nabu-large]) .nabu-region-body { content-visibility: visible; }
+       Never nested: an `auto` box must neither contain nor sit inside another one. WebKit pays for the nesting on every keystroke
+       (a novel of nested parts > chapters > scenes, caret mid-document: ~380 ms per key at 90,000 words with every body `auto`; 34-40 ms
+       with every body visible; 23-26 ms at 90k and 28-30 ms at 150k with `auto` on the LEAF bodies only, flat with the size; `auto` on the
+       non-leaf bodies only is as slow as all of them; Chromium is at 9-12 ms either way). So only a leaf body (`data-region-leaf`: no region
+       among its children, not itself rendered in chunks, whose `.nabu-chunk` boxes are the `auto` ones then) is skipped, and not when it already
+       sits inside a chunk, which skips what it holds. (BlockList.svelte keeps chunks out of chunks the same way.) */
+    @media not print {
+        :global(.nabu-editor[data-nabu-large] .nabu-region-body[data-region-leaf]:not(.nabu-chunk .nabu-region-body)) {
+            content-visibility: auto;
+            contain-intrinsic-block-size: auto calc(var(--nb-region-blocks, 16) * var(--nb-block-estimate, 72px));
+            /* ...and what it contains may hang out of its box (the margin rail of a sub-region): paint containment would clip it. */
+            overflow-clip-margin: var(--nb-clip-margin, 3rem);
+        }
     }
 
     /* ── Margin rail: the region that holds the caret (data-region-caret), from its seam to the end of its body ── */

@@ -4,10 +4,12 @@
 
 ### Fixed
 - **Firefox: the text froze after an IME composition in an empty block.** Firefox puts the composed text in a new text node, and Svelte went on updating the old one: what was typed next reached the model but not the screen, and the caret jumped to the start. The block's render now goes back as Svelte left it when a composition ends, and the model shows the composed text through it. This covers every browser and every text block, including code blocks.
+- **WebKit: typing in the middle of a long document with nested regions took ~400 ms per key.** In a large document every region body was skipped off screen with `content-visibility: auto`, and WebKit pays on every frame for such boxes nested inside each other. Only the innermost region bodies are skipped now, never one inside another. On a 90,000-word novel (parts, chapters, scenes), a key in the middle takes 22 ms instead of ~390 ms on WebKitGTK, and Chromium does not change.
 - **Composed text ignored the bold you had switched on, and could show twice.** A composition now gets the same marks as typed text: the marks you switched on, and the rule for mark edges. At the end of a bold run, the composed text showed both in the run and after it.
 
 ### Tests
 - A `firefox` Playwright project (`tests/e2e/firefox`) drives compositions on the real browser. Run `bunx playwright install firefox` once. `core` still runs on Chromium only.
+- `tests/e2e/large-docs-auto-boxes.spec.ts` checks that no skipped box is ever inside another. A `perf-webkit` project, run on demand, types in the middle of a 90,000-word novel and fails above 60 ms per key at the median.
 
 ## 0.1.5 (2026-11-04)
 

@@ -158,15 +158,20 @@ test.describe('large document: what the browser has to look at', () => {
     expect(await findPhantoms(page), 'whitespace nodes in the chunked markup').toEqual([]);
   });
 
-  test('a document with regions skips the off-screen region bodies', async ({ page }) => {
+  test('a document with regions skips the off-screen LEAF region bodies (the others stay visible: auto boxes never nest)', async ({ page }) => {
     test.setTimeout(90000);
     const g = genDoc({ blocks: N, regions: true });
     await openSeeded(page, docId(), JSON.stringify(g.doc), g.nodes);
     expect(await page.locator('[data-nabu-root][data-nabu-large]').count()).toBe(1);
-    const s = await skippedOf(page, '.nabu-region-body');
-    console.log(`[large-docs] ${s.total} region bodies, ${s.skipped} skipped by the browser`);
+    const s = await skippedOf(page, '.nabu-region-body[data-region-leaf]');
+    console.log(`[large-docs] ${s.total} leaf region bodies, ${s.skipped} skipped by the browser`);
     expect(s.auto).toBe(true);
-    expect(s.skipped, 'region bodies skipped').toBeGreaterThanOrEqual(Math.floor(s.total * 0.6));
+    expect(s.skipped, 'leaf region bodies skipped').toBeGreaterThanOrEqual(Math.floor(s.total * 0.6));
+    expect(s.total, 'leaf bodies (the scenes)').toBeGreaterThan(0);
+    // The invariant itself is checked in large-docs-auto-boxes.spec.ts: here, only that a container body is not skipped.
+    const containers = await skippedOf(page, '.nabu-region-body:not([data-region-leaf])');
+    expect(containers.total, 'container bodies').toBeGreaterThan(0);
+    expect(containers.skipped, 'container bodies are never skipped').toBe(0);
   });
 
   test('a small document is left exactly as it was: no chunk, no skipped body', async ({ page }) => {

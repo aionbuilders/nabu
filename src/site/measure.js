@@ -15,7 +15,7 @@
  *   Reading: the engine's own work stays ~3 ms at any size and a keystroke creates no DOM node. What took 80-100 ms at 10,000 blocks
  *   was the browser: after the text changed it laid out, painted and synced the selection of the WHOLE contenteditable (a Chrome
  *   trace: `Editor::SyncSelection` 70 ms per key, `Layout` 15-30 ms for 9 dirty objects out of 27,000). The fix lets it skip what is off
- *   screen (`content-visibility: auto` on chunks of ~64 blocks and on region bodies, see src/lib/blocks/chunks.js). The small document
+ *   screen (`content-visibility: auto` on chunks of ~64 blocks and on the leaf region bodies, see src/lib/blocks/chunks.js). The small document
  *   sits at ~9 ms, which is mostly the wait for the next frame tick (a uniform 0-16.7 ms, ~8 ms on average): it is the floor.
  *   Loading 10,000 blocks takes 7-10 s in the lab (not changed by the fix), 1,000 blocks 1-1.4 s.
  *
