@@ -124,7 +124,7 @@ Tests at known timing risk go in `tests/e2e/flaky/` (clipboard APIs, CRDT undo t
 
 ## Consumer smoke test (`tests/consumer`)
 
-`bun run test:consumer` checks the package as a consumer gets it, which no other suite does: the unit tests and the e2e app import the sources, not the published files. It runs `npm pack` (so `prepack` rebuilds `dist`), copies `tests/consumer/app` (a minimal SvelteKit app set up as `docs/getting-started/installation.md` says) to a temp folder, installs the tarball there with npm, checks that the installed `dist/index.js` is the packed one, runs `vite build`, then runs `tests/consumer/smoke.spec.js` on Chromium, Firefox and WebKit against `node build/index.js` on port 5178.
+`bun run test:consumer` checks the package as a consumer gets it, which no other suite does: the unit tests and the e2e app import the sources, not the published files. It runs `npm pack` (so `prepack` rebuilds `dist`), copies `tests/consumer/app` (a minimal SvelteKit app set up as `docs/getting-started/installation.md` says) to a temp folder, installs the tarball there with npm, checks that the installed `dist/index.js` is the packed one, type-checks `tests/consumer/types/probe.js` against the installed `.d.ts` files (bundler resolution, as a SvelteKit app; its `@ts-expect-error` lines fail the check if a type turns into `any`), runs `vite build`, then runs `tests/consumer/smoke.spec.js` on Chromium, Firefox and WebKit against `node build/index.js` on port 5178.
 
 For an SSR page, a client-only page (`ssr = false`), a lazy import and a server-built document, it checks that nothing throws or logs an error, that the editor mounts, and that typing `Hello é` reaches the model. It also imports `@aionbuilders/nabu/format` in plain Node.
 

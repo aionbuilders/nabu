@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **`nabu.regions` had no type.** `RegionsExtension` installs it when the editor starts, so the `Nabu` type does not have it, and an IDE offered nothing after `engine.regions`. `createFullEditor()` now returns a `RegionsEditor`, where `regions` is always typed, and the new `RegionsEditor` type annotates an editor built with your own preset. `Regions.get(nabu)` still works everywhere.
+
+### Tests
+- `bun run test:consumer` also type-checks a file against the installed package, the way an IDE sees it.
+
 ## 0.1.6 (2026-11-15)
 
 Two browser fixes: IME compositions in Firefox, and typing in long documents on WebKit. No API change.

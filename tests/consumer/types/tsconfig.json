@@ -1,0 +1,15 @@
+{
+	"//": "Copied next to the consumer app by scripts/consumer-smoke.js. Bundler resolution, as a SvelteKit app; skipLibCheck as most apps.",
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": true,
+		"noEmit": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"target": "es2022",
+		"types": []
+	},
+	"files": ["probe.js"]
+}

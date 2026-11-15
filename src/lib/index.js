@@ -88,6 +88,7 @@ export { formatChord } from './utils/keys.js';
  * @typedef {import('./presets.js').EditorOptions} EditorOptions
  * The options of the editor factories (`createEditor` and the preset factories): every `NabuInit` option plus the `preset` to start from.
  */
+/** @typedef {import('./blocks/region/region.extension.js').RegionsEditor} RegionsEditor An editor with `nabu.regions` typed (see `RegionsExtension`). */
 /** @typedef {import('./files/files.svelte.js').FilesConfig} FilesConfig The `files` option: uploads, limits, embedding. */
 /** @typedef {import('./files/files.svelte.js').EmbeddedAsset} EmbeddedAsset */
 /** @typedef {import('./utils/placeholders.js').PlaceholdersOption} PlaceholdersOption */

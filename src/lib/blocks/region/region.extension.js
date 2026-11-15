@@ -18,6 +18,13 @@ import { closeOnEnter } from "./close.js";
  */
 
 /**
+ * @typedef {Nabu & { readonly regions: Regions }} RegionsEditor
+ * An editor built with `RegionsExtension`: `nabu.regions` (the registry, same as `Regions.get(nabu)`) is installed by the
+ * extension's `onInit` hook, never by the engine, so the `Nabu` type does not have it. `createFullEditor()` returns this type;
+ * with your own preset, annotate the editor: `/** @type {RegionsEditor} *\/ (createEditor({ preset }))`, or use `Regions.get(nabu)`.
+ */
+
+/**
  * @param {Nabu} nabu @param {InputEvent} event @param {import("../block.svelte.js").Block} block
  */
 function openCreateChooser(nabu, event, block) {

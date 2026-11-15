@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Consumer smoke test: packs the package exactly as npm would publish it, installs the tarball in a fresh copy of the
- * SvelteKit app in tests/consumer/app (in a temp folder), builds that app for production and runs tests/consumer/smoke.spec.js
- * against it on Chromium, Firefox and WebKit.
+ * SvelteKit app in tests/consumer/app (in a temp folder), type-checks tests/consumer/types/probe.js against the installed .d.ts
+ * files, builds that app for production and runs tests/consumer/smoke.spec.js against it on Chromium, Firefox and WebKit.
  *
  * It exists because a bundler-entry change for Loro's WASM broke a client-only route on WebKit while the unit tests and our own
  * e2e app (which import the sources) stayed green. Only a separate app that installed the tarball sees what a consumer sees.
@@ -71,7 +71,11 @@ const installed = join(app, 'node_modules/@aionbuilders/nabu/dist/index.js');
 if (sha(installed) !== sha(join(ROOT, 'dist/index.js'))) fail('the installed @aionbuilders/nabu is NOT the packed one (dist/index.js differs from the repo)');
 console.log('\nInstalled package matches the repo dist (dist/index.js hash).');
 
-// 4. Production build, then the browsers.
+// 4. The published types, as an editor sees them in the app (tests/consumer/types/probe.js).
+cpSync(join(ROOT, 'tests/consumer/types'), join(app, 'types-probe'), { recursive: true });
+step('types', join(ROOT, 'node_modules/.bin/tsc'), ['-p', join(app, 'types-probe/tsconfig.json')]);
+
+// 5. Production build, then the browsers.
 step('vite build', 'npx', ['vite', 'build'], { cwd: app });
 step('playwright', join(ROOT, 'node_modules/.bin/playwright'), ['test', '--config', 'tests/consumer/playwright.config.js'], {
   env: { NABU_CONSUMER_APP: app },

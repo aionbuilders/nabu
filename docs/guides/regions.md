@@ -110,6 +110,14 @@ A body may mix its own text and sub-regions in any order: the text of a chapter,
 
 `nabu.regions` is a reactive view derived from the tree (it stores nothing in the document). It is recomputed when the **structure** changes, not when text is typed.
 
+`RegionsExtension` installs `nabu.regions` when the editor starts; the engine itself knows nothing about regions. `Regions.get(nabu)` returns the same registry on any editor. For types and autocompletion, `createFullEditor()` returns a `RegionsEditor`, where `regions` is always there. With your own preset, annotate the editor:
+
+```js
+/** @import { RegionsEditor } from '@aionbuilders/nabu' */
+const engine = /** @type {RegionsEditor} */ (createEditor({ preset: DocumentPreset, extensions: [RegionsExtension()] }));
+engine.regions.list; // typed
+```
+
 | Member | |
 |---|---|
 | `list` | Every region, in document order |

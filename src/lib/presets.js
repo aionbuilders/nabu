@@ -1,5 +1,6 @@
 /**
  * @import { Extension } from './utils/extensions.js';
+ * @import { RegionsEditor } from './blocks/region/region.extension.js';
  */
 
 import { Nabu } from './blocks/nabu.svelte.js';
@@ -106,11 +107,13 @@ export const createDocumentEditor = (options = {}) =>
     createEditor({ preset: DocumentPreset, ...options });
 
 /**
- * All built-in blocks + rich text. The full Nabu experience.
+ * All built-in blocks + rich text. The full Nabu experience. It includes `RegionsExtension`, so `nabu.regions` is always there
+ * (typed without `undefined`).
  * @param {EditorOptions} [options]  every `NabuInit` option (`files`, `snapshot`, `keymap`…) and extra `extensions`
+ * @returns {RegionsEditor}
  */
 export const createFullEditor = (options = {}) =>
-    createEditor({ preset: FullPreset, ...options });
+    /** @type {RegionsEditor} */ (createEditor({ preset: FullPreset, ...options }));
 
 // ---------------------------------------------------------------------------
 // Persisted factory
