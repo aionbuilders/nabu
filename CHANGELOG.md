@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.6 (2026-11-15)
+
+Two browser fixes: IME compositions in Firefox, and typing in long documents on WebKit. No API change.
 
 ### Fixed
 - **Firefox: the text froze after an IME composition in an empty block.** Firefox puts the composed text in a new text node, and Svelte went on updating the old one: what was typed next reached the model but not the screen, and the caret jumped to the start. The block's render now goes back as Svelte left it when a composition ends, and the model shows the composed text through it. This covers every browser and every text block, including code blocks.
