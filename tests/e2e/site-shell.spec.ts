@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { test, expect } from './helpers/test.js';
+import { latestChangelogHeading } from './helpers/changelog.js';
 
 // The public website shell (src/site + src/routes/(site)): header, footer, theme, mobile menu.
 // These pages have no editor: the editor DOM invariant fixture is a no-op here (no [data-nabu-root]).
@@ -67,7 +68,7 @@ test.describe('site shell', () => {
       if (href === '/labs') await expect(page.getByRole('link', { name: /Performance/ })).toBeVisible();
       else if (href === '/api') await expect(page.getByRole('navigation', { name: 'API reference' })).toBeVisible();
       else if (href === '/docs') await expect(page.getByRole('navigation', { name: 'Documentation' })).toBeVisible();
-      else if (href === '/changelog') await expect(page.getByRole('heading', { level: 2, name: 'Unreleased' })).toBeVisible();
+      else if (href === '/changelog') await expect(page.getByRole('heading', { level: 2, name: latestChangelogHeading(), exact: true })).toBeVisible();
       else if (href === '/architecture') await expect(page.getByRole('heading', { level: 2, name: 'Should you switch?' })).toBeVisible();
       await expect(page.getByRole('banner')).toBeVisible();
       await expect(page.locator('footer')).toBeVisible();

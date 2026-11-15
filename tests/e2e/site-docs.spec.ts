@@ -2,6 +2,7 @@ import { mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { test, expect, type Page, type Browser } from './helpers/test.js';
 import { domInvariantReport } from './helpers/dom-invariant.js';
+import { latestChangelogHeading } from './helpers/changelog.js';
 
 // The documentation (src/routes/(site)/docs, /changelog): every page is a Nabu document in READ-ONLY mode, built from the repo's Markdown at
 // build time, server-rendered and hydrated. Pages and their frontmatter are read from docs/ here too, so a new page is tested without a line.
@@ -152,7 +153,7 @@ test.describe('the documentation pages', () => {
     const root = page.locator(ROOT);
     await expect(root).toHaveAttribute('contenteditable', 'false');
     await expect(root).toHaveAttribute('role', 'document');
-    await expect(page.getByRole('heading', { level: 2, name: 'Unreleased' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: latestChangelogHeading(), exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: '0.1.0-beta.0' })).toHaveCount(1);
     await expect(page.getByRole('navigation', { name: 'Main' }).locator('a[aria-current="page"]')).toHaveText('Changelog');
     expect(await page.getByRole('navigation', { name: 'On this page' }).getByRole('link').count()).toBeGreaterThan(10);
