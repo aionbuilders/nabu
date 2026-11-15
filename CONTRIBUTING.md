@@ -52,6 +52,7 @@ bun run dev
 ```bash
 bun run test:unit    # Vitest
 bun run test:e2e     # builds the test app and runs Playwright (Chromium) on port 5180
+bun run test:consumer # packs the package, installs it in a fresh app, builds it, checks 3 browsers (run it before a release)
 ```
 
 To run one spec: `bunx playwright test tests/e2e/marks.spec.ts --reporter=line`. More details in [tests/README.md](tests/README.md).

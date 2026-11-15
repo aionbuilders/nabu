@@ -8,6 +8,7 @@
 - **Composed text ignored the bold you had switched on, and could show twice.** A composition now gets the same marks as typed text: the marks you switched on, and the rule for mark edges. At the end of a bold run, the composed text showed both in the run and after it.
 
 ### Tests
+- `bun run test:consumer` packs the package as npm would publish it, installs the tarball in a fresh SvelteKit app, builds it and checks on Chromium, Firefox and WebKit that the editor boots and takes typing on an SSR, a client-only, a lazy and a server-built page. It catches what only a consumer sees (a change to how Loro's WASM is loaded broke a client-only route on WebKit while every other test was green).
 - A `firefox` Playwright project (`tests/e2e/firefox`) drives compositions on the real browser. Run `bunx playwright install firefox` once. `core` still runs on Chromium only.
 - `tests/e2e/large-docs-auto-boxes.spec.ts` checks that no skipped box is ever inside another. A `perf-webkit` project, run on demand, types in the middle of a 90,000-word novel and fails above 60 ms per key at the median.
 

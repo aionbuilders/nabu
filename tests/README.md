@@ -23,6 +23,10 @@ bun run test                 # unit, then e2e
 bun run check                # svelte-check on src/lib
 ```
 
+```bash
+bun run test:consumer        # consumer smoke test, see below (needs network, a few minutes)
+```
+
 Playwright projects (see `playwright.config.js`):
 
 | Project | Directory | Notes |
@@ -117,3 +121,11 @@ A violation fails the test with the offending node and the nearest block ids. Op
 7. Prefer turning a manual checklist into a spec; keep manual testing for "feel".
 
 Tests at known timing risk go in `tests/e2e/flaky/` (clipboard APIs, CRDT undo timing, IndexedDB debounce, cross-block selection).
+
+## Consumer smoke test (`tests/consumer`)
+
+`bun run test:consumer` checks the package as a consumer gets it, which no other suite does: the unit tests and the e2e app import the sources, not the published files. It runs `npm pack` (so `prepack` rebuilds `dist`), copies `tests/consumer/app` (a minimal SvelteKit app set up as `docs/getting-started/installation.md` says) to a temp folder, installs the tarball there with npm, checks that the installed `dist/index.js` is the packed one, runs `vite build`, then runs `tests/consumer/smoke.spec.js` on Chromium, Firefox and WebKit against `node build/index.js` on port 5178.
+
+For an SSR page, a client-only page (`ssr = false`), a lazy import and a server-built document, it checks that nothing throws or logs an error, that the editor mounts, and that typing `Hello é` reaches the model. It also imports `@aionbuilders/nabu/format` in plain Node.
+
+It needs network (npm install) and takes a few minutes. Run it after any change to how the package is built or loaded (`src/lib/vite.js`, `exports`, the Loro loading, `dist` layout). `--keep` keeps the temp folder (`bun run test:consumer -- --keep`); it is printed in any case, and kept when the run fails. The Playwright config lives in `tests/consumer/` and is not picked up by `bun run test:e2e`.

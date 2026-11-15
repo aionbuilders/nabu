@@ -8,5 +8,9 @@
 		"src",
 		"vite.config.js",
 		"tests"
+	],
+	"exclude": [
+		"node_modules/**",
+		"tests/consumer/**"
 	]
 }
