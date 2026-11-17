@@ -268,10 +268,13 @@ describe('save status and errors (P-95)', () => {
     await edit(engine, 'x');
     await tick(2);
     expect(p.status).toBe('pending');
-    const saving = engine.saveNow();
-    await tick(1);
-    expect(p.status).toBe('saving');
-    await saving;
+    // Every value the status takes, recorded as it is assigned. Reading the status after a wait raced the save: a fast machine
+    // could already be 'saved', a slow one still 'pending' (the save first waits for the files and the lock).
+    const assigned = [];
+    const own = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(p), 'status');
+    Object.defineProperty(p, 'status', { configurable: true, get() { return own.get.call(this); }, set(value) { assigned.push(value); own.set.call(this, value); } });
+    await engine.saveNow();
+    expect(assigned).toEqual(['saving', 'saved']);
     expect(p.status).toBe('saved');
     expect(p.lastSavedAt).toBeGreaterThan(Date.now() - 5000);
     expect(p.lastError).toBeNull();
