@@ -90,12 +90,12 @@ export class TextBehavior {
     /**
      * Number of words in this text: segmented with `Intl.Segmenter` in the language of the editor (`nabu.lang`) when the platform
      * has it, so Chinese or Japanese text counts its words rather than one per sentence; whitespace-separated otherwise. See
-     * `utils/words.js`. Reactive in the text and in `nabu.lang`.
+     * `utils/words.js`. The editor's `countWords` option replaces that rule. Reactive in the text and in `nabu.lang`.
      * @returns {number}
      * @public
      */
     get wordCount() {
-        return countWords(this.text, this.nabu?.lang);
+        return (this.nabu?.countWords ?? countWords)(this.text, this.nabu?.lang);
     }
     
     /**

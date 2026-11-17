@@ -78,11 +78,13 @@ export { JSON_FORMAT_VERSION, CLIPBOARD_FORMAT_VERSION, isSupportedJsonVersion }
 export { deltaToMarkdown, deltaToHtml } from './behaviors/text/index.js';
 export { sanitizeUrl } from './utils/html.js';
 export { formatChord } from './utils/keys.js';
+export { countWords } from './utils/words.js';
 
 // ---------------------------------------------------------------------------
 // Types (JSDoc typedefs, importable as `import('@aionbuilders/nabu').NabuInit`…)
 // ---------------------------------------------------------------------------
 
+/** @typedef {import('./utils/words.js').WordCounter} WordCounter A word counter, `(text, lang?) => number`: the `countWords` option. */
 /** @typedef {import('./blocks/nabu.svelte.js').NabuInit} NabuInit The options of an editor: `new Nabu(init)`, the factories and `createPersistedEditor`. */
 /**
  * @typedef {import('./presets.js').EditorOptions} EditorOptions

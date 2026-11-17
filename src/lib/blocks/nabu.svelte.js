@@ -20,6 +20,7 @@ import { closestWithin } from '../utils/dom-scope.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset, revealFocus } from './undo-selection.js';
 import { LARGE_DOC } from './chunks.js';
 import { revealCaret } from '../utils/reveal-caret.js';
+import { countWords as defaultCountWords } from '../utils/words.js';
 import { markAtCaret } from '../behaviors/text/mark-edges.js';
 import { swapEmptyBlocks, restoreEmptyBlocks } from '../utils/composition.js';
 import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPosition, documentEnd, positionInRange, positionAfterRemoval, DRAG_MARKER, NABU_FORMAT } from '../utils/drop.js';
@@ -63,6 +64,9 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 * @property {string} [lang] - Language of the content, a BCP 47 tag (`'fr'`, `'en-GB'`). Set on the root as `lang`, so the browser's
 *   spellchecker, hyphenation and screen readers use it. Unset: inherits the page language. An invalid tag is ignored (warning).
 *   Reactive: `nabu.lang`.
+* @property {import('../utils/words.js').WordCounter} [countWords] - Your own word counter, `(text, lang) => number`, called with the text of
+*   one block and the editor's `lang`; it replaces the default rule (Unicode word breaks) everywhere Nabu counts words (`wordCount` of
+*   a block, a region...). Given once at creation, not reactive. Not a function: ignored (warning). Read back as `nabu.countWords`.
 * @property {'focus' | 'stay' | 'indent'} [tab] - What Tab / Shift+Tab do in a plain text block, where no block handles them
 *   structurally (list indent, code indentation and region titles keep their own meaning, whatever this says; P-41).
 *   `'focus'`: the browser default, Tab leaves the editor. `'stay'`: both keys are swallowed and the caret stays; Escape then Tab
@@ -287,6 +291,17 @@ export class Nabu {
         this.placeholders = normalizePlaceholders(init.placeholders);
         this.spellcheck = init.spellcheck !== false;
         this.lang = init.lang;
+        /**
+         * The function that counts words: the `countWords` option, or the default rule (`countWords` of `utils/words.js`, also exported
+         * by the package). Fixed at creation.
+         * @type {import('../utils/words.js').WordCounter}
+         * @public
+         */
+        this.countWords = defaultCountWords;
+        if (init.countWords !== undefined) {
+            if (typeof init.countWords === 'function') this.countWords = init.countWords;
+            else this.warn(`Ignoring invalid "countWords" (not a function): ${String(init.countWords)}`);
+        }
         this.readonly = !!init.readonly;
         this.#tabDefault = resolveTabMode(init.tabDefault, 'focus', (message) => this.warn(message));
         this.tab = init.tab;

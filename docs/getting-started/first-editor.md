@@ -88,7 +88,7 @@ const engine = createDocumentEditor();
 expect(engine).toBeInstanceOf(Nabu);
 ```
 
-Every factory takes the same options: the `Nabu` options (`NabuInit`: `placeholders`, `spellcheck`, `lang`, `tab`, `keymap`, `files`, `snapshot`…) and extra `extensions`.
+Every factory takes the same options: the `Nabu` options (`NabuInit`: `placeholders`, `spellcheck`, `lang`, `countWords`, `tab`, `keymap`, `files`, `snapshot`…) and extra `extensions`.
 
 ```js test
 import { createTextEditor } from '@aionbuilders/nabu';

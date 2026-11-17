@@ -16,6 +16,12 @@
  * one word by the same rules).
  */
 
+/**
+ * A word-counting function: the text of one block and the editor's `lang`, the number of words. The `countWords` option of an
+ * editor replaces the default one with a function of this shape (see `NabuInit`).
+ * @typedef {(text: string, lang?: string) => number} WordCounter
+ */
+
 /** @type {Map<string, Intl.Segmenter | null>} */
 const segmenters = new Map();
 
@@ -42,7 +48,7 @@ function segmenterFor(lang) {
 const LATIN_WORD = /^[0-9A-Za-zÀ-ÖØ-öø-ɏ]+$/;
 
 /**
- * Number of words in a text.
+ * Number of words in a text (the default {@link WordCounter} of Nabu).
  * @param {string} text
  * @param {string} [lang] BCP 47 tag of the text (the editor's `lang`); unset: the platform default
  * @returns {number}

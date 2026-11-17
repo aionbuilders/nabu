@@ -50,6 +50,7 @@ const ROOT = [
   'ToggleExtension',
   'TypographyExtension',
   'VideoExtension',
+  'countWords',
   'createDialogueExtension',
   'createDocumentEditor',
   'createEditor',
@@ -101,6 +102,7 @@ const EXTEND = [
 // The light door to helpers that the other entries export too (same functions, so a page that only reads loads no WebAssembly).
 const FORMAT = [
   'JSON_FORMAT_VERSION',
+  'countWords',
   'deltaToHtml',
   'deltaToMarkdown',
   'escapeHtml',

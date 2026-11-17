@@ -25,7 +25,7 @@ const sorted = (/** @type {Iterable<string>} */ names) => [...names].sort();
 const NABU = {
   instance: [
     'BREAK', 'CONTINUE', 'blocks', 'blocksByType', 'cancelPendingCommand', 'children',
-    'commandAnnouncement', 'commands', 'commit', 'components', 'composing', 'composingBlock',
+    'commandAnnouncement', 'commands', 'commit', 'components', 'composing', 'composingBlock', 'countWords',
     'createPasteBlock', 'debugging', 'defaultBlockType', 'delete', 'destroy', 'doc', 'exec', 'extensions',
     'focus', 'importFragment', 'importJSON', 'importMarkdown', 'importRemote', 'insert',
     'insertPasteBlock', 'internals', 'isEmpty', 'isMarkActive', 'isolateUndoStep', 'lang', 'lastVisibleBlock',

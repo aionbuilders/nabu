@@ -19,7 +19,7 @@ Every block has a `wordCount`, **reactive**: it updates as you type. A region gi
 | `region.ownWordCount` | The words of its own text, **sub-regions excluded** |
 | `engine.regions.preamble.wordCount` | The words before the first region |
 
-**Titles are never counted**: not the region's own, not its sub-regions'. A title is a label, not prose. A word is a run of characters separated by whitespace.
+**Titles are never counted**: not the region's own, not its sub-regions'. A title is a label, not prose. What a word is follows the Unicode word-break rules in the language of the editor (`well-known` is two words). If your app has another rule, pass your own counter with the [`countWords` option](../guides/ime-and-languages.md#counting-words).
 
 ## A report
 

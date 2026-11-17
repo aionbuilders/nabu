@@ -4,6 +4,7 @@
 // the directive would be unused and the check would fail.
 import { createEditor, createFullEditor, DocumentPreset, RegionsExtension, Regions } from '@aionbuilders/nabu';
 /** @import { RegionsEditor } from '@aionbuilders/nabu' */
+import { countWords } from '@aionbuilders/nabu/format';
 
 // `createFullEditor()` includes RegionsExtension: `nabu.regions` is typed, without `undefined`.
 const full = createFullEditor();
@@ -22,3 +23,10 @@ const plain = createEditor({ preset: DocumentPreset });
 plain.regions;
 
 export { count, notAString, words, viaGet };
+
+// `countWords` option: a function type-checks, a number does not; the default rule is exported from the light entry.
+createEditor({ countWords: (text, lang) => 1 });
+// @ts-expect-error `countWords` is a function, not a number
+createEditor({ countWords: 42 });
+/** @type {(text: string, lang?: string) => number} */ const defaultCounter = countWords;
+export { defaultCounter };

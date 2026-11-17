@@ -102,6 +102,23 @@ expect(await count('ja', '私は昨日東京に行きました')).toBeGreaterTha
 
 It follows the Unicode word-break rules, so it differs from a whitespace count in three ways: a punctuation mark or quotation mark standing alone is not a word, a hyphenated compound counts as several words (`well-known` is two), and a number such as `1,000` or `3.14` is one word. Typing recounts only the block being edited.
 
+### Your own counter
+
+There is no universal definition of a word, and Word's rule (a hyphenated compound like `passe-t-il` or `Dix-huit` is one word) is a publishing convention, so it belongs to your app, not to the editor. The `countWords` option replaces the default rule everywhere Nabu counts words. It is a function `(text, lang) => number`, called with the text of one block and the editor's `lang`. It is given once at creation (it is not reactive) and read back as `engine.countWords`. A value that is not a function is ignored, with a warning. Without the option, the Unicode rule above stays.
+
+```js test
+import { createDocumentEditor } from '@aionbuilders/nabu';
+
+// Word's rule: whitespace-separated tokens that contain a letter or a digit
+const wordLike = (text, lang) => text.split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
+
+const engine = createDocumentEditor({ lang: 'fr', countWords: wordLike });
+await engine.importMarkdown("passe-t-il Dix-huit l'homme");
+expect(engine.children.reduce((sum, block) => sum + block.wordCount, 0)).toBe(3);
+```
+
+The default rule is also exported as `countWords(text, lang)`, from `@aionbuilders/nabu` and from `@aionbuilders/nabu/format` (which loads neither Loro nor Svelte), to count the words of a text without an editor.
+
 ## Typography per language
 
 `TypographyExtension` has **no options**. It does one thing: typing `-- ` (two hyphens and a space, not preceded by another hyphen) becomes `— ` (an em dash). It does not turn straight quotes into curly ones, does not insert non-breaking spaces and knows nothing about languages. Those typographic conventions (guillemets and the narrow space before `;`, `:`, `!`, `?` in French, the quotation marks of German or Japanese) are yours to add.

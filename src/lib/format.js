@@ -12,6 +12,7 @@
 
 export { deltaToHtml, deltaToMarkdown } from './behaviors/text/delta-format.js';
 export { sanitizeUrl, escapeHtml } from './utils/html.js';
+export { countWords } from './utils/words.js';
 export { JSON_FORMAT_VERSION, isSupportedJsonVersion } from './utils/extensions.js';
 
 /** The text of a block's `content`: a plain string (code), or the `text` of its runs. Marks are ignored. @param {unknown} content */

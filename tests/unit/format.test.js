@@ -246,6 +246,7 @@ describe('the import graph of @aionbuilders/nabu/format (it must not load the We
       'src/lib/behaviors/text/markdown-syntax.js',
       'src/lib/utils/html.js',
       'src/lib/utils/extensions.js',
+      'src/lib/utils/words.js',
     ]));
     expect(offenders).toEqual([]);
   });
