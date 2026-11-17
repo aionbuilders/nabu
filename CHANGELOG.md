@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.1.7 (2026-11-17)
+
+Your own word counter, and types for `nabu.regions`.
+
+### Added
+- **`countWords` option: your own word counter.** `createEditor({ countWords: (text, lang) => number })` replaces the rule used everywhere Nabu counts words (`wordCount` of a block, a list item, a toggle, a region, the preamble). It receives the text of one block and the editor's `lang`, and is given once at creation. The default does not change. Use it when your app has a different definition of a word, for example Word's, where a hyphenated compound is one word. The function in use is `nabu.countWords`; a value that is not a function is ignored with a warning.
+- **`countWords(text, lang)` is exported** by `@aionbuilders/nabu` and by `@aionbuilders/nabu/format` (which still loads neither Loro nor Svelte): the default rule, to count words of a serialized document without the editor. The `WordCounter` type describes a counter.
 
 ### Fixed
 - **`nabu.regions` had no type.** `RegionsExtension` installs it when the editor starts, so the `Nabu` type does not have it, and an IDE offered nothing after `engine.regions`. `createFullEditor()` now returns a `RegionsEditor`, where `regions` is always typed, and the new `RegionsEditor` type annotates an editor built with your own preset. `Regions.get(nabu)` still works everywhere.
