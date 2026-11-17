@@ -96,7 +96,7 @@ jobs:
 
       # A tarball is published as is: no lifecycle script runs.
       - name: Publish
-        run: npm publish pack/*.tgz
+        run: npm publish ./pack/*.tgz # "./": without it npm reads "pack/x.tgz" as a GitHub shorthand (user/repo)
 
       # The `beta` dist-tag follows `latest`.
       - name: Move the beta tag
