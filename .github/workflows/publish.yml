@@ -1,0 +1,103 @@
+# Publishes @aionbuilders/nabu to npm when a GitHub release is published.
+#
+# Trusted publishing (OIDC): no npm token anywhere. npm trusts this exact workflow file of this repository, through the
+# `npm` environment, and attaches provenance (built from this commit of this repo). Settings on npmjs.com, package
+# @aionbuilders/nabu > Settings > Trusted Publisher: GitHub Actions, organization `aionbuilders`, repository `nabu`,
+# workflow `publish.yml`, environment `npm`, allowed actions: npm publish and npm dist-tag.
+#
+# Two jobs, so that no dependency code ever runs where the publish right is:
+# - `build` has NO publish right (no id-token): it installs the dependencies, runs the unit tests and packs the tarball
+#   (`npm pack` runs `prepack`: svelte-package and publint).
+# - `publish` is the only job that can get the OIDC token. It runs in the protected `npm` environment, so it waits until a
+#   required reviewer approves it on GitHub (Actions tab, or the GitHub mobile app). It installs nothing from the project
+#   and publishes the tarball `build` made, as is.
+#
+# Release flow: bump `version` in package.json and date CHANGELOG.md, push, create the GitHub release `vX.Y.Z` on a commit
+# that has this file, approve the run. The build refuses a tag that does not match package.json.
+
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.release.tag_name }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: The tag matches package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v$version" != "$TAG" ]; then
+            echo "Tag $TAG does not match package.json version $version"; exit 1
+          fi
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: bun install --frozen-lockfile
+
+      - name: Unit tests
+        run: |
+          bun run api:model
+          bun run test:unit
+
+      - name: Pack
+        run: |
+          mkdir pack
+          npm pack --pack-destination pack
+          ls -l pack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: pack/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # the OIDC token npm exchanges for a one-time publish credential
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: npm version
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: pack
+
+      # A tarball is published as is: no lifecycle script runs.
+      - name: Publish
+        run: npm publish pack/*.tgz
+
+      # The `beta` dist-tag follows `latest`.
+      - name: Move the beta tag
+        run: npm dist-tag add "@aionbuilders/nabu@${TAG#v}" beta
