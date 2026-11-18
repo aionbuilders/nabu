@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { tick } from 'svelte';
-import { countWords } from '#lib/utils/words.js';
+import { countWords, wordDeleteRange } from '#lib/utils/words.js';
 import { Nabu } from '#lib/blocks/nabu.svelte.js';
 import { ParagraphExtension } from '#lib/blocks/paragraph/index.js';
 import { RichTextExtension } from '#lib/behaviors/text/index.js';
@@ -31,6 +31,17 @@ describe('countWords', () => {
   it('French: guillemets and dashes standing alone are not words', () => {
     expect(countWords('« Bonjour », dit-il — puis il partit.', 'fr')).toBe(6); // Bonjour, dit, il, puis, il, partit
     expect(countWords('« » — –', 'fr')).toBe(0);
+  });
+
+  it('word deletion stops at a dot between two letters, not at any other dot (no RegExp lookbehind: Safari < 16.4)', () => {
+    /** the text left after deleting backward from the end */
+    const back = (text) => { const { from } = wordDeleteRange(text, text.length, 'backward', { lang: 'en' }); return text.slice(0, from); };
+    expect(back('foo.bar')).toBe('foo.');
+    expect(back('a.b.c')).toBe('a.b.');
+    expect(back('U.S.A')).toBe('U.S.');
+    expect(back('see www.example.com')).toBe('see www.example.');
+    expect(back('pi 3.14')).toBe('pi ');
+    expect(back('é.è')).toBe('é.');
   });
 
   it('Chinese: a sentence is several words, not one', () => {

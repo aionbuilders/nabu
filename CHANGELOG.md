@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Safari 15 / macOS 12 support: no more RegExp lookbehind.** Safari before 16.4 (the WebKit of macOS 12) cannot parse `(?<=…)` / `(?<!…)`, and one such regex literal made the whole bundle fail to load, so an app using Nabu showed a blank window there. The word-deletion split at a dot between letters, the `--` em dash rule and the markdown typing shortcuts (`*`, `**`, `***`, `_`, `__`, `___`, `` ` ``, `~~`) now check the character before the match in code instead. Behaviour is unchanged.
+
+### Tests
+- A guard test fails when `src/` (or the built `dist/`) contains a RegExp lookbehind or the `v` flag, with the file and line.
+
 ## 0.1.7 (2026-11-17)
 
 Your own word counter, and types for `nabu.regions`.

@@ -1,6 +1,7 @@
 import { Extension } from '../../utils/extensions.js';
 import { TextBehavior } from './text.behavior.svelte.js';
-import { WORD } from './markdown-syntax.js';
+import { WORD, isWordChar } from './markdown-syntax.js';
+import { charBeforeMatch } from '../../utils/input-rules.js';
 
 // Flanking rules (CommonMark, simplified): an opening delimiter must be followed by a non-whitespace
 // char and a closing one preceded by a non-whitespace char, so `2 * 3 * 4` and `* not *` stay literal.
@@ -15,6 +16,11 @@ import { WORD } from './markdown-syntax.js';
  */
 const inner = (d) => `[^${d}\\s](?:[^${d}]*[^${d}\\s])?`;
 
+/** `notAfter` predicates: the opener must not follow this character. */
+const isStar = (/** @type {string} */ c) => c === '*';
+const isTilde = (/** @type {string} */ c) => c === '~';
+const isBacktick = (/** @type {string} */ c) => c === '`';
+
 /**
  * Build an inputRule that, when `closeChar` is typed and `pattern` matches the
  * text before the cursor, strips the markdown delimiters and applies mark(s)
@@ -23,7 +29,12 @@ const inner = (d) => `[^${d}\\s](?:[^${d}]*[^${d}\\s])?`;
  * @param {RegExp} pattern
  * @param {string} closeChar  the closing delimiter character being typed
  * @param {string | string[]} marks  mark name(s) to apply
- * @param {{ noIntrawordClose?: boolean }} [opts]  `noIntrawordClose`: refuse to close when the char
+ * @param {{ noIntrawordClose?: boolean, notAfter?: (c: string) => boolean }} [opts]
+ *   `notAfter`: refuse when the character right before the opener satisfies it (nothing before = fine). This makes
+ *   the opener the START of its delimiter run. Done here, not with a RegExp lookbehind `(?<!…)`, which Safari < 16.4
+ *   (macOS 12's WebKit) cannot parse. Each pattern has a single possible opener position (its inner text excludes
+ *   the delimiter), so checking after the match is equivalent to a lookbehind.
+ *   `noIntrawordClose`: refuse to close when the char
  *   right after the cursor is a letter/digit (the closing `_` would be intraword)
  * @returns {import('../../utils/extensions.js').InputRule}
  */
@@ -33,6 +44,7 @@ function markRule(pattern, closeChar, marks, opts = {}) {
         pattern,
         handler(nabu, block, match, sel) {
             if (sel.data !== closeChar) return;
+            if (opts.notAfter?.(charBeforeMatch(match))) return;
             const behavior = block.behaviors.get('text');
             if (!(behavior instanceof TextBehavior)) return;
             if (opts.noIntrawordClose && /[\p{L}\p{N}]/u.test(behavior.text.charAt(sel.from))) return;
@@ -55,25 +67,25 @@ function markRule(pattern, closeChar, marks, opts = {}) {
  */
 export const MarkdownShortcutsExtension = new Extension('markdown-shortcuts', {
     // ORDER MATTERS: most-specific (longest) delimiters first.
-    // The `(?<!d)` lookbehinds make an opener the START of its delimiter run: `**…*` must not fire
+    // The `notAfter` checks make an opener the START of its delimiter run: `**…*` must not fire
     // inside `***x*` (typing `***x***`: the 2nd closing `*` used to bold `x*` and leave a stray `*`).
     inputRules: [
         // ***bold-italic***  (asterisks) — typed final '*' after '***x**'
-        markRule(new RegExp(`(?<!\\*)\\*\\*\\*(${inner('*')})\\*\\*$`, 'u'), '*', ['bold', 'italic']),
+        markRule(new RegExp(`\\*\\*\\*(${inner('*')})\\*\\*$`, 'u'), '*', ['bold', 'italic'], { notAfter: isStar }),
         // **bold**           — typed final '*' after '**x*'
-        markRule(new RegExp(`(?<!\\*)\\*\\*(${inner('*')})\\*$`, 'u'), '*', 'bold'),
+        markRule(new RegExp(`\\*\\*(${inner('*')})\\*$`, 'u'), '*', 'bold', { notAfter: isStar }),
         // *italic*           — typed final '*' after '*x' (not preceded by '*')
-        markRule(new RegExp(`(?<!\\*)\\*(${inner('*')})$`, 'u'), '*', 'italic'),
+        markRule(new RegExp(`\\*(${inner('*')})$`, 'u'), '*', 'italic', { notAfter: isStar }),
         // ___bold-italic___  (underscores, not intraword) — typed final '_' after '___x__'
-        markRule(new RegExp(`(?<![${WORD}])___(${inner('_')})__$`, 'u'), '_', ['bold', 'italic'], { noIntrawordClose: true }),
+        markRule(new RegExp(`___(${inner('_')})__$`, 'u'), '_', ['bold', 'italic'], { noIntrawordClose: true, notAfter: isWordChar }),
         // __bold__           — typed final '_' after '__x_'
-        markRule(new RegExp(`(?<![${WORD}])__(${inner('_')})_$`, 'u'), '_', 'bold', { noIntrawordClose: true }),
+        markRule(new RegExp(`__(${inner('_')})_$`, 'u'), '_', 'bold', { noIntrawordClose: true, notAfter: isWordChar }),
         // _italic_           — typed final '_' after '_x' (opener preceded by a non-word char or the block start)
-        markRule(new RegExp(`(?<![${WORD}])_(${inner('_')})$`, 'u'), '_', 'italic', { noIntrawordClose: true }),
+        markRule(new RegExp(`_(${inner('_')})$`, 'u'), '_', 'italic', { noIntrawordClose: true, notAfter: isWordChar }),
         // `code`             — typed final '`' after '`x'. Code spans keep inner spaces (`a b`), but need
         //                       at least one non-space char and don't open inside a longer backtick run.
-        markRule(/(?<!`)`([^`]*[^`\s][^`]*)$/, '`', 'code'),
+        markRule(/`([^`]*[^`\s][^`]*)$/, '`', 'code', { notAfter: isBacktick }),
         // ~~strike~~         — typed final '~' after '~~x~'
-        markRule(new RegExp(`(?<!~)~~(${inner('~')})~$`, 'u'), '~', 'strikethrough'),
+        markRule(new RegExp(`~~(${inner('~')})~$`, 'u'), '~', 'strikethrough', { notAfter: isTilde }),
     ],
 });

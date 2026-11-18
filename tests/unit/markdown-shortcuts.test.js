@@ -295,8 +295,58 @@ describe('TypographyExtension', () => {
     expect(b.container.insert).toHaveBeenCalledWith(7, ' ');
   });
 
+  it('"-- " at the very start of the block becomes an em dash (nothing before the "--")', () => {
+    const b = type('--');
+    expect(b.container.delete).toHaveBeenCalledWith(0, 2);
+    expect(b.container.insert).toHaveBeenCalledWith(0, '— ');
+  });
+
   it('"--" followed by a non-space char keeps the double dash', () => {
     const b = type('abc --', 'h');
     expect(b.container.delete).not.toHaveBeenCalled();
+  });
+});
+
+// Edge cases around the openers that used to be RegExp lookbehinds (Safari < 16.4 cannot parse them):
+// the character before the opener is now checked in the handler.
+describe('markdown shortcut openers (no lookbehind)', () => {
+  const rules = MarkdownShortcutsExtension.inputRules;
+  const type = (text, data) => {
+    const b = makeBehavior(text, { inputRules: rules });
+    b.handleBeforeInput(makeEvent('insertText', data), makeSel(text.length));
+    return b;
+  };
+
+  it('"*" opener after a letter, a space, or at the block start is a valid start', () => {
+    for (const [text, start] of [['a *x', 2], ['*x', 0], ['a*x', 1]]) {
+      const b = type(text, '*');
+      expect(b.container.delete).toHaveBeenCalledWith(start, text.length - start);
+    }
+  });
+
+  it('"**x*" + "*" does not bold inside a "***" run, "~~x~" does not strike inside "~~~", nor a code span inside "``"', () => {
+    for (const [text, ch] of [['***x*', '*'], ['~~~x~', '~'], ['``x', '`'], ['a ***x*', '*']]) {
+      expect(type(text, ch).container.delete).not.toHaveBeenCalled();
+    }
+  });
+
+  it('"_" opener: fine after a space, a punctuation or the block start, refused after a letter, digit or "_"', () => {
+    for (const [text, start] of [['a _x', 2], ['(_x', 1], ['_x', 0]]) {
+      expect(type(text, '_').container.delete).toHaveBeenCalledWith(start, text.length - start);
+    }
+    for (const text of ['a_x', '1_x', 'é_x', 'a__x_']) {
+      expect(type(text, '_').container.delete).not.toHaveBeenCalled();
+    }
+  });
+
+  it('"_" opener after an astral letter is intraword too', () => {
+    expect(type('\u{1D400}_x', '_').container.delete).not.toHaveBeenCalled();
+  });
+
+  it('"__x_" and "___x__" need a non-word char (or the start) before the run', () => {
+    expect(type('a __x_', '_').container.delete).toHaveBeenCalledWith(2, 4);
+    expect(type('a__x_', '_').container.delete).not.toHaveBeenCalled();
+    expect(type('a ___x__', '_').container.delete).toHaveBeenCalledWith(2, 6);
+    expect(type('a___x__', '_').container.delete).not.toHaveBeenCalled();
   });
 });

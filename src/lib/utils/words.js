@@ -26,6 +26,27 @@
 const segmenters = new Map();
 
 /**
+ * Split a word-like segment at every dot that sits between two letters, keeping each dot as its own piece:
+ * `U.S.A` → `U`, `.`, `S`, `.`, `A`. A dot next to a digit or at an edge (`3.14`, `a.`) does not split.
+ * Written without RegExp lookbehind (`(?<=\p{L})`): Safari before 16.4 (the WebKit of macOS 12) cannot parse it.
+ * @param {string} segment
+ * @returns {string[]}
+ */
+function splitAtLetterDots(segment) {
+    /** @type {string[]} */
+    const pieces = [];
+    let from = 0;
+    for (const dot of segment.matchAll(/\.(?=\p{L})/gu)) {
+        const before = Array.from(segment.slice(Math.max(0, dot.index - 2), dot.index)).pop();
+        if (!before || !/\p{L}/u.test(before)) continue;
+        pieces.push(segment.slice(from, dot.index), '.');
+        from = dot.index + 1;
+    }
+    pieces.push(segment.slice(from));
+    return pieces.filter(Boolean);
+}
+
+/**
  * The word segmenter for a locale, `null` when the platform has none. An unusable locale falls back to the default one.
  * @param {string | undefined} lang
  * @returns {Intl.Segmenter | null}
@@ -143,7 +164,7 @@ function wordTokens(text, lang) {
             // UAX #29 keeps `foo.bar` whole (a dot between letters); an editor stops at the dot, as Chromium does.
             if (part.isWordLike && part.segment.includes('.')) {
                 let at = part.index;
-                for (const piece of part.segment.split(/(?<=\p{L})(\.)(?=\p{L})/u)) { push(at, piece, piece !== '.'); at += piece.length; }
+                for (const piece of splitAtLetterDots(part.segment)) { push(at, piece, piece !== '.'); at += piece.length; }
             } else push(part.index, part.segment, part.isWordLike);
         }
     } else {
