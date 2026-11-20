@@ -87,6 +87,7 @@ export const ADR_SHORT = /** @type {Record<number, string>} */ ({
   16: 'Regions as markers',
   17: 'Commands, keymap, confirmations',
   18: 'Regions as containers',
+  19: 'Stable block ids',
 });
 
 /**

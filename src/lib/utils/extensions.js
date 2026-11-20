@@ -372,10 +372,12 @@ export function isSupportedJsonVersion(version) {
  */
 export function jsonToPasteBlocks(blocks) {
     return (Array.isArray(blocks) ? blocks : []).filter(b => b && typeof b === 'object' && typeof b.type === 'string').map(b => {
-        const { id: _id, type, props, content, children, ...extra } = b;
+        // `uid` (ADR 019) is dropped: an import is a paste, its blocks get new uids
+        const { id: _id, uid: _uid, type, props, content, children, ...extra } = b;
         /** @type {PasteBlock} */
         const pb = { type, partial: false };
         const merged = { ...extra, ...(props && typeof props === 'object' ? props : {}) };
+        delete merged.uid;
         if (Object.keys(merged).length) pb.props = merged;
         if (typeof content === 'string') {
             if (content) pb.delta = [{ insert: content }];

@@ -3,6 +3,8 @@
  * @import { Nabu } from './nabu.svelte.js';
  */
 
+import { uidOfEmptySurvivor, giveUid } from './uids.js';
+
 /**
  * Walks up from `block` toward `container` and returns the direct child of
  * `container` that is (or contains) `block`.
@@ -243,6 +245,8 @@ function deleteRangeRaw(nabu, range) {
     }
 
     // ── Text: head of the start block + tail of the end block ──
+    // An EMPTY start block that absorbs the end takes its uid (the text that remains is the end's): read before anything is cut.
+    const carried = startText && endText ? uidOfEmptySurvivor(nabu, start, end) : undefined;
     if (startText) {
         const length = startText.container.length;
         if (length > startOffset) startText.delete({ from: startOffset, to: length });
@@ -278,6 +282,8 @@ function deleteRangeRaw(nabu, range) {
         for (let p = block.parent ?? null; p; p = p.parent ?? null) if (doomed.has(p)) { covered = true; break; }
         if (!covered && !block.node.isDeleted?.()) block.destroy();
     }
+
+    if (absorbed) giveUid(nabu, start, carried);
 
     return { block: start, offset: startOffset };
 }

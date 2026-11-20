@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **`stableIds` option: blocks that keep their identity through undo.** `createEditor({ stableIds: true })` gives every block a `uid` (`block.uid`, `'u:12@345'`) that survives delete then undo, unlike `block.id`, and `nabu.blockByUid(uid)` finds the live block. A uid follows the block holding the first character: Enter in the middle keeps it on the first half, Enter at the start of a block that has text keeps it on the block with the text, a merge into an empty block takes the uid of the other one, and moves and retypes never change it. `serialize('json')` carries the uid of each block with the option on, and an import always mints new ones. Off by default, and free when off.
+- **`stampBlockUids(doc)` is exported:** it stamps the blocks of a bare `LoroDoc` that have no uid and heals duplicates, for your own migration. It commits the document with a silent origin, so call it with nothing pending. See [Stable block ids](docs/guides/stable-block-ids.md).
+
 ## 0.1.8 (2026-11-20)
 
 Nabu loads on Safari 15 and macOS 12.

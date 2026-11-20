@@ -11,6 +11,7 @@ import { List } from "./list.svelte.js";
 import { ListItem } from "./list-item.svelte.js";
 import { convertItemToListType } from "./convert.js";
 import { readDelta } from "../../utils/delta.js";
+import { carryUid, giveUid } from "../uids.js";
 
 /**
  * @param {Nabu} nabu
@@ -38,7 +39,9 @@ export async function convertToList(nabu, listType) {
     const list = List.create(nabu, "list", { listType }, parentId, index);
     const itemProps = listType === "todo" ? { delta, checked: false } : { delta };
     const item = ListItem.create(nabu, "list-item", itemProps, list.node.id.toString());
+    const uid = carryUid(nabu, block); // a retype keeps the uid (ADR 019)
     block.destroy();
+    giveUid(nabu, item, uid);
     await nabu.commit();
     const fresh = nabu.blocks.get(item.id);
     if (fresh) fresh.focus({ start: 0, end: 0 });

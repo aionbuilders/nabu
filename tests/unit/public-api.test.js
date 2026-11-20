@@ -66,6 +66,7 @@ const ROOT = [
   'insertMediaFromFile',
   'isSupportedJsonVersion',
   'sanitizeUrl',
+  'stampBlockUids',
 ];
 
 const UI = [

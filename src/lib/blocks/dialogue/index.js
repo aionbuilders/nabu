@@ -3,6 +3,7 @@ import { extension } from "../../utils/extensions";
 import { Dialogue } from "./dialogue.svelte.js";
 import DialogueComponent from "./Dialogue.svelte";
 import { onBeforeInput } from "./hooks/onBeforeInput.hook.js";
+import { swapUidsOnSplit } from "../uids.js";
 
 /**
  * @import { Nabu } from "../nabu.svelte.js";
@@ -46,7 +47,8 @@ export function createDialogueExtension({ dash = '–' } = {}) {
                 const parent = block.node.parent();
                 const parentId = parent?.id.toString() || null;
 
-                const newBlock = nabu.insert("dialogue", { delta }, parentId, currentIndex + 1);
+                const newBlock = nabu.insertPending("dialogue", { delta }, parentId, currentIndex + 1);
+                swapUidsOnSplit(nabu, block, newBlock);
 
                 block.commit().then(() => nabu.selection.setCursor(newBlock, 0));
 

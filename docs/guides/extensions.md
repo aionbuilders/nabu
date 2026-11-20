@@ -373,6 +373,7 @@ A member of the editor or of a block that is in neither list (you can see it in 
 | `selection` | The selection, in terms of blocks: see below |
 | `lang`, `spellcheck`, `tab`, `tabHint`, `placeholders`, `readonly` | The resolved options (reactive; assign to change them). `readonly` closes the user's channels (input, paste, drop, keys, commands) and leaves the host's own calls alone: see [Read-only mode](./accessibility.md#read-only-mode) |
 | `composing`, `composingBlock` | An IME composition is running, and in which block |
+| `stableIds`, `blockByUid` | The `stableIds` option (ADR 019) and `blockByUid(uid)`: the live block that carries a uid, or `null`. With the option off nothing is written and `blockByUid` returns `null` |
 | `countWords` | The word counter in use (the `countWords` option, or the default rule): `(text, lang?) => number` |
 | `destroy` | `destroy()`: release the engine for good, memory included (idempotent; the document stays readable, the engine no longer follows changes): see [Your first editor](../getting-started/first-editor.md#release-an-editor) |
 | `track` | `track(unsubscribe)`: hand over a cleanup that lives as long as the engine, `destroy()` calls it once. Pass your own Loro subscriptions, `nabu.track(node.data.subscribe(...))`: one that is not tracked keeps the engine in memory after `destroy()` |
@@ -403,6 +404,7 @@ Everything of `Block` is part of the contract: a block class overrides the metho
 | Member | What it is |
 |---|---|
 | `nabu`, `node`, `id`, `type` | The editor, the tree node, the id (also the key in `nabu.blocks`) and the type |
+| `uid` | The stable identity (`'u:12@345'`) with the `stableIds` option, `undefined` without it. Unlike `id`, it survives delete then undo; opaque, never compare it to an `id` |
 | `parent`, `children`, `index`, `previous`, `next`, `parents` | Its place in the tree (reactive). `children` belongs to `MegaBlock` |
 | `element` | The DOM element, bound by the component (`bind:this={block.element}`) |
 | `behaviors` | Its behaviors by name; a text block has `'text'` |

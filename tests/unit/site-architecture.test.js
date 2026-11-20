@@ -118,7 +118,8 @@ describe('recordsModel', () => {
     expect(adrHref(0)).toBe('/architecture/decisions/000');
     expect(model.neighbours(11).next?.number).toBe(13); // there is no 012
     expect(model.neighbours(13).prev?.number).toBe(11);
-    expect(model.neighbours(18).next).toBeNull();
+    expect(model.neighbours(18).next?.number).toBe(19);
+    expect(model.neighbours(19).next).toBeNull();
     expect(model.replacedOn(/** @type {any} */ (model.get(16)))).toBe(model.get(18)?.date);
     expect(model.replacedOn(/** @type {any} */ (model.get(1)))).toBeNull();
     expect(adrHref(16)).toBe('/architecture/decisions/016');

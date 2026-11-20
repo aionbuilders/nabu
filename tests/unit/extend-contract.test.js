@@ -24,14 +24,14 @@ const sorted = (/** @type {Iterable<string>} */ names) => [...names].sort();
 /** `@public` members of `Nabu`: instance members, then statics. Methods are listed in METHODS to check their kind too. */
 const NABU = {
   instance: [
-    'BREAK', 'CONTINUE', 'blocks', 'blocksByType', 'cancelPendingCommand', 'children',
+    'BREAK', 'CONTINUE', 'blockByUid', 'blocks', 'blocksByType', 'cancelPendingCommand', 'children',
     'commandAnnouncement', 'commands', 'commit', 'components', 'composing', 'composingBlock', 'countWords',
     'createPasteBlock', 'debugging', 'defaultBlockType', 'delete', 'destroy', 'doc', 'exec', 'extensions',
     'focus', 'importFragment', 'importJSON', 'importMarkdown', 'importRemote', 'insert',
     'insertPasteBlock', 'internals', 'isEmpty', 'isMarkActive', 'isolateUndoStep', 'lang', 'lastVisibleBlock',
     'openTrailingCaret', 'pendingCommand', 'pendingCommandOn', 'placeholders', 'positions', 'readonly', 'redo',
     'registry', 'resolveDocumentOffset', 'selection', 'serialize', 'serializers', 'shortcut',
-    'slashCommands', 'spellcheck', 'systems', 'tab', 'tabHint', 'track', 'transact', 'tree', 'trigger',
+    'slashCommands', 'spellcheck', 'stableIds', 'systems', 'tab', 'tabHint', 'track', 'transact', 'tree', 'trigger',
     'undo', 'warn',
   ],
   static: [
@@ -41,7 +41,7 @@ const NABU = {
 
 /** @type {string[]} */
 const NABU_METHODS = [
-  'cancelPendingCommand', 'commit', 'createPasteBlock', 'delete', 'destroy', 'exec', 'focus',
+  'blockByUid', 'cancelPendingCommand', 'commit', 'createPasteBlock', 'delete', 'destroy', 'exec', 'focus',
   'importFragment', 'importJSON', 'importMarkdown', 'importRemote', 'insert', 'insertPasteBlock',
   'isMarkActive', 'isolateUndoStep', 'openTrailingCaret', 'pendingCommandOn', 'redo',
   'resolveDocumentOffset', 'serialize', 'shortcut', 'track', 'transact', 'trigger', 'undo', 'warn',
@@ -54,8 +54,8 @@ const NABU_NOT_PROMISED = [
   'handleBeforeinput', 'handleCompositionEnd', 'handleCompositionStart', 'handleCompositionUpdate',
   'handleCopy', 'handleCut', 'handleDragEnd', 'handleDragLeave', 'handleDragOver',
   'handleDragStart', 'handleDrop', 'handleKeydown', 'handleMousedown', 'handlePaste', 'hookOwners',
-  'hooks', 'init', 'inputRules', 'insertFragment', 'noteTextChange', 'rearmTab',
-  'sealUndoEnd', 'storedMarks', 'tabDescription', 'tabWayOut', 'toggleStoredMark', 'undoManager', 'updateRoots',
+  'hooks', 'init', 'inputRules', 'insertFragment', 'insertPending', 'noteTextChange', 'rearmTab',
+  'sealUndoEnd', 'storedMarks', 'tabDescription', 'tabWayOut', 'toggleStoredMark', 'undoManager', 'updateRoots', 'writeUid',
 ];
 
 const INTERNALS = [
@@ -79,7 +79,7 @@ const BLOCK = {
     'next', 'node', 'parent', 'parents', 'pastesAsPlainText', 'placeholder', 'positions',
     'previous', 'requiredParent', 'resolveOffset', 'retype', 'selected', 'selection', 'serialize',
     'serializers', 'split', 'splitsOnEnter', 'transformTo', 'transformsEnabled', 'type',
-    'wordCount',
+    'uid', 'wordCount',
   ],
   static: [
     'create', 'fromHTML', 'fromMarkdown', 'htmlRules', 'htmlSiblings', 'load', 'markdownRules',

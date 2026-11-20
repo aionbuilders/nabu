@@ -71,6 +71,21 @@ export class Block {
     }
 
     /**
+     * The stable identity of the block (the `stableIds` option, ADR 019): `'u:12@345'`, unchanged by delete then undo, unlike `id`.
+     * `undefined` when the option is off or the node has none yet. Opaque: never equal to `id` after an undo.
+     * @type {string | undefined}
+     * @public
+     */
+    get uid() {
+        try {
+            const uid = this.node.data.get('uid');
+            return typeof uid === 'string' && uid ? uid : undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
      * Serializers of this block by format: `'markdown'`, `'json'`, `'application/x-nabu+json'` (the clipboard) or one of your own.
      * Each receives the context of the call (`{ from, to, partial }` for the clipboard) and returns the serialized block.
      * @type {SvelteMap<string, function(any): any>}
@@ -637,7 +652,14 @@ export class Block {
     serialize(format, context = {}) {
         const serializer = this.serializers.get(format);
         if (serializer) {
-            return serializer(context);
+            const out = serializer(context);
+            // The export carries the uid (ADR 019), so an outline or a search index can refer to blocks. Only the document export:
+            // the clipboard format never does (a paste mints new uids), and `importJSON` ignores the key.
+            if (format === 'json' && this.nabu.stableIds && out && typeof out === 'object') {
+                const uid = this.uid;
+                if (uid) out.uid = uid;
+            }
+            return out;
         } else {
             this.nabu.warn(`No serializer found for format "${format}" on block type "${this.type}"`);
             return null;

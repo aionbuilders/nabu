@@ -29,6 +29,7 @@ export {
     FullPreset,
 } from './presets.js';
 export { Nabu } from './blocks/nabu.svelte.js';
+export { stampBlockUids } from './blocks/uids.js';
 export { default as NabuEditor } from './blocks/Nabu.svelte';
 
 // ---------------------------------------------------------------------------

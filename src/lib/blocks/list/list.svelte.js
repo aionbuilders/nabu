@@ -5,6 +5,7 @@ import { stepBack } from "./step-back.js";
 import { hasLeveledItems, docsEntries, docsSiblings, isWordListParagraph, wordEntries, wordSiblings, nestEntries } from "./html-flat.js";
 import { isListItem, interruptsParagraph, listLength, parseListLines, renderList } from "./markdown.js";
 import { deltaToMarkdown } from "../../behaviors/text";
+import { swapUidsOnSplit } from "../uids.js";
 
 /**
  * @import { Nabu, NabuNode } from "../nabu.svelte.js";
@@ -127,12 +128,13 @@ export class List extends MegaBlock {
 
         
         // 3. On demande à Nabu d'insérer un nouveau list-item au même niveau
-        const newItem = this.nabu.insert(
+        const newItem = this.nabu.insertPending(
             "list-item",
             { delta },
             this.node.id.toString(), // Le parent est la liste actuelle
             /** @type {number} */ (currentIndex) + 1
         );
+        swapUidsOnSplit(this.nabu, sourceItem, newItem);
 
         // 3.1. On transfère TOUS les enfants du sourceItem vers le newItem
         const sourceChildren = sourceItem.node.children();

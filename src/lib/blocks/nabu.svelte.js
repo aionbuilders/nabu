@@ -19,6 +19,7 @@ import { moveBlocks } from './move.js';
 import { closestWithin } from '../utils/dom-scope.js';
 import { captureSelection, explicitSelection, legacySelection, restoreSelection, keepSelection, makeEndpoint, resolveOffset, revealFocus } from './undo-selection.js';
 import { LARGE_DOC } from './chunks.js';
+import { UidIndex, stampOnCreate, stampBlockUids, healUids, compareTreeIds } from './uids.js';
 import { revealCaret } from '../utils/reveal-caret.js';
 import { countWords as defaultCountWords } from '../utils/words.js';
 import { markAtCaret } from '../behaviors/text/mark-edges.js';
@@ -67,6 +68,9 @@ import { transferKind, wantsCopy, pickDropEffect, sameTarget, resolveDropPositio
 * @property {import('../utils/words.js').WordCounter} [countWords] - Your own word counter, `(text, lang) => number`, called with the text of
 *   one block and the editor's `lang`; it replaces the default rule (Unicode word breaks) everywhere Nabu counts words (`wordCount` of
 *   a block, a region...). Given once at creation, not reactive. Not a function: ignored (warning). Read back as `nabu.countWords`.
+* @property {boolean} [stableIds] - Give every block a stable identity (default `false`, ADR 019): each block node carries a `uid` in its
+*   data, read as `block.uid` and resolved by `nabu.blockByUid(uid)`. Unlike `block.id` (the tree id, which a delete then undo changes), a
+*   uid survives undo. Off: nothing is written, no index is kept. Given once at creation. Read back as `nabu.stableIds`.
 * @property {'focus' | 'stay' | 'indent'} [tab] - What Tab / Shift+Tab do in a plain text block, where no block handles them
 *   structurally (list indent, code indentation and region titles keep their own meaning, whatever this says; P-41).
 *   `'focus'`: the browser default, Tab leaves the editor. `'stay'`: both keys are swallowed and the caret stays; Escape then Tab
@@ -249,6 +253,9 @@ export class Nabu {
     /** The oldest key that asks "if something changed since": the document and selection counters at its keydown. @type {{ ops: number, placed: number } | null} */
     #revealSince = null;
 
+    /** uid -> TreeIDs, only with the `stableIds` option (see uids.js). @type {UidIndex | null} */
+    #uidIndex = null;
+
     /** @param {NabuInit} init */
     constructor(init = {}) {
         this.doc = new LoroDoc();
@@ -303,6 +310,19 @@ export class Nabu {
             else this.warn(`Ignoring invalid "countWords" (not a function): ${String(init.countWords)}`);
         }
         this.readonly = !!init.readonly;
+        /**
+         * Whether every block carries a stable `uid` (the `stableIds` option). Fixed at creation.
+         * @type {boolean}
+         * @public
+         */
+        this.stableIds = init.stableIds === true;
+        if (this.stableIds) {
+            // New nodes are stamped in their creating transaction; what a snapshot brings is stamped and healed once, now.
+            stampBlockUids(this.doc);
+            this.#uidIndex = new UidIndex();
+            this.#uidIndex.seed(this.tree);
+            stampOnCreate(this.tree, this.#uidIndex);
+        }
         this.#tabDefault = resolveTabMode(init.tabDefault, 'focus', (message) => this.warn(message));
         this.tab = init.tab;
         if (typeof init.tabHint === 'string' || init.tabHint === false) this.tabHint = init.tabHint;
@@ -418,9 +438,12 @@ export class Nabu {
             const retyped = new Set();
 
             let removed = false;
+            /** Nodes that appeared or got a new uid in this batch (stableIds only). @type {Set<string>} */
+            const arrived = new Set();
             event.events.forEach(e => {
                 if (e.diff.type === "tree") {
                     e.diff.diff.forEach(action => {
+                        if (this.#uidIndex && action.action === 'create') arrived.add(action.target.toString());
                         if (action.action === 'delete') removed = true;
                         if (action.action === 'create' || action.action === 'move' || action.action === 'delete') {
                             // `parent` is set on create / move, `oldParent` on move / delete (a TreeDiffItem is a union of the three)
@@ -437,6 +460,7 @@ export class Nabu {
                 }
 
                 if (e.diff.type === "map") {
+                    if (this.#uidIndex && e.diff.updated["uid"] !== undefined && e.path[1] !== undefined) arrived.add(e.path[1].toString());
                     const newType = e.diff.updated["type"];
                     if (newType !== undefined) {
                         const nodeId = e.path[1].toString();
@@ -456,6 +480,8 @@ export class Nabu {
                 // A block retyped into a leaf (no children) in the same transaction has no updateChildren().
                 /** @type {{ updateChildren?: (retyped?: Set<string>) => void } | undefined} */ (this.blocks.get(parentId))?.updateChildren?.(retyped);
             }
+            // Stamp what a peer without the option sent and rename duplicate uids, once the blocks exist (uids.js).
+            if (this.#uidIndex && arrived.size) healUids(this.doc, this.#uidIndex, arrived);
         }));
         
         this.init();
@@ -727,6 +753,36 @@ export class Nabu {
         return fn(this);
     }
     
+    /**
+     * Write a uid on a node and keep the index current (the `stableIds` option; uid transfers, see uids.js). Writes only: the
+     * caller's transaction commits.
+     * @param {NabuNode} node @param {string} uid
+     * @internal
+     */
+    writeUid(node, uid) {
+        if (!this.#uidIndex) return;
+        node.data.set('uid', uid);
+        this.#uidIndex.add(uid, node.id.toString());
+    }
+
+    /**
+     * The live block that carries `uid` (the `stableIds` option, ADR 019), or `null`: unknown uid, a deleted block, or the option off.
+     * A uid survives undo, so after delete then undo this returns the recreated block (a new `block.id`).
+     * @param {string} uid
+     * @returns {Block | null}
+     * @public
+     */
+    blockByUid(uid) {
+        if (!this.#uidIndex) return null;
+        const ids = this.#uidIndex.live(uid, this.tree);
+        ids.sort(compareTreeIds);
+        for (const id of ids) {
+            const block = this.blocks.get(id);
+            if (block) return block;
+        }
+        return null;
+    }
+
     init() {
         this.hooks.get("onInit")?.forEach(hook => hook(this));
     }
@@ -1295,6 +1351,19 @@ export class Nabu {
     
     
     
+    /**
+     * Like {@link Nabu#insert} but WITHOUT the commit: the caller's own commit carries it. For a gesture that must write more
+     * after creating the block (the uid transfer of a split) and stay one undo step.
+     * @param {string} type @param {Record<string, any>} [props] @param {string | null} [parentId] @param {number | null} [index]
+     * @returns {Block}
+     * @internal
+     */
+    insertPending(type, props = {}, parentId = null, index = null) {
+        const BlockClass = this.registry.get(type);
+        if (!BlockClass) throw new Error(`Block type "${type}" not registered.`);
+        return BlockClass.create(this, type, props, parentId, index);
+    }
+
     /**
      * Delete a block (and its children) from the tree. No commit: call `commit()` afterwards.
      * @param {Block} block

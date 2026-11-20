@@ -87,8 +87,10 @@ test.describe('API reference', () => {
     await expect(page.locator('#s-BREAK')).toBeVisible();
     await expect(page.locator('#m-readonly')).toBeVisible();
     await expect(page.locator('#m-countWords')).toBeVisible();
-    // 60 members tagged @public on Nabu
-    await expect(page.locator('section.member')).toHaveCount(60);
+    await expect(page.locator('#m-blockByUid')).toBeVisible();
+    await expect(page.locator('#m-stableIds')).toBeVisible();
+    // 62 members tagged @public on Nabu
+    await expect(page.locator('section.member')).toHaveCount(62);
     // what is not part of the contract is not listed
     await expect(page.locator('#m-handleKeydown')).toHaveCount(0);
     // internals is flagged unstable and points to its page

@@ -1,5 +1,6 @@
 import { extension } from "../../utils/extensions";
 import { Paragraph } from "./paragraph.svelte.js";
+import { swapUidsOnSplit } from "../uids.js";
 import ParagraphComponent from "./Paragraph.svelte";
 
 /**
@@ -74,7 +75,8 @@ const ParagraphExtension = extension("paragraph", {
             const parent = block.node.parent();
             const parentId = parent?.id.toString() || null;
             
-            const newBlock = nabu.insert("paragraph", { delta }, parentId, /** @type {number} */ (currentIndex) + 1);
+            const newBlock = nabu.insertPending("paragraph", { delta }, parentId, /** @type {number} */ (currentIndex) + 1);
+            swapUidsOnSplit(nabu, block, newBlock);
 
             block.commit().then(() => nabu.selection.setCursor(newBlock, 0));
 

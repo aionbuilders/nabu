@@ -10,6 +10,7 @@ import { readDelta } from "../../utils/delta.js";
 import { markEdgeFixes } from "./mark-edges.js";
 import { detectPlatform } from "../../utils/keys.js";
 import { deltaToMarkdown } from "./delta-format.js";
+import { uidOfEmptySurvivor, giveUid } from "../../blocks/uids.js";
 
 // The delta formatters live in a pure file (no Loro, no Svelte); every existing import path keeps working through this re-export.
 export { deltaToHtml, deltaToMarkdown, markdownDestination } from "./delta-format.js";
@@ -388,8 +389,10 @@ export class TextBehavior {
                 //     { retain: previousLength },
                 //     ...this.container.toDelta()
                 // ])
+                const uid = uidOfEmptySurvivor(this.nabu, previousBlock, this.block);
                 previousBlock.consume(this.block);
                 this.block.destroy();
+                giveUid(this.nabu, previousBlock, uid);
                 this.block.commit();
                 
                 tick().then(() => this.nabu.selection.setCursor(previousBehavior.block, previousLength));
@@ -423,10 +426,12 @@ export class TextBehavior {
                 //     { retain: this.container.length },
                 //     ...nextBehavior.container.toDelta()
                 // ]);
+                const uid = uidOfEmptySurvivor(this.nabu, this.block, nextBlock);
                 this.block.consume(nextBlock);
 
 
                 nextBehavior.block.destroy();
+                giveUid(this.nabu, this.block, uid);
                 this.block.commit();
                 
                 tick().then(() => this.nabu.selection.setCursor(this.block, sel.from));

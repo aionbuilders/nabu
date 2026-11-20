@@ -4,6 +4,7 @@ import { extension } from "../../utils/extensions";
 import { Heading } from "./heading.svelte.js";
 import HeadingComponent from "./Heading.svelte";
 import { onBeforeInput } from "./hooks/onBeforeInput.hook";
+import { swapUidsOnSplit } from "../uids.js";
 
 /**
  * @import { Nabu } from "../nabu.svelte.js";
@@ -57,7 +58,8 @@ const HeadingExtension = extension("heading", {
             const atEnd = offset >= length;
             const newBlock = atEnd
                 ? nabu.insert("paragraph", /** @type {any} */ ({ delta }), parentId, currentIndex + 1)
-                : nabu.insert("heading", /** @type {any} */ ({ delta, level: block.level }), parentId, currentIndex + 1);
+                : nabu.insertPending("heading", /** @type {any} */ ({ delta, level: block.level }), parentId, currentIndex + 1);
+            if (!atEnd) swapUidsOnSplit(nabu, block, newBlock);
 
             block.commit().then(() => nabu.selection.setCursor(newBlock, 0));
 

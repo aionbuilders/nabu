@@ -2,7 +2,7 @@
 // Checked by scripts/consumer-smoke.js with the repo's TypeScript, against the INSTALLED package (its .d.ts files), the way an
 // editor or `svelte-check` sees it in a consumer app. Every `@ts-expect-error` below must be an error: if a type became `any`,
 // the directive would be unused and the check would fail.
-import { createEditor, createFullEditor, DocumentPreset, RegionsExtension, Regions } from '@aionbuilders/nabu';
+import { createEditor, createFullEditor, DocumentPreset, RegionsExtension, Regions, stampBlockUids } from '@aionbuilders/nabu';
 /** @import { RegionsEditor } from '@aionbuilders/nabu' */
 import { countWords } from '@aionbuilders/nabu/format';
 
@@ -30,3 +30,19 @@ createEditor({ countWords: (text, lang) => 1 });
 createEditor({ countWords: 42 });
 /** @type {(text: string, lang?: string) => number} */ const defaultCounter = countWords;
 export { defaultCounter };
+
+// `stableIds` option (ADR 019): the option type-checks, `block.uid` is a string or undefined, `blockByUid` exists, `stampBlockUids` is exported.
+const stable = createEditor({ stableIds: true });
+// @ts-expect-error `stableIds` is a boolean, not a string
+createEditor({ stableIds: 'yes' });
+const firstBlock = stable.children[0];
+/** @type {string | undefined} */ const uid = firstBlock.uid;
+// @ts-expect-error `uid` can be undefined (option off), so it is not a plain string
+/** @type {string} */ const plainUid = firstBlock.uid;
+const found = stable.blockByUid('u:1@1');
+// @ts-expect-error `blockByUid` can return null
+found.uid;
+// @ts-expect-error `blockByUid` takes a uid string
+stable.blockByUid(42);
+/** @type {(doc: import('loro-crdt').LoroDoc) => number} */ const stamp = stampBlockUids;
+export { uid, plainUid, found, stamp };

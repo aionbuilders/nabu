@@ -4,6 +4,7 @@ import { List } from "../list.svelte.js";
 import { ListItem } from "../list-item.svelte.js";
 import { stepBack } from "../step-back.js";
 import { readDelta } from "../../../utils/delta.js";
+import { carryUid, giveUid } from "../../uids.js";
 
 /**
  * @import { Nabu, Block } from "../..";
@@ -99,7 +100,10 @@ export const onBeforeInput = (nabu, event, block) => {
         listItemId = listItem.node.id.toString();
 
         // Destroy the original paragraph; shortcut() commits the whole operation as one transaction
+        // The item IS the paragraph that became a list (ADR 019: a retype keeps the uid), so it inherits it.
+        const uid = carryUid(nabu, block);
         block.destroy();
+        giveUid(nabu, listItem, uid);
     });
 
     // Restore focus to the new list-item
